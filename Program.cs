@@ -22,10 +22,12 @@ namespace WienerNeustadtSimulation
                 Console.WriteLine("╚════════════════════════════════════════════════════════════╝\n");
 
                 // Load input data
-                var inboundPath = args.Length > 0 ? args[0] : "InputFiles/InboundTrains.json";
+                var inboundPath = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "InputFiles", "InboundTrains.json");
                 if (!File.Exists(inboundPath))
                 {
                     Console.Error.WriteLine($"❌ Inbound file not found: {inboundPath}");
+                    Console.Error.WriteLine($"   Current working directory: {Directory.GetCurrentDirectory()}");
+                    Console.Error.WriteLine($"   Application directory: {AppContext.BaseDirectory}");
                     return 2;
                 }
 
@@ -150,7 +152,8 @@ namespace WienerNeustadtSimulation
             {
                 foreach (var wg in root.WagonGroups)
                 {
-                    dict[wg.ID] = wg;
+                    if (wg.ID != null)
+                        dict[wg.ID] = wg;
                 }
             }
 

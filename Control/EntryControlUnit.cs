@@ -69,7 +69,7 @@ namespace WienerNeustadtSimulation.Control
             return _arrivalTracks
                 .Where(t => t.Length >= train.Length && t.Designation == "Arrival")
                 .OrderBy(t => t.CurrentOccupancies.Count)
-                .FirstOrDefault();
+                .FirstOrDefault() ?? throw new InvalidOperationException("No available arrival track found");
         }
 
         private bool IsTrackFree(Track track)
@@ -109,10 +109,10 @@ namespace WienerNeustadtSimulation.Control
 
         private Train CreateTrainEntity(TrainDto dto)
         {
-            var train = new Train(dto.ID, dto.Length)
+            var train = new Train(dto.ID, dto.Length ?? 0)
             {
                 WagonGroupIds = dto.WagonGroupIds ?? new List<string>(),
-                HasLoco = dto.HasLoco,
+                HasLoco = dto.HasLoco ?? false,
                 LocomotiveId = dto.LocomotiveId ?? "",
                 Status = dto.Status ?? "Arriving",
                 Designation = dto.Designation ?? "Inbound",

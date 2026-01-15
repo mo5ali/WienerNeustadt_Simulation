@@ -77,7 +77,7 @@ namespace WienerNeustadtSimulation.Control
                 var wgData = _wagonGroupData[wgId];
                 var destination = wgData.Destination;
 
-                if (!_destinationToTrackMap.ContainsKey(destination))
+                if (destination != null && !_destinationToTrackMap.ContainsKey(destination))
                 {
                     var assignedTrack = AllocateClassificationTrack(destination);
                     _destinationToTrackMap[destination] = assignedTrack;

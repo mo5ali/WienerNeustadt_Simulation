@@ -33,7 +33,7 @@ namespace WienerNeustadtSimulation.Control
 
             if (classificationTrack.CurrentOccupancies.Count == 0)
             {
-                CreateOutboundTrainEntity(classificationTrack, wgData.Destination);
+                CreateOutboundTrainEntity(classificationTrack, wgData.Destination ?? "Unknown");
                 RequestSecuring(wgId, classificationTrack);
             }
             else
@@ -80,7 +80,7 @@ namespace WienerNeustadtSimulation.Control
             {
                 var train = _formingTrains[track];
                 train.WagonGroupIds.Add(wgId);
-                train.Length += wgData.Length;
+                train.Length += wgData.Length ?? 0;
 
                 Console.WriteLine($"    → WG {wgId} added to forming outbound train.  Train length: {train.Length:F1}m, WGs: {train.WagonGroupIds.Count}");
 
@@ -92,12 +92,9 @@ namespace WienerNeustadtSimulation.Control
         {
             var trainId = GenerateOutboundTrainId();
 
-            var train = new OutboundTrain
+            var train = new OutboundTrain(trainId, destination, _engine.Now)
             {
-                ID = trainId,
-                Destination = destination,
                 ClassificationTrack = track,
-                CreationTime = _engine.Now,
                 WagonGroupIds = new List<string>(),
                 Length = 0
             };
