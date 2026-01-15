@@ -1,0 +1,76 @@
+{
+  "inboundTrains": [
+    {
+      "ID": "12341",
+      "Length": 320.0,
+      "WagonGroupIds": ["1234101", "1234102"],
+      "HasLoco": true,
+      "LocomotiveId": "LOCO-01",
+      "Status": "Arriving",
+      "Designation": "Inbound",
+      "Time": "2025-01-01T09:02:00Z"
+    },
+    {
+      "ID": "12342",
+      "Length": 320.0,
+      "WagonGroupIds": ["1234201", "1234202"],
+      "HasLoco": true,
+      "LocomotiveId": "LOCO-02",
+      "Status": "Arriving",
+      "Designation": "Inbound",
+      "Time": "2025-01-01T09:33:00Z"
+    }
+  ],
+  "wagonGroups": [
+    {
+      "ID": "1234101",
+      "Length": 128.0,
+      "WagonIds": [
+        "123410101",
+        "123410102"
+      ],
+      "Destination": "Vienna"
+    },
+    {
+      "ID": "1234102",
+      "Length": 128.0,
+      "WagonIds": [
+        "123410201",
+        "123410202",
+        "123410203"
+      ],
+      "Destination": "Graz"
+    },
+    {
+      "ID": "1234201",
+      "Length": 128.0,
+      "WagonIds": [
+        "123420101",
+        "123420102",
+        "123420103"
+      ],
+      "Destination": "Salzburg"
+    },
+    {
+      "ID": "1234202",
+      "Length": 128.0,
+      "WagonIds": [
+        "123420201",
+        "123420202"
+      ],
+      "Destination": "Ljubljana"
+    }
+  ],
+  "wagons": [
+    { "ID": "123410101", "Length": 16.0 },
+    { "ID": "123410102", "Length": 16.0 },
+    { "ID": "123410201", "Length": 16.0 },
+    { "ID": "123410202", "Length": 16.0 },
+    { "ID": "123410203", "Length": 16.0 },
+    { "ID": "123420101", "Length": 16.0 },
+    { "ID": "123420102", "Length": 16.0 },
+    { "ID": "123420103", "Length": 16.0 },
+    { "ID": "123420201", "Length": 16.0 },
+    { "ID": "123420202", "Length": 16.0 }
+  ]
+}
