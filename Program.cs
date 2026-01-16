@@ -18,20 +18,20 @@ namespace WienerNeustadtSimulation
             try
             {
                 Console.WriteLine("╔════════════════════════════════════════════════════════════╗");
-                Console.WriteLine("║   Wiener Neustadt Train Shunting Yard Simulation          ║");
+                Console.WriteLine("║   Wiener Neustadt Train Shunting Yard Simulation           ║");
                 Console.WriteLine("╚════════════════════════════════════════════════════════════╝\n");
 
                 // Load input data
                 var inboundPath = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "InputFiles", "InboundTrains.json");
                 if (!File.Exists(inboundPath))
                 {
-                    Console.Error.WriteLine($"❌ Inbound file not found: {inboundPath}");
+                    Console.Error.WriteLine($"   Inbound file not found: {inboundPath}");
                     Console.Error.WriteLine($"   Current working directory: {Directory.GetCurrentDirectory()}");
                     Console.Error.WriteLine($"   Application directory: {AppContext.BaseDirectory}");
                     return 2;
                 }
 
-                Console.WriteLine($"📂 Loading input file: {inboundPath}");
+                Console.WriteLine($"[Load incoming trains file: {inboundPath}]");
                 var json = File.ReadAllText(inboundPath);
                 var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                 var root = JsonSerializer.Deserialize<InboundRoot>(json, opts)
@@ -44,7 +44,7 @@ namespace WienerNeustadtSimulation
                 var engine = new SimulationEngine();
 
                 // Initialize infrastructure
-                Console.WriteLine("🏗️  Initializing infrastructure...");
+                Console.WriteLine("[Initializing infrastructure...]");
                 var arrivalTracks = CreateArrivalTracks();
                 var classificationTracks = CreateClassificationTracks();
                 Console.WriteLine($"✓ Created {arrivalTracks.Count} arrival tracks");
@@ -54,7 +54,7 @@ namespace WienerNeustadtSimulation
                 var wagonGroupData = ParseWagonGroupData(root);
 
                 // Create control units (in reverse dependency order)
-                Console.WriteLine("🎛️  Initializing control units...");
+                Console.WriteLine("[Initializing control units...]");
                 var classificationControl = new ClassificationControlUnit(engine);
 
                 var arrivalControl = new ArrivalControlUnit(
@@ -74,20 +74,20 @@ namespace WienerNeustadtSimulation
                 Console.WriteLine("✓ ClassificationControlUnit initialized\n");
 
                 // Schedule inbound train arrivals
-                Console.WriteLine("📅 Scheduling train arrivals...");
+                Console.WriteLine("[Scheduling train arrivals...]");
                 int scheduledCount = 0;
                 foreach (var t in root.InboundTrains ?? new List<TrainDto>())
                 {
                     if (string.IsNullOrWhiteSpace(t.Time))
                     {
-                        Console.WriteLine($"⚠️  Skipping train {t.ID} - no Time provided");
+                        Console.WriteLine($"[Skipping train {t.ID} - no Time provided]");
                         continue;
                     }
 
                     if (!DateTime.TryParse(t.Time, CultureInfo.InvariantCulture,
                         DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var simTime))
                     {
-                        Console.WriteLine($"⚠️  Skipping train {t.ID} - invalid Time format: {t.Time}");
+                        Console.WriteLine($"[Skipping train {t.ID} - invalid Time format: {t.Time}]");
                         continue;
                     }
 
@@ -116,7 +116,7 @@ namespace WienerNeustadtSimulation
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"\n❌ Fatal Error: {ex.Message}");
+                Console.Error.WriteLine($"\n Fatal Error: {ex.Message}");
                 Console.Error.WriteLine(ex.StackTrace);
                 return 99;
             }
