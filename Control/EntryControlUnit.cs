@@ -79,7 +79,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void EndWaitingActivity(Train train, Track arrivalTrack)
         {
-            Console.WriteLine($"  → Train {train.ID} assigned to arrival track {arrivalTrack.StationID}");
+            Console.WriteLine($"  → Train {train.ID} assigned to arrival track {arrivalTrack.RealLifeID}");
 
             if (_entryTimes.ContainsKey(train.ID))
             {
@@ -102,7 +102,7 @@ namespace WienerNeustadtSimulation.Control
         {
             arrivalTrack.CurrentOccupancies.Add(train.ID);
 
-            Console.WriteLine($"{DateTime.Now:MM/dd/yy HH:mm:ss} | {_engine.Now:yyyy-MM-ddTHH: mm:ss'Z'} | train {train.ID} arrives at arrival track {arrivalTrack.StationID}");
+            Console.WriteLine($"{DateTime.Now:MM/dd/yy HH:mm:ss} | {_engine.Now:yyyy-MM-ddTHH: mm:ss'Z'} | train {train.ID} arrives at arrival track {arrivalTrack.RealLifeID}");
 
             _arrivalControl.HandleTrainOnArrivalTrack(train, arrivalTrack);
         }

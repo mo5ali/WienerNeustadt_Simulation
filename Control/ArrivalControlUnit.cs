@@ -81,11 +81,11 @@ namespace WienerNeustadtSimulation.Control
                 {
                     var assignedTrack = AllocateClassificationTrack(destination);
                     _destinationToTrackMap[destination] = assignedTrack;
-                    Console.WriteLine($"  → Destination '{destination}' mapped to track {assignedTrack.StationID}");
+                    Console.WriteLine($"  → Destination '{destination}' mapped to track {assignedTrack.RealLifeID}");
                 }
 
                 wgClassificationMap[wgId] = _destinationToTrackMap[destination];
-                Console.WriteLine($"  → WG {wgId} → Destination '{destination}' → Track {_destinationToTrackMap[destination].StationID}");
+                Console.WriteLine($"  → WG {wgId} → Destination '{destination}' → Track {_destinationToTrackMap[destination].RealLifeID}");
             }
 
             RequestUncoupling(train, arrivalTrack, wgClassificationMap);
@@ -105,7 +105,7 @@ namespace WienerNeustadtSimulation.Control
                     .OrderBy(t => t.CurrentOccupancies.Count)
                     .First();
 
-                Console.WriteLine($"  ⚠ No free classification tracks - reusing track {availableTrack.StationID}");
+                Console.WriteLine($"  ⚠ No free classification tracks - reusing track {availableTrack.RealLifeID}");
             }
 
             return availableTrack;

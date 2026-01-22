@@ -38,15 +38,24 @@ namespace WienerNeustadtSimulation
                            ?? throw new Exception("Failed to parse inbound JSON");
 
                 Console.WriteLine($"✓ Loaded {root.InboundTrains?.Count ?? 0} inbound trains");
-                Console.WriteLine($"✓ Loaded {root.WagonGroups?.Count ?? 0} wagon groups\n");
+                Console.WriteLine($"✓ Loaded {root.WagonGroups?.Count ?? 0} wagon groups");
+
+                // Load infrastructure data
+                var infrastructurePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "InputFiles", "Infrastructure_WienerNeustadt_V20.json");
+                Console.WriteLine($"📂 Loading infrastructure file: {infrastructurePath}");
+                var infrastructureJson = File.ReadAllText(infrastructurePath);
+                var infrastructureRoot = JsonSerializer.Deserialize<InfrastructureRoot>(infrastructureJson, opts)
+                           ?? throw new Exception("Failed to parse infrastructure JSON");
+
+                Console.WriteLine($"✓ Loaded {infrastructureRoot.TrackSegments?.Count ?? 0} track segments\n");
 
                 // Create simulation engine
                 var engine = new SimulationEngine();
 
                 // Initialize infrastructure
                 Console.WriteLine("[Initializing infrastructure...]");
-                var arrivalTracks = CreateArrivalTracks();
-                var classificationTracks = CreateClassificationTracks();
+                var arrivalTracks = CreateArrivalTracks(infrastructureRoot);
+                var classificationTracks = CreateClassificationTracks(infrastructureRoot);
                 Console.WriteLine($"✓ Created {arrivalTracks.Count} arrival tracks");
                 Console.WriteLine($"✓ Created {classificationTracks.Count} classification tracks\n");
 
@@ -122,26 +131,48 @@ namespace WienerNeustadtSimulation
             }
         }
 
-        static List<Track> CreateArrivalTracks()
+        static List<Track> CreateArrivalTracks(InfrastructureRoot infrastructureRoot)
         {
-            return new List<Track>
+            var tracks = new List<Track>();
+            var arrivalSegments = infrastructureRoot.TrackSegments?
+                .Where(ts => ts.RailwayStationArea == "ArrivalArea")
+                .ToList() ?? new List<TrackSegmentDto>();
+
+            foreach (var segment in arrivalSegments)
             {
-                new Track("2001", 400) { Designation = "Arrival", RealLifeID = "A1", Area = "Arrival" },
-                new Track("2002", 400) { Designation = "Arrival", RealLifeID = "A2", Area = "Arrival" },
-                new Track("2003", 450) { Designation = "Arrival", RealLifeID = "A3", Area = "Arrival" }
-            };
+                var track = new Track(segment.TrackId.ToString("D4"), segment.Length)
+                {
+                    RealLifeID = segment.GetMapIdAsString(),
+                    Area = segment.RailwayStationArea ?? "",
+                    Designation = "Arrival",
+                    SegmentIds = new List<string> { segment.Id.ToString() }
+                };
+                tracks.Add(track);
+            }
+
+            return tracks;
         }
 
-        static List<Track> CreateClassificationTracks()
+        static List<Track> CreateClassificationTracks(InfrastructureRoot infrastructureRoot)
         {
-            return new List<Track>
+            var tracks = new List<Track>();
+            var classificationSegments = infrastructureRoot.TrackSegments?
+                .Where(ts => ts.RailwayStationArea == "ClassificationArea")
+                .ToList() ?? new List<TrackSegmentDto>();
+
+            foreach (var segment in classificationSegments)
             {
-                new Track("3001", 500) { Designation = "Classification", RealLifeID = "C1", Area = "Classification" },
-                new Track("3002", 500) { Designation = "Classification", RealLifeID = "C2", Area = "Classification" },
-                new Track("3003", 500) { Designation = "Classification", RealLifeID = "C3", Area = "Classification" },
-                new Track("3004", 500) { Designation = "Classification", RealLifeID = "C4", Area = "Classification" },
-                new Track("3005", 500) { Designation = "Classification", RealLifeID = "C5", Area = "Classification" }
-            };
+                var track = new Track(segment.TrackId.ToString("D4"), segment.Length)
+                {
+                    RealLifeID = segment.GetMapIdAsString(),
+                    Area = segment.RailwayStationArea ?? "",
+                    Designation = "Classification",
+                    SegmentIds = new List<string> { segment.Id.ToString() }
+                };
+                tracks.Add(track);
+            }
+
+            return tracks;
         }
 
         static Dictionary<string, WagonGroupDto> ParseWagonGroupData(InboundRoot root)

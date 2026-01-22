@@ -24,7 +24,7 @@ namespace WienerNeustadtSimulation.Entities
 
         public override string ToString()
         {
-            string trackInfo = ClassificationTrack != null ? $", Track: {ClassificationTrack.StationID}" : ", No Track";
+            string trackInfo = ClassificationTrack != null ? $", Track: {ClassificationTrack.RealLifeID}" : ", No Track";
             return $"OutboundTrain {ID} to {Destination} - {Length}m, {WagonGroupIds.Count} groups{trackInfo}";
         }
     }

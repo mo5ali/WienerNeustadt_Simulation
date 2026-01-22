@@ -27,7 +27,7 @@ namespace WienerNeustadtSimulation.Control
 
         public void CreateWagonGroupEntity(string wgId, WagonGroupDto wgData, Track classificationTrack)
         {
-            Console.WriteLine($"  ✓ WagonGroup entity {wgId} created on track {classificationTrack.StationID}");
+            Console.WriteLine($"  ✓ WagonGroup entity {wgId} created on track {classificationTrack.RealLifeID}");
 
             _wgEntryTimes[wgId] = _engine.Now;
 
@@ -48,7 +48,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void RequestSecuring(string wgId, Track track)
         {
-            Console.WriteLine($"    → Securing WG {wgId} (first on track {track.StationID})");
+            Console.WriteLine($"    → Securing WG {wgId} (first on track {track.RealLifeID})");
 
             var securingTime = TimeSpan.FromMinutes(2);
 
@@ -63,7 +63,7 @@ namespace WienerNeustadtSimulation.Control
         {
             var backmostWgId = track.CurrentOccupancies.LastOrDefault();
 
-            Console.WriteLine($"    → Coupling WG {wgId} to backmost WG {backmostWgId} on track {track.StationID}");
+            Console.WriteLine($"    → Coupling WG {wgId} to backmost WG {backmostWgId} on track {track.RealLifeID}");
 
             var couplingTime = TimeSpan.FromMinutes(3);
 
@@ -101,7 +101,7 @@ namespace WienerNeustadtSimulation.Control
 
             _formingTrains[track] = train;
 
-            Console.WriteLine($"  ✓ Outbound train entity {trainId} created for destination '{destination}' on track {track.StationID}");
+            Console.WriteLine($"  ✓ Outbound train entity {trainId} created for destination '{destination}' on track {track.RealLifeID}");
         }
 
         private void CheckTrainCompletionCondition(Track track)

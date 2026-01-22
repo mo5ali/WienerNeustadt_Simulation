@@ -16,6 +16,34 @@ namespace WienerNeustadtSimulation.Models
         public List<WagonDto>? Wagons { get; set; }
     }
 
+    public class InfrastructureRoot
+    {
+        [JsonPropertyName("TrackSegments")]
+        public List<TrackSegmentDto>? TrackSegments { get; set; }
+    }
+
+    public class TrackSegmentDto
+    {
+        public int Id { get; set; }
+        public int TrackId { get; set; }
+        public object? MapId { get; set; }
+        public double Length { get; set; }
+        public int ConnectionPoint1Id { get; set; }
+        public int ConnectionPoint2Id { get; set; }
+        public List<int>? InterimPointIds { get; set; }
+        public double Signal1DistanceToConnection1 { get; set; }
+        public double Signal2DistanceToConnection2 { get; set; }
+        public bool IsOccupancyTracked { get; set; }
+        public string? TrackType { get; set; }
+        public string? RailwayStationArea { get; set; }
+        public List<int>? UndrivableSubSegmentIndexes { get; set; }
+
+        public string GetMapIdAsString()
+        {
+            return MapId?.ToString() ?? "";
+        }
+    }
+
     public class TrainDto
     {
         public string? ID { get; set; }
