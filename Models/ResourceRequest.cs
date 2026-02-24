@@ -3,9 +3,6 @@ using System.Collections.Generic;
 
 namespace WienerNeustadtSimulation.Models
 {
-    /// <summary>
-    /// Represents the priority level of a resource request
-    /// </summary>
     public enum RequestPriority
     {
         Normal = 0,
@@ -13,85 +10,86 @@ namespace WienerNeustadtSimulation.Models
         Critical = 2
     }
 
-    /// <summary>
-    /// Activity type constants and their abbreviations
-    /// </summary>
+    public enum RequestStatus
+    {
+        Pending,
+        Queued,
+        Assigned,
+        InProgress,
+        Completed,
+        Rejected
+    }
+
     public static class ActivityTypes
     {
         public const string IncomingTrainPreparation = "IncomingTrainPreparation";
         public const string PushOff = "PushOff";
         public const string Securing = "Securing";
         public const string Coupling = "Coupling";
-        public const string DeparturePreparation = "DeparturePreparation";
-        public const string Inspection = "Inspection";
 
         // Abbreviations for request IDs
-        public static readonly Dictionary<string, string> Abbreviations = new Dictionary<string, string>
+        private static readonly Dictionary<string, string> Abbrev = new()
         {
             { IncomingTrainPreparation, "ITP" },
             { PushOff, "PO" },
             { Securing, "SEC" },
             { Coupling, "COP" },
-            { DeparturePreparation, "DP" },
-            { Inspection, "INS" }
         };
 
         public static string GetAbbreviation(string activityType)
-        {
-            return Abbreviations.ContainsKey(activityType) ? Abbreviations[activityType] : "ACT";
-        }
+            => Abbrev.TryGetValue(activityType, out var v) ? v : "REQ";
     }
 
-    /// <summary>
-    /// Types of resources that can be requested
-    /// </summary>
     public enum ResourceType
     {
         Worker,
         Supervisor,
         ShuntingLocomotive,
         SecuringEquipment,
-        CouplingEquipment,
-        InspectionEquipment
+        CouplingEquipment
     }
 
-    /// <summary>
-    /// Represents a single resource requirement (type and quantity)
-    /// </summary>
-    public class ResourceRequirement
+    public sealed class ResourceRequirement
     {
-        public ResourceType Type { get; set; }
-        public int Quantity { get; set; }
+        public ResourceType Type { get; }
+        public int Quantity { get; }
 
         public ResourceRequirement(ResourceType type, int quantity)
         {
+            if (quantity <= 0) throw new ArgumentException("Quantity must be > 0", nameof(quantity));
             Type = type;
             Quantity = quantity;
         }
 
-        public override string ToString()
-        {
-            return $"({Quantity}) {Type}";
-        }
+        public override string ToString() => $"{Quantity}x{Type}";
     }
 
     /// <summary>
-    /// Base class for all resource requests sent to ResourceControlUnit
+    /// A resource request that can block the caller chain until fulfilled.
     /// </summary>
     public class ResourceRequest
     {
-        public string RequestId { get; private set; }
-        public string Sender { get; set; } // e.g., "ArrivalControlUnit"
-        public string Handler { get; set; } // e.g., "ResourceControlUnit"
-        public string ForEntity { get; set; } // e.g., Train ID "12345" or WagonGroup ID "1234501"
-        public string ForActivity { get; set; } // Unique instance ID e.g., "IncomingTrainPreparation_1046180226_4578"
-        public string ActivityType { get; private set; } // e.g., "IncomingTrainPreparation"
-        public string LocationTrackId { get; set; } // Track.StationID (4-digit)
-        public string LocationArea { get; set; } // Track.Area
-        public RequestPriority Priority { get; set; }
-        public List<ResourceRequirement> ResourcesRequested { get; set; }
-        public DateTime RequestTime { get; set; }
-        public RequestStatus Status { get; set; }
+        public string RequestId { get; }
+        public string Sender { get; }
+        public string Handler { get; } = "ResourceControlUnit";
+
+        public string ForEntity { get; }          // Train.ID or WagonGroup.ID (string)
+        public string ActivityType { get; }       // e.g. IncomingTrainPreparation
+        public string ForActivity { get; }        // unique instance id: IncomingTrainPreparation_{ts}_{ForEntity}
+
+        public string LocationTrackId { get; }    // Track.StationID
+        public string LocationArea { get; }       // Track.Area
+
+        public RequestPriority Priority { get; set; } = RequestPriority.Normal;
+        public List<ResourceRequirement> ResourcesRequested { get; } = new();
+
+        public RequestStatus Status { get; internal set; } = RequestStatus.Pending;
+
+        /// <summary>
+        /// Called by ResourceControlUnit when the resources are assigned and available at location.
+        /// This callback is how the blocked process chain resumes.
+        /// </summary>
+        public Action<ResourceRequest>? OnFulfilled { get; set; }
 
         public ResourceRequest(
             string sender,
@@ -101,47 +99,28 @@ namespace WienerNeustadtSimulation.Models
             string locationArea = "")
         {
             Sender = sender;
-            Handler = "ResourceControlUnit";
             ForEntity = forEntity;
             ActivityType = activityType;
             LocationTrackId = locationTrackId;
-            LocationArea = locationArea;
-            Priority = RequestPriority.Normal;
-            ResourcesRequested = new List<ResourceRequirement>();
-            RequestTime = DateTime.UtcNow;
-            Status = RequestStatus.Pending;
+            LocationArea = locationArea ?? string.Empty;
 
-            // Generate unique IDs based on activity type and entity
-            long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            string abbreviation = ActivityTypes.GetAbbreviation(activityType);
-            
-            RequestId = $"{abbreviation}_{timestamp}_{forEntity}";
-            ForActivity = $"{activityType}_{timestamp}_{forEntity}";
+            var timestampSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var abbr = ActivityTypes.GetAbbreviation(activityType);
+
+            // Examples:
+            // RequestId: ITP_1700000000_12345
+            // ForActivity: IncomingTrainPreparation_1700000000_12345
+            RequestId = $"{abbr}_{timestampSeconds}_{forEntity}";
+            ForActivity = $"{activityType}_{timestampSeconds}_{forEntity}";
         }
 
         public void AddResource(ResourceType type, int quantity)
-        {
-            ResourcesRequested.Add(new ResourceRequirement(type, quantity));
-        }
+            => ResourcesRequested.Add(new ResourceRequirement(type, quantity));
 
         public override string ToString()
         {
-            string resources = string.Join(", ", ResourcesRequested);
-            return $"Request {RequestId} from {Sender} for activity {ForActivity} on entity {ForEntity} " +
-                   $"at Track {LocationTrackId} | Resources: {resources} | Status: {Status}";
+            var res = string.Join(", ", ResourcesRequested);
+            return $"{RequestId} | {Sender} -> {Handler} | Entity={ForEntity} | Activity={ForActivity} | Loc={LocationTrackId}/{LocationArea} | [{res}] | {Status}";
         }
-    }
-
-    /// <summary>
-    /// Status of a resource request
-    /// </summary>
-    public enum RequestStatus
-    {
-        Pending,
-        Searching,
-        Assigned,
-        InProgress,
-        Completed,
-        Failed
     }
 }

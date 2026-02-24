@@ -66,9 +66,22 @@ namespace WienerNeustadtSimulation
                 Console.WriteLine("[Initializing control units...]");
                 var classificationControl = new ClassificationControlUnit(engine);
 
+                // Minimal initial inventory (tune later)
+                var resourceInventory = new Dictionary<ResourceType, int>
+                {
+                    { ResourceType.Worker, 10 },
+                    { ResourceType.Supervisor, 2 },
+                    { ResourceType.ShuntingLocomotive, 2 },
+                    { ResourceType.SecuringEquipment, 5 },
+                    { ResourceType.CouplingEquipment, 5 },
+                };
+
+                var resourceControl = new ResourceControlUnit(engine, resourceInventory);
+
                 var arrivalControl = new ArrivalControlUnit(
                     engine,
                     classificationControl,
+                    resourceControl,
                     classificationTracks,
                     wagonGroupData
                 );
@@ -80,7 +93,9 @@ namespace WienerNeustadtSimulation
                 );
                 Console.WriteLine("✓ EntryControlUnit initialized");
                 Console.WriteLine("✓ ArrivalControlUnit initialized");
-                Console.WriteLine("✓ ClassificationControlUnit initialized\n");
+                Console.WriteLine("✓ ClassificationControlUnit initialized");
+                Console.WriteLine("✓ ResourceControlUnit initialized\n");
+
 
                 // Schedule inbound train arrivals
                 Console.WriteLine("[Scheduling train arrivals...]");

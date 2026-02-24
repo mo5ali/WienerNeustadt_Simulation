@@ -9,12 +9,15 @@ using WienerNeustadtSimulation.Models;
 namespace WienerNeustadtSimulation.Control
 {
     /// <summary>
-    /// Manages trains on arrival tracks:  preparation, classification, and push-off
+    /// Manages trains on arrival tracks: waiting, preparation+sorting, push-off, dismantling.
+    /// Sequence aligned with provided flowcharts.
     /// </summary>
     public class ArrivalControlUnit
     {
         private readonly SimulationEngine _engine;
         private readonly ClassificationControlUnit _classificationControl;
+        private readonly ResourceControlUnit _resourceControl;
+
         private readonly Dictionary<string, Track> _destinationToTrackMap;
         private readonly List<Track> _classificationTracks;
         private readonly Dictionary<string, WagonGroupDto> _wagonGroupData;
@@ -23,13 +26,17 @@ namespace WienerNeustadtSimulation.Control
         public ArrivalControlUnit(
             SimulationEngine engine,
             ClassificationControlUnit classificationControl,
+            ResourceControlUnit resourceControl,
             List<Track> classificationTracks,
             Dictionary<string, WagonGroupDto> wagonGroupData)
         {
             _engine = engine;
             _classificationControl = classificationControl;
+            _resourceControl = resourceControl;
+
             _classificationTracks = classificationTracks;
             _wagonGroupData = wagonGroupData;
+
             _destinationToTrackMap = new Dictionary<string, Track>();
             _arrivalTrackEntryTimes = new Dictionary<string, DateTime>();
         }
@@ -38,31 +45,44 @@ namespace WienerNeustadtSimulation.Control
         {
             _arrivalTrackEntryTimes[train.ID] = _engine.Now;
 
-            var waitTime = TimeSpan.FromMinutes(2);
+            Console.WriteLine($"  → Train {train.ID} arrived on arrival track {arrivalTrack.StationID}");
+            Console.WriteLine($"  → Start waiting activity (arrival track) for train {train.ID}");
 
+            // Flowchart has a waiting activity before preparation/sorting begins.
+            var waitTime = TimeSpan.FromMinutes(2);
             _engine.Schedule(
                 _engine.Now.Add(waitTime),
-                () => StartTrainPreparation(train, arrivalTrack),
-                $"StartPreparation-{train.ID}"
+                () => RequestIncomingTrainPreparationAndSorting(train, arrivalTrack),
+                $"ArrivalWaitComplete-{train.ID}"
             );
         }
 
-        private void StartTrainPreparation(Train train, Track arrivalTrack)
+        private void RequestIncomingTrainPreparationAndSorting(Train train, Track arrivalTrack)
         {
-            Console.WriteLine($"  → Starting preparation for train {train.ID}");
+            // 1) Sorting method: decide classification track mapping.
+            var wgClassificationMap = RunSortingMethod(train);
 
-            var preparationTime = TimeSpan.FromMinutes(10);
+            // 2) Resource request for incoming train preparation (blocks this train until fulfilled).
+            var prepReq = new TrainPreparationRequest(train.ID, arrivalTrack.StationID, arrivalTrack.Area);
 
-            _engine.Schedule(
-                _engine.Now.Add(preparationTime),
-                () => DetermineClassificationTracks(train, arrivalTrack),
-                $"ClassificationDetermination-{train.ID}"
-            );
+            prepReq.OnFulfilled = _ =>
+            {
+                // Once resources are assigned, start the preparation activity.
+                StartIncomingTrainPreparationActivity(train, arrivalTrack, wgClassificationMap, prepReq);
+            };
+
+            _resourceControl.Submit(prepReq);
+
+            // IMPORTANT: we do NOT schedule next steps here. The chain resumes in OnFulfilled.
         }
 
-        private void DetermineClassificationTracks(Train train, Track arrivalTrack)
+        /// <summary>
+        /// This is the "Sorting method" from your diagram:
+        /// map each wagon group destination to a classification track.
+        /// </summary>
+        private Dictionary<string, Track> RunSortingMethod(Train train)
         {
-            Console.WriteLine($"  → Determining classification tracks for train {train.ID}");
+            Console.WriteLine($"  → Run sorting method for train {train.ID}");
 
             var wgClassificationMap = new Dictionary<string, Track>();
 
@@ -75,20 +95,20 @@ namespace WienerNeustadtSimulation.Control
                 }
 
                 var wgData = _wagonGroupData[wgId];
-                var destination = wgData.Destination;
+                var destination = wgData.Destination ?? "Unknown";
 
-                if (destination != null && !_destinationToTrackMap.ContainsKey(destination))
+                if (!_destinationToTrackMap.ContainsKey(destination))
                 {
                     var assignedTrack = AllocateClassificationTrack(destination);
                     _destinationToTrackMap[destination] = assignedTrack;
-                    Console.WriteLine($"  → Destination '{destination}' mapped to track {assignedTrack.RealLifeID}");
+                    Console.WriteLine($"  → Destination '{destination}' mapped to track {assignedTrack.StationID}");
                 }
 
                 wgClassificationMap[wgId] = _destinationToTrackMap[destination];
-                Console.WriteLine($"  → WG {wgId} → Destination '{destination}' → Track {_destinationToTrackMap[destination].RealLifeID}");
+                Console.WriteLine($"  → WG {wgId} → Destination '{destination}' → Track {_destinationToTrackMap[destination].StationID}");
             }
 
-            RequestUncoupling(train, arrivalTrack, wgClassificationMap);
+            return wgClassificationMap;
         }
 
         private Track AllocateClassificationTrack(string destination)
@@ -105,73 +125,86 @@ namespace WienerNeustadtSimulation.Control
                     .OrderBy(t => t.CurrentOccupancies.Count)
                     .First();
 
-                Console.WriteLine($"  ⚠ No free classification tracks - reusing track {availableTrack.RealLifeID}");
+                Console.WriteLine($"  ⚠ No free classification tracks - reusing track {availableTrack.StationID} for destination '{destination}'");
             }
 
             return availableTrack;
         }
 
-        private void RequestUncoupling(Train train, Track arrivalTrack, Dictionary<string, Track> wgClassificationMap)
+        private void StartIncomingTrainPreparationActivity(
+            Train train,
+            Track arrivalTrack,
+            Dictionary<string, Track> wgClassificationMap,
+            ResourceRequest prepReq)
         {
-            Console.WriteLine($"  → Requesting uncoupling for train {train.ID}");
+            Console.WriteLine($"  → Incoming train preparation START (activity: {prepReq.ForActivity}) for train {train.ID}");
 
-            var uncouplingTime = TimeSpan.FromMinutes(train.WagonGroupIds.Count * 3);
-
-            _engine.Schedule(
-                _engine.Now.Add(uncouplingTime),
-                () => CheckServiceStatus(train, arrivalTrack, wgClassificationMap),
-                $"UncouplingComplete-{train.ID}"
-            );
-        }
-
-        private void CheckServiceStatus(Train train, Track arrivalTrack, Dictionary<string, Track> wgClassificationMap)
-        {
-            bool isServiceOkay = true;
-
-            if (isServiceOkay)
-            {
-                EndWaitingActivity(train, arrivalTrack, wgClassificationMap);
-            }
-            else
-            {
-                Console.WriteLine($"  ⚠ Service not ready for train {train.ID}, retrying.. .");
-                _engine.Schedule(
-                    _engine.Now.AddMinutes(5),
-                    () => CheckServiceStatus(train, arrivalTrack, wgClassificationMap),
-                    $"RetryService-{train.ID}"
-                );
-            }
-        }
-
-        private void EndWaitingActivity(Train train, Track arrivalTrack, Dictionary<string, Track> wgClassificationMap)
-        {
-            Console.WriteLine($"  → Preparation of shunting train {train.ID}");
-
-            var preparationTime = TimeSpan.FromMinutes(8);
+            // "Preparation of incoming train" (done to the entity) duration:
+            var preparationTime = TimeSpan.FromMinutes(10);
 
             _engine.Schedule(
                 _engine.Now.Add(preparationTime),
-                () => RequestPushOff(train, arrivalTrack, wgClassificationMap),
-                $"PreparationComplete-{train.ID}"
+                () => CompleteIncomingTrainPreparation(train, arrivalTrack, wgClassificationMap, prepReq),
+                $"IncomingTrainPreparationComplete-{train.ID}"
             );
+        }
+
+        private void CompleteIncomingTrainPreparation(
+            Train train,
+            Track arrivalTrack,
+            Dictionary<string, Track> wgClassificationMap,
+            ResourceRequest prepReq)
+        {
+            Console.WriteLine($"  ✓ Incoming train preparation DONE for train {train.ID}");
+
+            // Release prep resources now that this activity is finished
+            _resourceControl.Release(prepReq);
+
+            // Next: Request PushOff (blocks this train until fulfilled)
+            RequestPushOff(train, arrivalTrack, wgClassificationMap);
         }
 
         private void RequestPushOff(Train train, Track arrivalTrack, Dictionary<string, Track> wgClassificationMap)
         {
-            Console.WriteLine($"  → Requesting push-off for train {train.ID}");
+            Console.WriteLine($"  → Request PushOff for train {train.ID}");
+
+            var poReq = new PushOffRequest(train.ID, arrivalTrack.StationID, arrivalTrack.Area);
+
+            poReq.OnFulfilled = _ =>
+            {
+                StartPushOffProcess(train, arrivalTrack, wgClassificationMap, poReq);
+            };
+
+            _resourceControl.Submit(poReq);
+        }
+
+        private void StartPushOffProcess(
+            Train train,
+            Track arrivalTrack,
+            Dictionary<string, Track> wgClassificationMap,
+            ResourceRequest poReq)
+        {
+            Console.WriteLine($"  → Push-off process START (activity: {poReq.ForActivity}) for train {train.ID}");
 
             var pushOffTime = TimeSpan.FromMinutes(5);
 
             _engine.Schedule(
                 _engine.Now.Add(pushOffTime),
-                () => ExecutePushOff(train, arrivalTrack, wgClassificationMap),
-                $"PushOffExecuted-{train.ID}"
+                () => CompletePushOffAndDismantle(train, arrivalTrack, wgClassificationMap, poReq),
+                $"PushOffComplete-{train.ID}"
             );
         }
 
-        private void ExecutePushOff(Train train, Track arrivalTrack, Dictionary<string, Track> wgClassificationMap)
+        private void CompletePushOffAndDismantle(
+            Train train,
+            Track arrivalTrack,
+            Dictionary<string, Track> wgClassificationMap,
+            ResourceRequest poReq)
         {
             Console.WriteLine($"{DateTime.Now:MM/dd/yy HH:mm:ss} | {_engine.Now:yyyy-MM-ddTHH:mm:ss'Z'} | train {train.ID} push-off executed");
+
+            // Release push-off resources
+            _resourceControl.Release(poReq);
 
             if (_arrivalTrackEntryTimes.ContainsKey(train.ID))
             {
@@ -179,20 +212,24 @@ namespace WienerNeustadtSimulation.Control
                 Console.WriteLine($"  → Arrival track dwell time: {dwellTime.TotalMinutes:F2} minutes");
             }
 
+            // Dismantle train into WGs and place them on classification tracks
             foreach (var wgId in train.WagonGroupIds)
             {
-                if (wgClassificationMap.ContainsKey(wgId))
-                {
-                    var targetTrack = wgClassificationMap[wgId];
-                    var wgData = _wagonGroupData[wgId];
+                if (!wgClassificationMap.ContainsKey(wgId))
+                    continue;
 
-                    _classificationControl.CreateWagonGroupEntity(wgId, wgData, targetTrack);
-                }
+                if (!_wagonGroupData.ContainsKey(wgId))
+                    continue;
+
+                var targetTrack = wgClassificationMap[wgId];
+                var wgData = _wagonGroupData[wgId];
+
+                _classificationControl.CreateWagonGroupEntity(wgId, wgData, targetTrack);
             }
 
             arrivalTrack.CurrentOccupancies.Remove(train.ID);
 
-            Console.WriteLine($"  ✗ Train entity {train.ID} destroyed after push-off");
+            Console.WriteLine($"  ✗ Train entity {train.ID} removed (dismantled into WGs)");
         }
     }
 }
