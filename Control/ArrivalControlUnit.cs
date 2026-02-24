@@ -9,8 +9,8 @@ using WienerNeustadtSimulation.Models;
 namespace WienerNeustadtSimulation.Control
 {
     /// <summary>
-    /// Manages trains on arrival tracks: waiting, preparation+sorting, push-off, dismantling.
-    /// Sequence aligned with provided flowcharts.
+    /// Manages incoming trains from entry through arrival track to push-off and dismantling.
+    /// Combines entry queue management + arrival track processing.
     /// </summary>
     public class ArrivalControlUnit
     {
@@ -18,6 +18,12 @@ namespace WienerNeustadtSimulation.Control
         private readonly ClassificationControlUnit _classificationControl;
         private readonly ResourceControlUnit _resourceControl;
 
+        // Entry-related state (from EntryControlUnit)
+        private readonly Queue<Train> _entryQueue;
+        private readonly List<Track> _arrivalTracks;
+        private readonly Dictionary<string, DateTime> _entryTimes;
+
+        // Arrival track processing state
         private readonly Dictionary<string, Track> _destinationToTrackMap;
         private readonly List<Track> _classificationTracks;
         private readonly Dictionary<string, WagonGroupDto> _wagonGroupData;
@@ -27,6 +33,7 @@ namespace WienerNeustadtSimulation.Control
             SimulationEngine engine,
             ClassificationControlUnit classificationControl,
             ResourceControlUnit resourceControl,
+            List<Track> arrivalTracks,
             List<Track> classificationTracks,
             Dictionary<string, WagonGroupDto> wagonGroupData)
         {
@@ -34,21 +41,135 @@ namespace WienerNeustadtSimulation.Control
             _classificationControl = classificationControl;
             _resourceControl = resourceControl;
 
+            _arrivalTracks = arrivalTracks;
             _classificationTracks = classificationTracks;
             _wagonGroupData = wagonGroupData;
 
+            _entryQueue = new Queue<Train>();
+            _entryTimes = new Dictionary<string, DateTime>();
             _destinationToTrackMap = new Dictionary<string, Track>();
             _arrivalTrackEntryTimes = new Dictionary<string, DateTime>();
         }
 
-        public void HandleTrainOnArrivalTrack(Train train, Track arrivalTrack)
+        // ============================================================
+        // ENTRY PHASE (from EntryControlUnit)
+        // ============================================================
+
+        /// <summary>
+        /// Called from Program.cs when a train arrives at the system entry.
+        /// </summary>
+        public void HandleTrainArrival(TrainDto trainDto, DateTime simTimeUtc)
+        {
+            Console.WriteLine($"{DateTime.Now:MM/dd/yy HH:mm:ss} | {simTimeUtc:yyyy-MM-ddTHH:mm:ss'Z'} | train {trainDto.ID} arrives at entry");
+
+            var train = CreateTrainEntity(trainDto);
+            _entryQueue.Enqueue(train);
+            _entryTimes[train.ID] = simTimeUtc;
+
+            Console.WriteLine($"  → Train {train.ID} queued at entry. Queue length: {_entryQueue.Count}");
+
+            StartWaitingForArrivalTrack(train);
+        }
+
+        private Train CreateTrainEntity(TrainDto trainDto)
+        {
+            var train = new Train(trainDto.ID ?? "00000", trainDto.Length ?? 0)
+            {
+                WagonGroupIds = trainDto.WagonGroupIds ?? new List<string>(),
+                HasLoco = trainDto.HasLoco ?? false,
+                LocomotiveId = trainDto.LocomotiveId ?? string.Empty,
+                Status = trainDto.Status ?? string.Empty,
+                Designation = trainDto.Designation ?? "Inbound"
+            };
+
+            if (DateTime.TryParse(trainDto.Time, out var parsedTime))
+                train.Time = parsedTime;
+
+            return train;
+        }
+
+        private void StartWaitingForArrivalTrack(Train train)
+        {
+            var assignedTrack = RequestArrivalTrack(train);
+
+            if (assignedTrack != null && IsTrackFree(assignedTrack))
+            {
+                EndWaitingForArrivalTrack(train, assignedTrack);
+            }
+            else
+            {
+                Console.WriteLine($"  → Train {train.ID} waiting for arrival track (retry in 30s)");
+
+                _engine.Schedule(
+                    _engine.Now.AddSeconds(30),
+                    () => StartWaitingForArrivalTrack(train),
+                    $"RetryArrivalTrack-{train.ID}"
+                );
+            }
+        }
+
+        private Track? RequestArrivalTrack(Train train)
+        {
+            return _arrivalTracks
+                .Where(t => t.Length >= train.Length && t.Designation == "Arrival")
+                .OrderBy(t => t.CurrentOccupancies.Count)
+                .FirstOrDefault();
+        }
+
+        private bool IsTrackFree(Track track)
+        {
+            return track.CurrentOccupancies.Count == 0;
+        }
+
+        private void EndWaitingForArrivalTrack(Train train, Track arrivalTrack)
+        {
+            Console.WriteLine($"  → Train {train.ID} assigned to arrival track {arrivalTrack.StationID}");
+
+            if (_entryTimes.ContainsKey(train.ID))
+            {
+                var queuingTime = _engine.Now - _entryTimes[train.ID];
+                Console.WriteLine($"  → Queuing time: {queuingTime.TotalMinutes:F2} minutes");
+            }
+
+            var driveTime = CalculateDriveTime(train, arrivalTrack);
+
+            _engine.Schedule(
+                _engine.Now.Add(driveTime),
+                () => ArriveAtArrivalTrack(train, arrivalTrack),
+                $"ArriveAtArrivalTrack-{train.ID}"
+            );
+
+            Console.WriteLine($"  → Train {train.ID} driving to arrival track (ETA: {driveTime.TotalMinutes:F1} min)");
+        }
+
+        private TimeSpan CalculateDriveTime(Train train, Track arrivalTrack)
+        {
+            // Simplified drive time calculation
+            return TimeSpan.FromMinutes(3);
+        }
+
+        private void ArriveAtArrivalTrack(Train train, Track arrivalTrack)
+        {
+            Console.WriteLine($"  ✓ Train {train.ID} arrived at arrival track {arrivalTrack.StationID}");
+
+            arrivalTrack.CurrentOccupancies.Add(train.ID);
+
+            // Now proceed to arrival track processing phase
+            HandleTrainOnArrivalTrack(train, arrivalTrack);
+        }
+
+        // ============================================================
+        // ARRIVAL TRACK PHASE (existing logic, refactored)
+        // ============================================================
+
+        private void HandleTrainOnArrivalTrack(Train train, Track arrivalTrack)
         {
             _arrivalTrackEntryTimes[train.ID] = _engine.Now;
 
-            Console.WriteLine($"  → Train {train.ID} arrived on arrival track {arrivalTrack.StationID}");
+            Console.WriteLine($"  → Train {train.ID} on arrival track {arrivalTrack.StationID}");
             Console.WriteLine($"  → Start waiting activity (arrival track) for train {train.ID}");
 
-            // Flowchart has a waiting activity before preparation/sorting begins.
+            // Flowchart: waiting activity before preparation/sorting begins.
             var waitTime = TimeSpan.FromMinutes(2);
             _engine.Schedule(
                 _engine.Now.Add(waitTime),
@@ -72,13 +193,10 @@ namespace WienerNeustadtSimulation.Control
             };
 
             _resourceControl.Submit(prepReq);
-
-            // IMPORTANT: we do NOT schedule next steps here. The chain resumes in OnFulfilled.
         }
 
         /// <summary>
-        /// This is the "Sorting method" from your diagram:
-        /// map each wagon group destination to a classification track.
+        /// Sorting method: map each wagon group destination to a classification track.
         /// </summary>
         private Dictionary<string, Track> RunSortingMethod(Train train)
         {
@@ -125,7 +243,7 @@ namespace WienerNeustadtSimulation.Control
                     .OrderBy(t => t.CurrentOccupancies.Count)
                     .First();
 
-                Console.WriteLine($"  ⚠ No free classification tracks - reusing track {availableTrack.StationID} for destination '{destination}'");
+                Console.WriteLine($"  �� No free classification tracks - reusing track {availableTrack.StationID} for destination '{destination}'");
             }
 
             return availableTrack;
@@ -139,7 +257,6 @@ namespace WienerNeustadtSimulation.Control
         {
             Console.WriteLine($"  → Incoming train preparation START (activity: {prepReq.ForActivity}) for train {train.ID}");
 
-            // "Preparation of incoming train" (done to the entity) duration:
             var preparationTime = TimeSpan.FromMinutes(10);
 
             _engine.Schedule(
@@ -157,10 +274,8 @@ namespace WienerNeustadtSimulation.Control
         {
             Console.WriteLine($"  ✓ Incoming train preparation DONE for train {train.ID}");
 
-            // Release prep resources now that this activity is finished
             _resourceControl.Release(prepReq);
 
-            // Next: Request PushOff (blocks this train until fulfilled)
             RequestPushOff(train, arrivalTrack, wgClassificationMap);
         }
 
@@ -203,7 +318,6 @@ namespace WienerNeustadtSimulation.Control
         {
             Console.WriteLine($"{DateTime.Now:MM/dd/yy HH:mm:ss} | {_engine.Now:yyyy-MM-ddTHH:mm:ss'Z'} | train {train.ID} push-off executed");
 
-            // Release push-off resources
             _resourceControl.Release(poReq);
 
             if (_arrivalTrackEntryTimes.ContainsKey(train.ID))

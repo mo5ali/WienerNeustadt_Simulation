@@ -78,20 +78,17 @@ namespace WienerNeustadtSimulation
 
                 var resourceControl = new ResourceControlUnit(engine, resourceInventory);
 
+                // ArrivalControlUnit now handles BOTH entry and arrival phases
                 var arrivalControl = new ArrivalControlUnit(
                     engine,
                     classificationControl,
                     resourceControl,
+                    arrivalTracks,
                     classificationTracks,
-                    wagonGroupData
+                    wagonGroupData              
                 );
 
-                var entryControl = new EntryControlUnit(
-                    engine,
-                    arrivalControl,
-                    arrivalTracks
-                );
-                Console.WriteLine("✓ EntryControlUnit initialized");
+
                 Console.WriteLine("✓ ArrivalControlUnit initialized");
                 Console.WriteLine("✓ ClassificationControlUnit initialized");
                 Console.WriteLine("✓ ResourceControlUnit initialized\n");
@@ -117,7 +114,7 @@ namespace WienerNeustadtSimulation
 
                     engine.Schedule(
                         simTime.ToUniversalTime(),
-                        () => entryControl.HandleTrainArrival(t, simTime.ToUniversalTime()),
+                        () => arrivalControl.HandleTrainArrival(t, simTime.ToUniversalTime()),
                         $"TrainArrives-{t.ID}"
                     );
                     scheduledCount++;
