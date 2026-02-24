@@ -52,7 +52,7 @@ namespace WienerNeustadtSimulation.Control
         }
 
         // ============================================================
-        // ENTRY PHASE (from EntryControlUnit)
+        // ENTRY PHASE
         // ============================================================
 
         /// <summary>
@@ -68,7 +68,19 @@ namespace WienerNeustadtSimulation.Control
 
             Console.WriteLine($"  → Train {train.ID} queued at entry. Queue length: {_entryQueue.Count}");
 
-            StartWaitingForArrivalTrack(train);
+            // Try to find an available arrival track immediately
+            var availableTrack = SearchForArrivalTrack(train);
+
+            if (availableTrack != null && IsTrackFree(availableTrack))
+            {
+                // Track available - assign immediately
+                AssignToArrivalTrack(train, availableTrack);
+            }
+            else
+            {
+                // No track available - start waiting/retry loop
+                StartWaitingForArrivalTrack(train);
+            }
         }
 
         private Train CreateTrainEntity(TrainDto trainDto)
@@ -88,27 +100,11 @@ namespace WienerNeustadtSimulation.Control
             return train;
         }
 
-        private void StartWaitingForArrivalTrack(Train train)
-        {
-            var assignedTrack = RequestArrivalTrack(train);
-
-            if (assignedTrack != null && IsTrackFree(assignedTrack))
-            {
-                EndWaitingForArrivalTrack(train, assignedTrack);
-            }
-            else
-            {
-                Console.WriteLine($"  → Train {train.ID} waiting for arrival track (retry in 30s)");
-
-                _engine.Schedule(
-                    _engine.Now.AddSeconds(30),
-                    () => StartWaitingForArrivalTrack(train),
-                    $"RetryArrivalTrack-{train.ID}"
-                );
-            }
-        }
-
-        private Track? RequestArrivalTrack(Train train)
+        /// <summary>
+        /// Searches for an available arrival track that can accommodate the train.
+        /// Returns null if no suitable track is found.
+        /// </summary>
+        private Track? SearchForArrivalTrack(Train train)
         {
             return _arrivalTracks
                 .Where(t => t.Length >= train.Length && t.Designation == "Arrival")
@@ -121,7 +117,33 @@ namespace WienerNeustadtSimulation.Control
             return track.CurrentOccupancies.Count == 0;
         }
 
-        private void EndWaitingForArrivalTrack(Train train, Track arrivalTrack)
+        private void StartWaitingForArrivalTrack(Train train)
+        {
+            Console.WriteLine($"  → Train {train.ID} waiting for arrival track (retry in 30s)");
+
+            _engine.Schedule(
+                _engine.Now.AddSeconds(30),
+                () => RetryArrivalTrackSearch(train),
+                $"RetryArrivalTrack-{train.ID}"
+            );
+        }
+
+        private void RetryArrivalTrackSearch(Train train)
+        {
+            var availableTrack = SearchForArrivalTrack(train);
+
+            if (availableTrack != null && IsTrackFree(availableTrack))
+            {
+                AssignToArrivalTrack(train, availableTrack);
+            }
+            else
+            {
+                // Still no track available - retry again
+                StartWaitingForArrivalTrack(train);
+            }
+        }
+
+        private void AssignToArrivalTrack(Train train, Track arrivalTrack)
         {
             Console.WriteLine($"  → Train {train.ID} assigned to arrival track {arrivalTrack.StationID}");
 
