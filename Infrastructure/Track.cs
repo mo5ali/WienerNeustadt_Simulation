@@ -1,17 +1,16 @@
 ﻿namespace WienerNeustadtSimulation.Infrastructure
 {
-    public class Track // Represents a track composed of multiple segments.
+    public class Track
     {
-        public string RealLifeID { get; set; } // Real-world track identifier (e.g., "Track-A1")
-        public string StationID { get; } // 4-digit station identifier
-        public string Area { get; set; } // Area/zone within the station
-        public string Designation { get; set; } // e.g., "Entry", "Classification", "Departure"
-        public double Length { get; set; } // Total length in meters (from file or calculated)
-        public List<string> SegmentIds { get; set; } // List of segment IDs composing this track
-        public List<string> CurrentOccupancies { get; set; } // List of entity IDs currently occupying this track
+        public string RealLifeID { get; set; }
+        public string StationID { get; }
+        public string Area { get; set; }
+        public string Designation { get; set; }
+        public double Length { get; set; }
+        public List<string> SegmentIds { get; set; }
+        public List<string> CurrentOccupancies { get; set; }
+        public bool Reserved { get; set; }  // ← NEW: defaults to false
 
-        /// <param name="stationId">4-digit station ID</param>
-        /// <param name="length">Length in meters (optional if calculated later)</param>
         public Track(string stationId, double length = 0)
         {
             if (string.IsNullOrWhiteSpace(stationId) || stationId.Length != 4 || !long.TryParse(stationId, out _))
@@ -26,6 +25,7 @@
 
             StationID = stationId;
             Length = length;
+            Reserved = false;  // ← NEW: starts as false
             RealLifeID = string.Empty;
             Area = string.Empty;
             Designation = string.Empty;
@@ -33,7 +33,6 @@
             CurrentOccupancies = new List<string>();
         }
 
-        // Method to calculate total length from segment objects (implement later when you have segment length data)
         public void CalculateLength(Dictionary<string, Segment> segmentLookup, Dictionary<string, Node> nodeLookup)
         {
             if (SegmentIds == null || SegmentIds.Count == 0)
@@ -42,10 +41,7 @@
                 return;
             }
 
-            // Calculate distance between start and end nodes for each segment
-            // For now, this is a placeholder - you'll need to implement distance calculation
-            // using node coordinates (Haversine formula or Euclidean distance)
-            Length = 0; // TODO: Implement actual calculation
+            Length = 0;
         }
 
         public override string ToString()

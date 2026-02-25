@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using WienerNeustadtSimulation.Engine;
 using WienerNeustadtSimulation.Entities;
 using WienerNeustadtSimulation.Infrastructure;
@@ -60,7 +61,7 @@ namespace WienerNeustadtSimulation.Control
         /// </summary>
         public void HandleTrainArrival(TrainDto trainDto, DateTime simTimeUtc)
         {
-            Console.WriteLine($"{DateTime.Now:MM/dd/yy HH:mm:ss} | {simTimeUtc:yyyy-MM-ddTHH:mm:ss'Z'} | train {trainDto.ID} arrives at entry");
+            Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | train {trainDto.ID} arrives at entry");
 
             var train = CreateTrainEntity(trainDto);
             _entryQueue.Enqueue(train);
@@ -68,7 +69,64 @@ namespace WienerNeustadtSimulation.Control
 
             Console.WriteLine($"  → Train {train.ID} queued at entry. Queue length: {_entryQueue.Count}");
 
+            // Print handling first train in queue
+            var firstTrain = _entryQueue.Peek();
+            Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: handling train {firstTrain.ID} of length {firstTrain.Length} meters");
+
+            Track assignedTrack = null;
+            bool firstTime = true;
+
             
+            while (assignedTrack == null) // Loop until we find a track
+            {
+                foreach (var track in _arrivalTracks)// Look for a long enough, available arrival tracks
+                {
+                    if (track.Length >= train.Length && track.Designation == "Arrival")
+                    {
+                        // Check if track is free
+                        if (track.CurrentOccupancies.Count == 0 && track.Reserved == false)
+                        {
+                            assignedTrack = track;
+                            Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} assigned arrival track {track.StationID} ");
+                            track.Reserved = true;
+                            break; // Exit the foreach loop
+                        }
+                    }
+                }
+
+                // If no track found
+                if (assignedTrack == null)
+                {
+                    Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: no arrival track currently available for train {train.ID}");
+
+                    if (firstTime)
+                    {
+                        Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: starting waiting activity for train {train.ID}");
+                        train.Status = "waiting for arrival track";
+                        firstTime = false;
+                    }
+                    System.Threading.Thread.Sleep(30000); // Wait 30 seconds before trying again
+                }
+            }
+
+            // Schedule a driving activity to the destination track
+            var driveTime = TimeSpan.FromMinutes(3);  // Simple: 3 minutes to drive there
+
+            _engine.Schedule(
+                _engine.Now.Add(driveTime),
+                () =>
+                {
+                    // Train arrives at arrival track
+                    assignedTrack.CurrentOccupancies.Add(train.ID);
+                    Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.StationID}");
+                },
+                $"TrainArrivesAtArrivalTrack-{train.ID}"
+            );
+
+            Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} driving to arrival track {assignedTrack.StationID} (ETA: {driveTime.TotalMinutes} minutes)");
+            _entryQueue.Dequeue();
+
+
         }
 
         private Train CreateTrainEntity(TrainDto trainDto)
