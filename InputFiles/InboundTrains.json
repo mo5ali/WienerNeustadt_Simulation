@@ -18,7 +18,7 @@
       "LocomotiveId": "LOCO-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-01T09:33:00Z"
+      "Time": "2025-01-01T09:03:00Z"
     }
   ],
   "wagonGroups": [
@@ -49,7 +49,7 @@
         "123420102",
         "123420103"
       ],
-      "Destination": "Salzburg"
+      "Destination": "Graz"
     },
     {
       "ID": "1234202",

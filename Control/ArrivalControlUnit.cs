@@ -61,13 +61,13 @@ namespace WienerNeustadtSimulation.Control
         /// </summary>
         public void HandleTrainArrival(TrainDto trainDto, DateTime simTimeUtc)
         {
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | train {trainDto.ID} arrives at entry");
+            //Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | train {trainDto.ID} arrives at entry");
 
             var train = CreateTrainEntity(trainDto);
             _entryQueue.Enqueue(train);
             _entryTimes[train.ID] = simTimeUtc;
 
-            Console.WriteLine($"  → Train {train.ID} queued at entry. Queue length: {_entryQueue.Count}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | Train {train.ID} queued at entry. Queue length: {_entryQueue.Count}");
 
             // Print handling first train in queue
             var firstTrain = _entryQueue.Peek();
@@ -119,13 +119,15 @@ namespace WienerNeustadtSimulation.Control
                     // Train arrives at arrival track
                     assignedTrack.CurrentOccupancies.Add(train.ID);
                     Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.StationID}");
+                    var wagonGroupToTrackMap = RunSortingMethod(train);
                 },
                 $"TrainArrivesAtArrivalTrack-{train.ID}"
+                
             );
-
+            
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} driving to arrival track {assignedTrack.StationID} (ETA: {driveTime.TotalMinutes} minutes)");
             _entryQueue.Dequeue();
-
+            
 
         }
 
@@ -145,7 +147,54 @@ namespace WienerNeustadtSimulation.Control
 
             return train;
         }
+        private Dictionary<string, Track> RunSortingMethod(Train train)
+        {
+            var wagonGroupToTrackMap = new Dictionary<string, Track>();
 
+            foreach (var wgId in train.WagonGroupIds)
+            {
+                if (!_wagonGroupData.ContainsKey(wgId))
+                {
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: WARNING - wagon group {wgId} not found");
+                    continue;
+                }
+
+                var wgData = _wagonGroupData[wgId];
+                var destination = wgData.Destination ?? "Unknown";
+
+                // If we haven't assigned a track for this destination yet
+                if (!_destinationToTrackMap.ContainsKey(destination))
+                {
+                    Track classificationTrack = null;
+
+                    // Find a free classification track
+                    foreach (var track in _classificationTracks)
+                    {
+                        if (track.Designation == "Classification" && !_destinationToTrackMap.ContainsValue(track))
+                        {
+                            classificationTrack = track;
+                            break;
+                        }
+                    }
+
+                    // If no free track, will implement waiting later
+                    if (classificationTrack == null)
+                    {
+                        Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: no free classification tracks");
+                    }
+
+                    _destinationToTrackMap[destination] = classificationTrack;
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: track {classificationTrack.StationID} set for '{destination}'");
+                }
+
+                // Map this wagon group to its track
+                var assignedTrack = _destinationToTrackMap[destination];
+                wagonGroupToTrackMap[wgId] = assignedTrack;
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: wagon group {wgId} → destination '{destination}' → track {assignedTrack.StationID}");
+            }
+
+            return wagonGroupToTrackMap;  // Returns: WagonGroupID → Track
+        }
         ///// <summary>
         ///// Searches for an available arrival track that can accommodate the train.
         ///// Returns null if no suitable track is found.
