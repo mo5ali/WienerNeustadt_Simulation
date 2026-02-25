@@ -87,7 +87,7 @@ namespace WienerNeustadtSimulation.Control
                         if (track.CurrentOccupancies.Count == 0 && track.Reserved == false)
                         {
                             assignedTrack = track;
-                            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} assigned arrival track {track.StationID} ");
+                            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} assigned arrival track {track.RealLifeID} ");
                             track.Reserved = true;
                             break; // Exit the foreach loop
                         }
@@ -118,14 +118,14 @@ namespace WienerNeustadtSimulation.Control
                 {
                     // Train arrives at arrival track
                     assignedTrack.CurrentOccupancies.Add(train.ID);
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.StationID}");
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.RealLifeID}");
                     var wagonGroupToTrackMap = RunSortingMethod(train);
                 },
                 $"TrainArrivesAtArrivalTrack-{train.ID}"
                 
             );
             
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} driving to arrival track {assignedTrack.StationID} (ETA: {driveTime.TotalMinutes} minutes)");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} driving to arrival track {assignedTrack.RealLifeID} (ETA: {driveTime.TotalMinutes} minutes)");
             _entryQueue.Dequeue();
             
 
@@ -184,13 +184,13 @@ namespace WienerNeustadtSimulation.Control
                     }
 
                     _destinationToTrackMap[destination] = classificationTrack;
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: track {classificationTrack.StationID} set for '{destination}'");
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: track {classificationTrack.RealLifeID} set for '{destination}'");
                 }
 
                 // Map this wagon group to its track
                 var assignedTrack = _destinationToTrackMap[destination];
                 wagonGroupToTrackMap[wgId] = assignedTrack;
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: wagon group {wgId} → destination '{destination}' → track {assignedTrack.StationID}");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: wagon group {wgId} → destination '{destination}' → track {assignedTrack.RealLifeID}");
             }
 
             return wagonGroupToTrackMap;  // Returns: WagonGroupID → Track
