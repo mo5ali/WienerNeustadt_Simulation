@@ -61,7 +61,7 @@ namespace WienerNeustadtSimulation.Control
         /// </summary>
         public void HandleTrainArrival(TrainDto trainDto, DateTime simTimeUtc)
         {
-            Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | train {trainDto.ID} arrives at entry");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | train {trainDto.ID} arrives at entry");
 
             var train = CreateTrainEntity(trainDto);
             _entryQueue.Enqueue(train);
@@ -71,7 +71,7 @@ namespace WienerNeustadtSimulation.Control
 
             // Print handling first train in queue
             var firstTrain = _entryQueue.Peek();
-            Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: handling train {firstTrain.ID} of length {firstTrain.Length} meters");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: handling train {firstTrain.ID} of length {firstTrain.Length} meters");
 
             Track assignedTrack = null;
             bool firstTime = true;
@@ -87,7 +87,7 @@ namespace WienerNeustadtSimulation.Control
                         if (track.CurrentOccupancies.Count == 0 && track.Reserved == false)
                         {
                             assignedTrack = track;
-                            Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} assigned arrival track {track.StationID} ");
+                            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} assigned arrival track {track.StationID} ");
                             track.Reserved = true;
                             break; // Exit the foreach loop
                         }
@@ -97,11 +97,11 @@ namespace WienerNeustadtSimulation.Control
                 // If no track found
                 if (assignedTrack == null)
                 {
-                    Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: no arrival track currently available for train {train.ID}");
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: no arrival track currently available for train {train.ID}");
 
                     if (firstTime)
                     {
-                        Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: starting waiting activity for train {train.ID}");
+                        Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: starting waiting activity for train {train.ID}");
                         train.Status = "waiting for arrival track";
                         firstTime = false;
                     }
@@ -118,12 +118,12 @@ namespace WienerNeustadtSimulation.Control
                 {
                     // Train arrives at arrival track
                     assignedTrack.CurrentOccupancies.Add(train.ID);
-                    Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.StationID}");
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.StationID}");
                 },
                 $"TrainArrivesAtArrivalTrack-{train.ID}"
             );
 
-            Console.WriteLine($"{simTimeUtc:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} driving to arrival track {assignedTrack.StationID} (ETA: {driveTime.TotalMinutes} minutes)");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} driving to arrival track {assignedTrack.StationID} (ETA: {driveTime.TotalMinutes} minutes)");
             _entryQueue.Dequeue();
 
 
