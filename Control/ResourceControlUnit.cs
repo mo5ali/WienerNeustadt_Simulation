@@ -31,7 +31,7 @@ namespace WienerNeustadtSimulation.Control
 
         public void Submit(ResourceRequest request)
         {
-            Console.WriteLine($"  → Resource request submitted: {request}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | Resource req: {request}");
 
             if (TryAllocate(request))
             {

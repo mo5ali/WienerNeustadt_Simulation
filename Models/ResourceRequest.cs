@@ -120,7 +120,7 @@ namespace WienerNeustadtSimulation.Models
         public override string ToString()
         {
             var res = string.Join(", ", ResourcesRequested);
-            return $"{RequestId} | {Sender} -> {Handler} | Entity={ForEntity} | Activity={ForActivity} | Loc={LocationTrackId}/{LocationArea} | [{res}] | {Status}";
+            return $"{RequestId} / for {ForEntity} / Track {LocationTrackId} / [{res}] / {Status}";
         }
     }
 }

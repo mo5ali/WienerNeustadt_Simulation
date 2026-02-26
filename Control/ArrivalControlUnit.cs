@@ -30,6 +30,8 @@ namespace WienerNeustadtSimulation.Control
         private readonly Dictionary<string, WagonGroupDto> _wagonGroupData;
         private readonly Dictionary<string, DateTime> _arrivalTrackEntryTimes;
 
+        private readonly Dictionary<string, Dictionary<string, Track>> _trainWagonGroupMaps;
+
         public ArrivalControlUnit(
             SimulationEngine engine,
             ClassificationControlUnit classificationControl,
@@ -50,6 +52,8 @@ namespace WienerNeustadtSimulation.Control
             _entryTimes = new Dictionary<string, DateTime>();
             _destinationToTrackMap = new Dictionary<string, Track>();
             _arrivalTrackEntryTimes = new Dictionary<string, DateTime>();
+
+            _trainWagonGroupMaps = new Dictionary<string, Dictionary<string, Track>>();
         }
 
         // ============================================================
@@ -118,8 +122,10 @@ namespace WienerNeustadtSimulation.Control
                 {
                     // Train arrives at arrival track
                     assignedTrack.CurrentOccupancies.Add(train.ID);
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.RealLifeID}");
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.RealLifeID}, and starts waiting for preparation");
                     var wagonGroupToTrackMap = RunSortingMethod(train);
+                    _trainWagonGroupMaps[train.ID] = wagonGroupToTrackMap; // saving the wagon group mapping in class level to use during push off               
+                    RequestTrainPreparation(train, assignedTrack); // Request resources for train preparation
                 },
                 $"TrainArrivesAtArrivalTrack-{train.ID}"
                 
@@ -133,7 +139,20 @@ namespace WienerNeustadtSimulation.Control
 
         private Train CreateTrainEntity(TrainDto trainDto)
         {
-            var train = new Train(trainDto.ID ?? "00000", trainDto.Length ?? 0)
+            // Calculate train length from wagon groups
+            double calculatedLength = 0;
+            if (trainDto.WagonGroupIds != null)
+            {
+                foreach (var wgId in trainDto.WagonGroupIds)
+                {
+                    if (_wagonGroupData.ContainsKey(wgId))
+                    {
+                        calculatedLength += _wagonGroupData[wgId].Length ?? 0;
+                    }
+                }
+            }
+
+            var train = new Train(trainDto.ID ?? "00000", calculatedLength)  // Use calculated length
             {
                 WagonGroupIds = trainDto.WagonGroupIds ?? new List<string>(),
                 HasLoco = trainDto.HasLoco ?? false,
@@ -194,6 +213,43 @@ namespace WienerNeustadtSimulation.Control
             }
 
             return wagonGroupToTrackMap;  // Returns: WagonGroupID → Track
+        }
+
+
+
+        private void RequestTrainPreparation(Train train, Track arrivalTrack)
+        {
+            var prepReq = new TrainPreparationRequest(train.ID, arrivalTrack.RealLifeID, arrivalTrack.Area);
+
+            prepReq.OnFulfilled = _ =>
+            {
+                // Resources allocated! Start preparation
+                StartTrainPreparation(train, arrivalTrack, prepReq);
+            };
+
+            _resourceControl.Submit(prepReq);
+        }
+
+        private void StartTrainPreparation(Train train, Track arrivalTrack, ResourceRequest prepReq)
+        {
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train preparation START for train {train.ID}");
+
+            var preparationTime = TimeSpan.FromMinutes(10);
+
+            _engine.Schedule(
+                _engine.Now.Add(preparationTime),
+                () => CompleteTrainPreparation(train, arrivalTrack, prepReq),
+                $"PreparationComplete-{train.ID}"
+            );
+        }
+
+        private void CompleteTrainPreparation(Train train, Track arrivalTrack, ResourceRequest prepReq)
+        {
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train preparation DONE for train {train.ID}");
+
+            _resourceControl.Release(prepReq);
+
+            // TODO: Next step - request pushoff
         }
         ///// <summary>
         ///// Searches for an available arrival track that can accommodate the train.

@@ -62,6 +62,27 @@ namespace WienerNeustadtSimulation
                 // Parse wagon group data from input
                 var wagonGroupData = ParseWagonGroupData(root);
 
+                // NEW: Parse wagon data
+                var wagonData = ParseWagonData(root);
+
+                // NEW: Calculate wagon group lengths from their wagons
+                foreach (var wg in wagonGroupData.Values)
+                {
+                    if (wg.WagonIds != null && wg.WagonIds.Count > 0)
+                    {
+                        double calculatedLength = 0;
+                        foreach (var wagonId in wg.WagonIds)
+                        {
+                            if (wagonData.ContainsKey(wagonId))
+                            {
+                                calculatedLength += wagonData[wagonId].Length ?? 0;
+                            }
+                        }
+                        wg.Length = calculatedLength;
+                        Console.WriteLine($"  → WagonGroup {wg.ID}: {wg.WagonIds.Count} wagons = {calculatedLength}m");
+                    }
+                }
+
                 // Create control units (in reverse dependency order)
                 Console.WriteLine("[Initializing control units...]");
                 var classificationControl = new ClassificationControlUnit(engine);
@@ -197,6 +218,21 @@ namespace WienerNeustadtSimulation
                 {
                     if (wg.ID != null)
                         dict[wg.ID] = wg;
+                }
+            }
+
+            return dict;
+        }
+        static Dictionary<string, WagonDto> ParseWagonData(InboundRoot root)
+        {
+            var dict = new Dictionary<string, WagonDto>();
+
+            if (root.Wagons != null)
+            {
+                foreach (var wagon in root.Wagons)
+                {
+                    if (wagon.ID != null)
+                        dict[wagon.ID] = wagon;
                 }
             }
 

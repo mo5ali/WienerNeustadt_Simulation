@@ -1,3 +1,5 @@
+using WienerNeustadtSimulation.Infrastructure;
+
 namespace WienerNeustadtSimulation.Models
 {
     public sealed class TrainPreparationRequest : ResourceRequest
