@@ -115,12 +115,12 @@ namespace WienerNeustadtSimulation.Control
 
         private void Fulfill(ResourceRequest request)
         {
-            Console.WriteLine($"  ✓ Resource request fulfilled: {request.RequestId}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: Resource allocated: {request.RequestId}");
 
             // Resume the blocked chain:
             if (request.OnFulfilled == null)
             {
-                Console.WriteLine($"  ⚠ Request {request.RequestId} has no OnFulfilled callback; nothing to resume.");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: Request {request.RequestId} has no OnFulfilled callback; nothing to resume.");
                 return;
             }
 
