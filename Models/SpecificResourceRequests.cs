@@ -1,26 +1,70 @@
-using WienerNeustadtSimulation.Infrastructure;
+using System;
+using System.Collections.Generic;
 
 namespace WienerNeustadtSimulation.Models
 {
-    public sealed class TrainPreparationRequest : ResourceRequest
+    /// <summary>
+    /// Request for incoming train preparation activity.
+    /// </summary>
+    public class TrainPreparationRequest : ResourceRequest
     {
-        public TrainPreparationRequest(string trainId, string trackId, string area = "")
-            : base("ArrivalControlUnit", trainId, ActivityTypes.IncomingTrainPreparation, trackId, area)
+        public TrainPreparationRequest(string trainId, string trackId, string area)
+            : base($"TrainPrep-{trainId}", "Train Preparation", trackId, area)
         {
-            // Example from your requirement:
-            AddResource(ResourceType.Worker, 4);
-            AddResource(ResourceType.Supervisor, 1);
-            AddResource(ResourceType.ShuntingLocomotive, 1);
+            // Define what this activity needs (simple version for now)
+            RequiredWorkers = 1;
+            RequiredLocomotives = 0;
         }
+
+        public int RequiredWorkers { get; set; }
+        public int RequiredLocomotives { get; set; }
     }
 
-    public sealed class PushOffRequest : ResourceRequest
+    /// <summary>
+    /// Request for push-off activity.
+    /// </summary>
+    public class PushOffRequest : ResourceRequest
     {
-        public PushOffRequest(string trainId, string trackId, string area = "")
-            : base("ArrivalControlUnit", trainId, ActivityTypes.PushOff, trackId, area)
+        public PushOffRequest(string trainId, string trackId, string area)
+            : base($"PushOff-{trainId}", "Push Off", trackId, area)
         {
-            AddResource(ResourceType.ShuntingLocomotive, 1);
-            AddResource(ResourceType.Worker, 2);
+            RequiredWorkers = 1;
+            RequiredLocomotives = 1; // Needs a shunting locomotive
         }
+
+        public int RequiredWorkers { get; set; }
+        public int RequiredLocomotives { get; set; }
+    }
+
+    /// <summary>
+    /// Request for coupling activity.
+    /// </summary>
+    public class CouplingRequest : ResourceRequest
+    {
+        public CouplingRequest(string wagonGroupId, string trackId, string area)
+            : base($"Coupling-{wagonGroupId}", "Coupling", trackId, area)
+        {
+            RequiredWorkers = 2;
+            RequiredLocomotives = 0;
+        }
+
+        public int RequiredWorkers { get; set; }
+        public int RequiredLocomotives { get; set; }
+    }
+
+    /// <summary>
+    /// Request for securing activity.
+    /// </summary>
+    public class SecuringRequest : ResourceRequest
+    {
+        public SecuringRequest(string wagonGroupId, string trackId, string area)
+            : base($"Securing-{wagonGroupId}", "Securing", trackId, area)
+        {
+            RequiredWorkers = 1;
+            RequiredLocomotives = 0;
+        }
+
+        public int RequiredWorkers { get; set; }
+        public int RequiredLocomotives { get; set; }
     }
 }

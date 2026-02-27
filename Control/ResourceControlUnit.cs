@@ -1,132 +1,124 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using WienerNeustadtSimulation.Engine;
 using WienerNeustadtSimulation.Models;
 
 namespace WienerNeustadtSimulation.Control
 {
-    /// <summary>
-    /// Minimal resource manager:
-    /// - Holds simple counts per ResourceType
-    /// - Accepts ResourceRequests
-    /// - If available: allocates immediately and calls request.OnFulfilled
-    /// - If not: queues and retries periodically
-    /// </summary>
     public class ResourceControlUnit
     {
         private readonly SimulationEngine _engine;
+        private readonly Queue<ResourceRequest> _requestQueue;
 
-        private readonly Dictionary<ResourceType, int> _available = new();
-        private readonly Queue<ResourceRequest> _queue = new();
+        // Resource pools
+        private readonly List<WorkerDto> _workers;
+        private readonly List<ShuntingLocomotiveDto> _shuntingLocomotives;
 
-        private readonly TimeSpan _retryInterval = TimeSpan.FromSeconds(30);
+        // Available resource tracking
+        private readonly HashSet<string> _availableWorkerIds;
+        private readonly HashSet<string> _availableLocoIds;
 
-        public ResourceControlUnit(SimulationEngine engine, Dictionary<ResourceType, int> initialInventory)
+        public ResourceControlUnit(SimulationEngine engine, ResourcePoolRoot resourcePool)
         {
             _engine = engine;
+            _requestQueue = new Queue<ResourceRequest>();
 
-            foreach (var kv in initialInventory)
-                _available[kv.Key] = kv.Value;
+            _workers = resourcePool.Workers ?? new List<WorkerDto>();
+            _shuntingLocomotives = resourcePool.ShuntingLocomotives ?? new List<ShuntingLocomotiveDto>();
+
+            // Initialize all resources as available
+            _availableWorkerIds = new HashSet<string>(_workers.Select(w => w.Id ?? ""));
+            _availableLocoIds = new HashSet<string>(_shuntingLocomotives.Select(l => l.Id ?? ""));
+
+            Console.WriteLine($"  → ResourceControlUnit: {_workers.Count} workers, {_shuntingLocomotives.Count} locomotives initialized");
         }
 
         public void Submit(ResourceRequest request)
         {
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | Resource req: {request}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.ForActivity}' submitted");
 
-            if (TryAllocate(request))
+            // Try to allocate resources
+            bool canFulfill = TryAllocateResources(request);
+
+            if (canFulfill)
             {
-                Fulfill(request);
-                return;
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.ForActivity}' FULFILLED immediately");
+                request.OnFulfilled?.Invoke(request);
             }
-
-            request.Status = RequestStatus.Queued;
-            _queue.Enqueue(request);
-
-            // schedule a retry loop (lightweight)
-            _engine.Schedule(
-                _engine.Now.Add(_retryInterval),
-                () => RetryQueuedRequests(),
-                $"RetryResources-{request.RequestId}"
-            );
+            else
+            {
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.ForActivity}' QUEUED (resources unavailable)");
+                _requestQueue.Enqueue(request);
+            }
         }
 
-        /// <summary>
-        /// Must be called when the activity is done so resources can be reused.
-        /// </summary>
+        private bool TryAllocateResources(ResourceRequest request)
+        {
+            // For now: simple check if we have at least 1 worker available
+            // Later: check specific skills, multiple workers, locomotives, etc.
+
+            if (_availableWorkerIds.Count > 0)
+            {
+                // Allocate one worker (simple version)
+                var workerId = _availableWorkerIds.First();
+                _availableWorkerIds.Remove(workerId);
+
+                // Store allocation so we can release later
+                if (!request.AllocatedWorkerIds.Contains(workerId))
+                    request.AllocatedWorkerIds.Add(workerId);
+
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: allocated worker {workerId} to '{request.ForActivity}'");
+
+                return true;
+            }
+
+            return false;
+        }
+
         public void Release(ResourceRequest request)
         {
-            foreach (var rr in request.ResourcesRequested)
-                _available[rr.Type] = GetAvailable(rr.Type) + rr.Quantity;
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: releasing resources for '{request.ForActivity}'");
 
-            Console.WriteLine($"  ← Resources released for {request.RequestId}");
+            // Return allocated workers to the pool
+            foreach (var workerId in request.AllocatedWorkerIds)
+            {
+                _availableWorkerIds.Add(workerId);
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: worker {workerId} returned to pool");
+            }
+            request.AllocatedWorkerIds.Clear();
 
-            // Opportunistic retry right away
-            RetryQueuedRequests();
+            // Return allocated locomotives to the pool
+            foreach (var locoId in request.AllocatedLocoIds)
+            {
+                _availableLocoIds.Add(locoId);
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: locomotive {locoId} returned to pool");
+            }
+            request.AllocatedLocoIds.Clear();
+
+            // Try to fulfill queued requests
+            ProcessQueue();
         }
 
-        private void RetryQueuedRequests()
+        private void ProcessQueue()
         {
-            if (_queue.Count == 0)
+            if (_requestQueue.Count == 0)
                 return;
 
-            // Preserve order; cycle through once and re-queue those still blocked.
-            var n = _queue.Count;
-            for (var i = 0; i < n; i++)
-            {
-                var req = _queue.Dequeue();
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: processing queue ({_requestQueue.Count} waiting)");
 
-                if (TryAllocate(req))
-                {
-                    Fulfill(req);
-                }
-                else
-                {
-                    _queue.Enqueue(req);
-                }
-            }
+            // Try to fulfill the first queued request
+            var nextRequest = _requestQueue.Peek();
 
-            // If still pending requests, schedule next retry
-            if (_queue.Count > 0)
+            if (TryAllocateResources(nextRequest))
             {
-                _engine.Schedule(
-                    _engine.Now.Add(_retryInterval),
-                    () => RetryQueuedRequests(),
-                    $"RetryResources-Queue"
-                );
+                _requestQueue.Dequeue();
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: queued request '{nextRequest.ForActivity}' now FULFILLED");
+                nextRequest.OnFulfilled?.Invoke(nextRequest);
+
+                // Try to process more (recursive)
+                ProcessQueue();
             }
         }
-
-        private bool TryAllocate(ResourceRequest request)
-        {
-            // Check all required types are available
-            foreach (var rr in request.ResourcesRequested)
-            {
-                if (GetAvailable(rr.Type) < rr.Quantity)
-                    return false;
-            }
-
-            // Allocate (decrement)
-            foreach (var rr in request.ResourcesRequested)
-                _available[rr.Type] = GetAvailable(rr.Type) - rr.Quantity;
-
-            request.Status = RequestStatus.Assigned;
-            return true;
-        }
-
-        private void Fulfill(ResourceRequest request)
-        {
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: Resource allocated: {request.RequestId}");
-
-            // Resume the blocked chain:
-            if (request.OnFulfilled == null)
-            {
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: Request {request.RequestId} has no OnFulfilled callback; nothing to resume.");
-                return;
-            }
-
-            request.OnFulfilled(request);
-        }
-
-        private int GetAvailable(ResourceType t) => _available.TryGetValue(t, out var v) ? v : 0;
     }
 }

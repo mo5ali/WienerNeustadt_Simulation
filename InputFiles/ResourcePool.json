@@ -1,0 +1,115 @@
+{
+  "workers": [
+    {
+      "id": "W001",
+      "name": "Max Verstappen",
+	  "movementSpeedMetersPerMinute": 80,
+      "skills": [
+        { "activity": "IncomingTrainPreparation", "timeMultiplier": 0.8 },
+        { "activity": "Coupling", "timeMultiplier": 0.8 },
+		{ "activity": "Securing", "timeMultiplier": 0.8 }
+      ]
+
+
+    },
+    {
+      "id": "W002",
+      "name": "Lewis Hamilton",
+	  "movementSpeedMetersPerMinute": 80,
+      "skills": [
+        { "activity": "IncomingTrainPreparation", "timeMultiplier": 0.9 },
+        { "activity": "Coupling", "timeMultiplier": 0.9 },
+		{ "activity": "Securing", "timeMultiplier": 0.9 }
+      ]
+      
+    },
+    {
+      "id": "W003",
+      "name": "Charles Leclerc",
+	  "movementSpeedMetersPerMinute": 80,
+      "skills": [
+        { "activity": "IncomingTrainPreparation", "timeMultiplier": 0.9 },
+        { "activity": "Coupling", "timeMultiplier": 0.9 },
+		{ "activity": "Securing",  "timeMultiplier": 0.9
+        }
+      ]
+    },
+    {
+      "id": "W004",
+      "name": "Fernando Alonso",
+	  "movementSpeedMetersPerMinute": 80,
+      "skills": [
+        { "activity": "IncomingTrainPreparation", "timeMultiplier": 1 },
+        { "activity": "Coupling", "timeMultiplier": 1 },
+		{ "activity": "Securing", "timeMultiplier": 1 }
+      ]
+    },
+    {
+      "id": "W005",
+      "name": "George Russel",
+	  "movementSpeedMetersPerMinute": 80,
+      "skills": [
+        { "activity": "IncomingTrainPreparation", "timeMultiplier": 1 },
+        { "activity": "Coupling", "timeMultiplier": 1 },
+		{ "activity": "Securing", "timeMultiplier": 1 }
+      ]
+    },
+    {
+      "id": "W006",
+      "name": "Lando Norris",
+	  "movementSpeedMetersPerMinute": 80,
+      "skills": [
+        { "activity": "IncomingTrainPreparation", "timeMultiplier": 1 },
+        { "activity": "Coupling", "timeMultiplier": 1 },
+		{ "activity": "Securing", "timeMultiplier": 1 }
+      ]
+    },
+    {
+      "id": "W007",
+      "name": "Oscar Piastri",
+	  "movementSpeedMetersPerMinute": 80,
+      "skills": [
+        { "activity": "IncomingTrainPreparation", "timeMultiplier": 1 },
+        { "activity": "Coupling", "timeMultiplier": 1 },
+		{ "activity": "Securing", "timeMultiplier": 1 }
+      ]
+    },
+    {
+      "id": "W008",
+      "name": "Niko Hulkenberg",
+	  "movementSpeedMetersPerMinute": 80,
+      "skills": [
+        { "activity": "IncomingTrainPreparation", "timeMultiplier": 1.1 },
+        { "activity": "Coupling", "timeMultiplier": 1.1 },
+		{ "activity": "Securing", "timeMultiplier": 1.1 }
+      ]
+    },
+    {
+      "id": "W009",
+      "name": "Sergio Perez",
+	  "movementSpeedMetersPerMinute": 80,
+      "skills": [
+        { "activity": "IncomingTrainPreparation", "timeMultiplier": 1.1 },
+        { "activity": "Coupling", "timeMultiplier": 1.1 },
+		{ "activity": "Securing", "timeMultiplier": 1.1 }
+      ]
+    },
+    {
+      "id": "W010",
+      "name": "Isaac Hadjar",
+	  "movementSpeedMetersPerMinute": 80,
+      "skills": [
+        { "activity": "IncomingTrainPreparation", "timeMultiplier": 1.1 },
+        { "activity": "Coupling", "timeMultiplier": 1.1 },
+		{ "activity": "Securing", "timeMultiplier": 1.1 }
+      ]
+    }
+  ],
+  "shuntingLocomotives": [
+    { "id": "SL001", "maxSpeed": 25 },
+	{ "id": "SL002", "maxSpeed": 25 },
+	{ "id": "SL003", "maxSpeed": 25 },
+	{ "id": "SL004", "maxSpeed": 25 },
+    { "id": "SL005", "maxSpeed": 25 }
+  ]
+  }

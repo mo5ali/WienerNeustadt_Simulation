@@ -49,6 +49,17 @@ namespace WienerNeustadtSimulation
 
                 Console.WriteLine($"✓ Loaded {infrastructureRoot.TrackSegments?.Count ?? 0} track segments\n");
 
+
+                // Load resource pool
+                var resourcePoolPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "InputFiles", "ResourcePool.json");
+                Console.WriteLine($"📂 Loading resource pool file: {resourcePoolPath}");
+                var resourcePoolJson = File.ReadAllText(resourcePoolPath);
+                var resourcePool = JsonSerializer.Deserialize<ResourcePoolRoot>(resourcePoolJson, opts)
+                           ?? throw new Exception("Failed to parse resource pool JSON");
+
+                Console.WriteLine($"✓ Loaded {resourcePool.Workers?.Count ?? 0} workers");
+                Console.WriteLine($"✓ Loaded {resourcePool.ShuntingLocomotives?.Count ?? 0} shunting locomotives\n");
+
                 // Create simulation engine
                 var engine = new SimulationEngine();
 
@@ -87,17 +98,7 @@ namespace WienerNeustadtSimulation
                 Console.WriteLine("[Initializing control units...]");
                 var classificationControl = new ClassificationControlUnit(engine);
 
-                // Minimal initial inventory (tune later)
-                var resourceInventory = new Dictionary<ResourceType, int>
-                {
-                    { ResourceType.Worker, 10 },
-                    { ResourceType.Supervisor, 2 },
-                    { ResourceType.ShuntingLocomotive, 2 },
-                    { ResourceType.SecuringEquipment, 5 },
-                    { ResourceType.CouplingEquipment, 5 },
-                };
-
-                var resourceControl = new ResourceControlUnit(engine, resourceInventory);
+                var resourceControl = new ResourceControlUnit(engine, resourcePool);
 
                 // ArrivalControlUnit now handles BOTH entry and arrival phases
                 var arrivalControl = new ArrivalControlUnit(
