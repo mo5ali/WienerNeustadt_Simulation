@@ -107,7 +107,7 @@ namespace WienerNeustadtSimulation
                     resourceControl,
                     arrivalTracks,
                     classificationTracks,
-                    wagonGroupData              
+                    wagonGroupData
                 );
 
 
@@ -152,7 +152,7 @@ namespace WienerNeustadtSimulation
 
                 Console.WriteLine("\n═══════════════════════════════════════════════════════════");
                 Console.WriteLine("                   SIMULATION COMPLETE                     ");
-                Console.WriteLine("═══════════════════════════════════════════════════════════\n");
+                Console.WriteLine("═════════════════════════════════════════��═════════════════\n");
 
                 Console.WriteLine("✓ Simulation finished successfully");
                 return 0;

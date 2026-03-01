@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace WienerNeustadtSimulation.Models
 {
     /// <summary>
@@ -8,16 +5,23 @@ namespace WienerNeustadtSimulation.Models
     /// </summary>
     public class TrainPreparationRequest : ResourceRequest
     {
-        public TrainPreparationRequest(string trainId, string trackId, string area)
-            : base($"TrainPrep-{trainId}", "Train Preparation", trackId, area)
+        public TrainPreparationRequest(string trainId, double trainLengthMeters, string trackId, string area)
+            : base(
+                  requestId: $"TrainPrep-{trainId}",
+                  forActivity: $"TrainPreparation-{trainId}",
+                  activityTypeKey: "IncomingTrainPreparation",
+                  trackId: trackId,
+                  area: area)
         {
-            // Define what this activity needs (simple version for now)
             RequiredWorkers = 1;
             RequiredLocomotives = 0;
-        }
 
-        public int RequiredWorkers { get; set; }
-        public int RequiredLocomotives { get; set; }
+            EntityLengthMeters = trainLengthMeters;
+
+            // Example base time (you can tune this):
+            // 15 seconds per meter
+            BaseSecondsPerMeter = 15.0;
+        }
     }
 
     /// <summary>
@@ -25,15 +29,20 @@ namespace WienerNeustadtSimulation.Models
     /// </summary>
     public class PushOffRequest : ResourceRequest
     {
-        public PushOffRequest(string trainId, string trackId, string area)
-            : base($"PushOff-{trainId}", "Push Off", trackId, area)
+        public PushOffRequest(string trainId, double trainLengthMeters, string trackId, string area)
+            : base(
+                  requestId: $"PushOff-{trainId}",
+                  forActivity: $"PushOff-{trainId}",
+                  activityTypeKey: "PushOff",
+                  trackId: trackId,
+                  area: area)
         {
             RequiredWorkers = 1;
-            RequiredLocomotives = 1; // Needs a shunting locomotive
-        }
+            RequiredLocomotives = 1; // TODO: implement loco travel/allocation too
 
-        public int RequiredWorkers { get; set; }
-        public int RequiredLocomotives { get; set; }
+            EntityLengthMeters = trainLengthMeters;
+            BaseSecondsPerMeter = 10.0;
+        }
     }
 
     /// <summary>
@@ -41,15 +50,20 @@ namespace WienerNeustadtSimulation.Models
     /// </summary>
     public class CouplingRequest : ResourceRequest
     {
-        public CouplingRequest(string wagonGroupId, string trackId, string area)
-            : base($"Coupling-{wagonGroupId}", "Coupling", trackId, area)
+        public CouplingRequest(string wagonGroupId, double wagonGroupLengthMeters, string trackId, string area)
+            : base(
+                  requestId: $"Coupling-{wagonGroupId}",
+                  forActivity: $"Coupling-{wagonGroupId}",
+                  activityTypeKey: "Coupling",
+                  trackId: trackId,
+                  area: area)
         {
             RequiredWorkers = 2;
             RequiredLocomotives = 0;
-        }
 
-        public int RequiredWorkers { get; set; }
-        public int RequiredLocomotives { get; set; }
+            EntityLengthMeters = wagonGroupLengthMeters;
+            BaseSecondsPerMeter = 8.0;
+        }
     }
 
     /// <summary>
@@ -57,14 +71,19 @@ namespace WienerNeustadtSimulation.Models
     /// </summary>
     public class SecuringRequest : ResourceRequest
     {
-        public SecuringRequest(string wagonGroupId, string trackId, string area)
-            : base($"Securing-{wagonGroupId}", "Securing", trackId, area)
+        public SecuringRequest(string wagonGroupId, double wagonGroupLengthMeters, string trackId, string area)
+            : base(
+                  requestId: $"Securing-{wagonGroupId}",
+                  forActivity: $"Securing-{wagonGroupId}",
+                  activityTypeKey: "Securing",
+                  trackId: trackId,
+                  area: area)
         {
             RequiredWorkers = 1;
             RequiredLocomotives = 0;
-        }
 
-        public int RequiredWorkers { get; set; }
-        public int RequiredLocomotives { get; set; }
+            EntityLengthMeters = wagonGroupLengthMeters;
+            BaseSecondsPerMeter = 6.0;
+        }
     }
 }
