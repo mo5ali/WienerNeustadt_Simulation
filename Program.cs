@@ -76,7 +76,7 @@ namespace WienerNeustadtSimulation
                 // NEW: Parse wagon data
                 var wagonData = ParseWagonData(root);
 
-                // NEW: Calculate wagon group lengths from their wagons
+                // NEW: Calculate wagon group lengths from their wagonsnhzn
                 foreach (var wg in wagonGroupData.Values)
                 {
                     if (wg.WagonIds != null && wg.WagonIds.Count > 0)
