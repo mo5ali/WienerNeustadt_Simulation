@@ -9,7 +9,7 @@ namespace WienerNeustadtSimulation.Control
     public class ResourceControlUnit
     {
         private readonly SimulationEngine _engine;
-        private readonly Queue<ResourceRequest> _requestQueue;
+        private readonly Queue<Activity> _requestQueue;
 
         private readonly List<WorkerDto> _workers;
         private readonly List<ShuntingLocomotiveDto> _shuntingLocomotives;
@@ -17,14 +17,14 @@ namespace WienerNeustadtSimulation.Control
         private readonly HashSet<string> _availableWorkerIds;
         private readonly HashSet<string> _availableLocoIds;
 
-        // Simple assumptions for now
         private const double FixedTravelDistanceMeters = 100.0;
         private const double DefaultWorkerSpeedMetersPerMinute = 60.0;
+        private const double LocoSpeedMetersPerMinute = 25.0;
 
         public ResourceControlUnit(SimulationEngine engine, ResourcePoolRoot resourcePool)
         {
             _engine = engine;
-            _requestQueue = new Queue<ResourceRequest>();
+            _requestQueue = new Queue<Activity>();
 
             _workers = resourcePool.Workers ?? new List<WorkerDto>();
             _shuntingLocomotives = resourcePool.ShuntingLocomotives ?? new List<ShuntingLocomotiveDto>();
@@ -35,58 +35,93 @@ namespace WienerNeustadtSimulation.Control
             Console.WriteLine($"  → ResourceControlUnit: {_workers.Count} workers, {_shuntingLocomotives.Count} locomotives initialized");
         }
 
-        public void Submit(ResourceRequest request)
+        public void Submit(Activity activity)
         {
-            request.SubmittedAtUtc = _engine.Now;
+            int requiredLocos = activity.RequiresLocomotive ? 1 : 0;
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{activity.ActivityId}' submitted ({activity.RequiredWorkers} workers {requiredLocos} loco)");
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.ForActivity}' submitted (needs {request.RequiredWorkers} worker(s))");
-
-            if (TryAllocateAndDispatchWorkers(request))
+            if (TryAllocateAndDispatchResources(activity))
             {
-                // Allocation done; OnFulfilled will be fired when last worker arrives.
                 return;
             }
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.ForActivity}' QUEUED (insufficient workers)");
-            _requestQueue.Enqueue(request);
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{activity.ActivityId}' QUEUED (insufficient resources)");
+            _requestQueue.Enqueue(activity);
         }
 
-        private bool TryAllocateAndDispatchWorkers(ResourceRequest request)
+        private bool TryAllocateAndDispatchResources(Activity activity)
         {
-            if (request.RequiredWorkers <= 0)
-            {
-                // Nothing to allocate; treat as immediately ready.
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.ForActivity}' requires no workers -> ready");
-                request.OnFulfilled?.Invoke(request);
-                return true;
-            }
+            bool needsWorkers = activity.RequiredWorkers > 0;
+            bool needsLoco = activity.RequiresLocomotive;
 
-            if (_availableWorkerIds.Count < request.RequiredWorkers)
+            // Check availability
+            if (needsWorkers && _availableWorkerIds.Count < activity.RequiredWorkers)
                 return false;
 
-            // Allocate N workers
-            var allocated = _availableWorkerIds.Take(request.RequiredWorkers).ToList();
-            foreach (var id in allocated)
-                _availableWorkerIds.Remove(id);
+            if (needsLoco && _availableLocoIds.Count == 0)
+                return false;
 
-            request.AllocatedWorkerIds.Clear();
-            request.ArrivedWorkerIds.Clear();
-
-            request.AllocatedWorkerIds.AddRange(allocated);
-
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: allocated workers [{string.Join(", ", allocated)}] to '{request.ForActivity}'");
-
-            // Schedule travel for each worker. Commencement occurs when ALL workers arrived.
-            foreach (var workerId in allocated)
+            // Allocate workers
+            List<string> allocatedWorkers = new List<string>();
+            if (needsWorkers)
             {
+                allocatedWorkers = _availableWorkerIds.Take(activity.RequiredWorkers).ToList();
+                foreach (var id in allocatedWorkers)
+                    _availableWorkerIds.Remove(id);
+                activity.AllocatedWorkerIds.AddRange(allocatedWorkers);
+            }
+
+            // Allocate locomotive
+            List<string> allocatedLocos = new List<string>();
+            if (needsLoco)
+            {
+                var locoId = _availableLocoIds.First();
+                _availableLocoIds.Remove(locoId);
+                activity.AllocatedLocoIds.Add(locoId);
+                allocatedLocos.Add(locoId);
+            }
+
+            // Build allocation message
+            List<string> resourceNames = new List<string>();
+            foreach (var wId in allocatedWorkers)
+            {
+                var worker = _workers.FirstOrDefault(w => w.Id == wId);
+                resourceNames.Add(worker?.Name ?? wId);
+            }
+            foreach (var lId in allocatedLocos)
+            {
+                resourceNames.Add(lId);
+            }
+
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: allocated {string.Join(", ", resourceNames)} to '{activity.ActivityId}'");
+
+            // Schedule travel for workers
+            foreach (var workerId in allocatedWorkers)
+            {
+                var worker = _workers.FirstOrDefault(w => w.Id == workerId);
+                var workerName = worker?.Name ?? workerId;
                 var travelTime = CalculateWorkerTravelTime(workerId);
 
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: worker {workerId} traveling {FixedTravelDistanceMeters}m (ETA {travelTime.TotalSeconds:F0}s) for '{request.ForActivity}'");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {workerName} traveling to track {activity.Location} ({FixedTravelDistanceMeters}m {travelTime.TotalSeconds:F0}s) for '{activity.ActivityId}'");
 
                 _engine.Schedule(
                     _engine.Now.Add(travelTime),
-                    () => OnWorkerArrived(request, workerId),
-                    $"WorkerArrives-{workerId}-{request.RequestId}"
+                    () => OnWorkerArrived(activity, workerId, workerName),
+                    $"WorkerArrives-{workerId}-{activity.ActivityId}"
+                );
+            }
+
+            // Schedule travel for locomotive
+            foreach (var locoId in allocatedLocos)
+            {
+                var travelTime = CalculateLocoTravelTime();
+
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} driving to track {activity.Location} ({FixedTravelDistanceMeters}m {travelTime.TotalSeconds:F0}s) for '{activity.ActivityId}'");
+
+                _engine.Schedule(
+                    _engine.Now.Add(travelTime),
+                    () => OnLocoArrived(activity, locoId),
+                    $"LocoArrives-{locoId}-{activity.ActivityId}"
                 );
             }
 
@@ -105,39 +140,51 @@ namespace WienerNeustadtSimulation.Control
             return TimeSpan.FromMinutes(minutes);
         }
 
-        private void OnWorkerArrived(ResourceRequest request, string workerId)
+        private TimeSpan CalculateLocoTravelTime()
         {
-            request.ArrivedWorkerIds.Add(workerId);
-
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: worker {workerId} ARRIVED for '{request.ForActivity}' ({request.ArrivedWorkerIds.Count}/{request.RequiredWorkers})");
-
-            if (request.ArrivedWorkerIds.Count >= request.RequiredWorkers)
-            {
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: all workers arrived -> '{request.ForActivity}' CAN COMMENCE");
-                request.OnFulfilled?.Invoke(request);
-            }
+            var minutes = FixedTravelDistanceMeters / LocoSpeedMetersPerMinute;
+            return TimeSpan.FromMinutes(minutes);
         }
 
-        public void Release(ResourceRequest request)
+        private void OnWorkerArrived(Activity activity, string workerId, string workerName)
         {
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: releasing resources for '{request.ForActivity}'");
+            activity.RecordWorkerArrival(workerId, _engine.Now);
 
-            foreach (var workerId in request.AllocatedWorkerIds)
+            int arrived = activity.WorkerArrivalTimes.Count;
+            int total = activity.RequiredWorkers + (activity.RequiresLocomotive ? 1 : 0);
+
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {workerName} arrived for '{activity.ActivityId}' ({arrived}/{total})");
+        }
+
+        private void OnLocoArrived(Activity activity, string locoId)
+        {
+            activity.RecordLocoArrival(locoId, _engine.Now);
+
+            int arrived = activity.WorkerArrivalTimes.Count + activity.LocoArrivalTimes.Count;
+            int total = activity.RequiredWorkers + (activity.RequiresLocomotive ? 1 : 0);
+
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} arrived for '{activity.ActivityId}' ({arrived}/{total})");
+        }
+
+        public void Release(Activity activity)
+        {
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: releasing resources for '{activity.ActivityId}'");
+
+            foreach (var workerId in activity.AllocatedWorkerIds)
             {
                 _availableWorkerIds.Add(workerId);
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: worker {workerId} returned to pool");
+                var worker = _workers.FirstOrDefault(w => w.Id == workerId);
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {worker?.Name ?? workerId} returned to pool");
             }
 
-            request.AllocatedWorkerIds.Clear();
-            request.ArrivedWorkerIds.Clear();
-
-            // Locos not implemented in this version; keep structure for later
-            foreach (var locoId in request.AllocatedLocoIds)
+            foreach (var locoId in activity.AllocatedLocoIds)
             {
                 _availableLocoIds.Add(locoId);
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: locomotive {locoId} returned to pool");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} returned to pool");
             }
-            request.AllocatedLocoIds.Clear();
+
+            activity.AllocatedWorkerIds.Clear();
+            activity.AllocatedLocoIds.Clear();
 
             ProcessQueue();
         }
@@ -149,17 +196,15 @@ namespace WienerNeustadtSimulation.Control
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: processing queue ({_requestQueue.Count} waiting)");
 
-            // FIFO: only try the head; if it can't be satisfied, stop.
             var next = _requestQueue.Peek();
 
-            if (TryAllocateAndDispatchWorkers(next))
+            if (TryAllocateAndDispatchResources(next))
             {
                 _requestQueue.Dequeue();
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: dequeued '{next.ForActivity}' (allocation/travel scheduled)");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: dequeued '{next.ActivityId}'");
             }
         }
 
-        // Helper used by ArrivalCU to compute duration at commencement
         public List<WorkerDto> GetWorkersByIds(IEnumerable<string> ids)
         {
             var idSet = new HashSet<string>(ids.Where(x => !string.IsNullOrWhiteSpace(x)));

@@ -12,14 +12,14 @@ namespace WienerNeustadtSimulation.Models
         public double EntityLength { get; set; }
         public string Location { get; set; }
         public string Area { get; set; }
-        public string ControlUnit { get; set; }  // NEW: Track which CU initiated this
+        public string ControlUnit { get; set; }
 
         // Timing
-        public DateTime RequestedAt { get; set; }  // This is your "Initialization" time
+        public DateTime RequestedAt { get; set; }
         public DateTime? AllResourcesArrivedAt { get; set; }
-        public DateTime? CommencedAt { get; set; }  // This is your "Commencement" time
+        public DateTime? CommencedAt { get; set; }
         public DateTime? ScheduledCompletionAt { get; set; }
-        public DateTime? CompletedAt { get; set; }  // This is your "Completion" time
+        public DateTime? CompletedAt { get; set; }
 
         // Duration tracking
         public TimeSpan? CalculatedDuration { get; set; }
@@ -42,6 +42,14 @@ namespace WienerNeustadtSimulation.Models
         public Action<Activity>? OnReadyToCommence { get; set; }
         public Action<Activity>? OnCompleted { get; set; }
 
+        // Reference to ResourceCU for auto-submission
+        private static Control.ResourceControlUnit? _resourceControlUnit;
+
+        public static void SetResourceControlUnit(Control.ResourceControlUnit resourceCU)
+        {
+            _resourceControlUnit = resourceCU;
+        }
+
         protected Activity(string activityType, string entityId, double entityLength, string location, string area, string controlUnit, DateTime requestedAt)
         {
             ActivityType = activityType;
@@ -52,13 +60,17 @@ namespace WienerNeustadtSimulation.Models
             ControlUnit = controlUnit;
             RequestedAt = requestedAt;
 
-            // Generate activity ID in the new format: Act_{Abbreviation}_{YYMMDDhhmmss}_{CU}_{EntityID}
             ActivityId = GenerateActivityId(activityType, requestedAt, controlUnit, entityId);
 
-            // Auto-register in registry
+            // Log initialization
+            Console.WriteLine($"{requestedAt:dd/MM/yyyy-HH:mm:ss} | {controlUnit}: initialized {ActivityId}");
+
             ActivityRegistry.Instance.Register(this);
 
-            Console.WriteLine($"[Activity] {ActivityId} initialized at {RequestedAt:yyyy-MM-ddTHH:mm:ss}");
+            if (_resourceControlUnit != null)
+            {
+                _resourceControlUnit.Submit(this);
+            }
         }
 
         private string GenerateActivityId(string activityType, DateTime timestamp, string cu, string entityId)
@@ -70,7 +82,6 @@ namespace WienerNeustadtSimulation.Models
 
         protected virtual string GetActivityAbbreviation(string activityType)
         {
-            // Default abbreviations - can be overridden in subclasses
             return activityType switch
             {
                 "IncomingTrainPreparation" => "ITP",
@@ -122,16 +133,12 @@ namespace WienerNeustadtSimulation.Models
         public void RecordWorkerArrival(string workerId, DateTime arrivalTime)
         {
             WorkerArrivalTimes[workerId] = arrivalTime;
-            Console.WriteLine($"{arrivalTime:dd/MM/yyyy-HH:mm:ss} | Activity {ActivityType}: worker {workerId} arrived at {Location}");
-
             CheckAndTriggerCommencement(arrivalTime);
         }
 
         public void RecordLocoArrival(string locoId, DateTime arrivalTime)
         {
             LocoArrivalTimes[locoId] = arrivalTime;
-            Console.WriteLine($"{arrivalTime:dd/MM/yyyy-HH:mm:ss} | Activity {ActivityType}: locomotive {locoId} arrived at {Location}");
-
             CheckAndTriggerCommencement(arrivalTime);
         }
 
@@ -144,7 +151,6 @@ namespace WienerNeustadtSimulation.Models
             if (AllResourcesArrivedAt == null)
             {
                 AllResourcesArrivedAt = currentTime;
-                Console.WriteLine($"{currentTime:dd/MM/yyyy-HH:mm:ss} | Activity {ActivityType}: ALL resources arrived, ready to commence");
 
                 // Trigger callback - the CU will calculate duration and schedule completion
                 OnReadyToCommence?.Invoke(this);

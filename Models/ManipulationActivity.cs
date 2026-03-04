@@ -4,7 +4,6 @@ namespace WienerNeustadtSimulation.Models
 {
     public class ManipulationActivity : Activity
     {
-        // Concrete implementation of abstract properties based on ActivityType
         public override int RequiredWorkers => GetRequiredWorkersForType(ActivityType);
         public override bool RequiresLocomotive => GetRequiresLocomotiveForType(ActivityType);
         public override double BaseSecondsPerMeter => GetBaseSecondsPerMeterForType(ActivityType);
@@ -25,12 +24,12 @@ namespace WienerNeustadtSimulation.Models
         {
             return type switch
             {
-                "IncomingTrainPreparation" => 3,
+                "IncomingTrainPreparation" => 2,
                 "Uncoupling" => 2,
                 "Coupling" => 2,
                 "Securing" => 1,
                 "PushOff" => 3,
-                _ => 2  // Default
+                _ => 2
             };
         }
 
@@ -39,10 +38,7 @@ namespace WienerNeustadtSimulation.Models
             return type switch
             {
                 "PushOff" => true,
-                "Coupling" => false,
-                "Uncoupling" => false,
-                "Securing" => false,
-                "IncomingTrainPreparation" => false,
+                "IncomingTrainPreparation" => true,
                 _ => false
             };
         }
@@ -51,12 +47,12 @@ namespace WienerNeustadtSimulation.Models
         {
             return type switch
             {
-                "IncomingTrainPreparation" => 15.0,  // 15 seconds per meter
-                "Uncoupling" => 10.0,                // 10 seconds per meter
-                "Coupling" => 12.0,                  // 12 seconds per meter
-                "Securing" => 8.0,                   // 8 seconds per meter
-                "PushOff" => 10.0,                   // 10 seconds per meter
-                _ => 10.0  // Default
+                "IncomingTrainPreparation" => 15.0,
+                "Uncoupling" => 10.0,
+                "Coupling" => 12.0,
+                "Securing" => 8.0,
+                "PushOff" => 10.0,
+                _ => 10.0
             };
         }
     }

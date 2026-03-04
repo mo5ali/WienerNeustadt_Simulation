@@ -99,6 +99,7 @@ namespace WienerNeustadtSimulation
                 var classificationControl = new ClassificationControlUnit(engine);
 
                 var resourceControl = new ResourceControlUnit(engine, resourcePool);
+                Activity.SetResourceControlUnit(resourceControl);
 
                 // ArrivalControlUnit now handles BOTH entry and arrival phases
                 var arrivalControl = new ArrivalControlUnit(
