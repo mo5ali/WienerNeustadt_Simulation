@@ -1,0 +1,63 @@
+﻿using System;
+
+namespace WienerNeustadtSimulation.Models
+{
+    public class ManipulationActivity : Activity
+    {
+        // Concrete implementation of abstract properties based on ActivityType
+        public override int RequiredWorkers => GetRequiredWorkersForType(ActivityType);
+        public override bool RequiresLocomotive => GetRequiresLocomotiveForType(ActivityType);
+        public override double BaseSecondsPerMeter => GetBaseSecondsPerMeterForType(ActivityType);
+
+        public ManipulationActivity(
+            string activityType,
+            string entityId,
+            double entityLength,
+            string location,
+            string area,
+            string controlUnit,
+            DateTime requestedAt)
+            : base(activityType, entityId, entityLength, location, area, controlUnit, requestedAt)
+        {
+        }
+
+        private int GetRequiredWorkersForType(string type)
+        {
+            return type switch
+            {
+                "IncomingTrainPreparation" => 3,
+                "Uncoupling" => 2,
+                "Coupling" => 2,
+                "Securing" => 1,
+                "PushOff" => 3,
+                _ => 2  // Default
+            };
+        }
+
+        private bool GetRequiresLocomotiveForType(string type)
+        {
+            return type switch
+            {
+                "PushOff" => true,
+                "Coupling" => false,
+                "Uncoupling" => false,
+                "Securing" => false,
+                "IncomingTrainPreparation" => false,
+                _ => false
+            };
+        }
+
+        private double GetBaseSecondsPerMeterForType(string type)
+        {
+            return type switch
+            {
+                "IncomingTrainPreparation" => 15.0,  // 15 seconds per meter
+                "Uncoupling" => 10.0,                // 10 seconds per meter
+                "Coupling" => 12.0,                  // 12 seconds per meter
+                "Securing" => 8.0,                   // 8 seconds per meter
+                "PushOff" => 10.0,                   // 10 seconds per meter
+                _ => 10.0  // Default
+            };
+        }
+    }
+}

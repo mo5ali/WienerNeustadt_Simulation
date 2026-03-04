@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -44,4 +45,7 @@ namespace WienerNeustadtSimulation.Models
         [JsonPropertyName("maxSpeed")]
         public double? MaxSpeed { get; set; }
     }
+
+    // ResourceRequest class used by ResourceControlUnit
+  
 }

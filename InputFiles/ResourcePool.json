@@ -107,9 +107,9 @@
   ],
   "shuntingLocomotives": [
     { "id": "SL001", "maxSpeed": 25 },
-	{ "id": "SL002", "maxSpeed": 25 },
-	{ "id": "SL003", "maxSpeed": 25 },
-	{ "id": "SL004", "maxSpeed": 25 },
+	  { "id": "SL002", "maxSpeed": 25 },
+	  { "id": "SL003", "maxSpeed": 25 },
+	  { "id": "SL004", "maxSpeed": 25 },
     { "id": "SL005", "maxSpeed": 25 }
   ]
   }

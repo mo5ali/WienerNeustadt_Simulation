@@ -150,6 +150,15 @@ namespace WienerNeustadtSimulation
 
                 engine.Run();
 
+                // Print activity summary
+                ActivityRegistry.Instance.PrintSummary();
+
+                // Export activities to JSON
+                var outputFolder = Path.Combine(AppContext.BaseDirectory, "OutputFiles");
+                Directory.CreateDirectory(outputFolder);
+                var activityLogPath = Path.Combine(outputFolder, "ActivityLog.json");
+                ActivityRegistry.Instance.ExportToJson(activityLogPath);
+
                 Console.WriteLine("\n═══════════════════════════════════════════════════════════");
                 Console.WriteLine("                   SIMULATION COMPLETE                     ");
                 Console.WriteLine("═════════════════════════════════════════��═════════════════\n");

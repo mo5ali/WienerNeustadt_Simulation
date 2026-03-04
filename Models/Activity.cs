@@ -12,13 +12,14 @@ namespace WienerNeustadtSimulation.Models
         public double EntityLength { get; set; }
         public string Location { get; set; }
         public string Area { get; set; }
+        public string ControlUnit { get; set; }  // NEW: Track which CU initiated this
 
         // Timing
-        public DateTime RequestedAt { get; set; }
+        public DateTime RequestedAt { get; set; }  // This is your "Initialization" time
         public DateTime? AllResourcesArrivedAt { get; set; }
-        public DateTime? CommencedAt { get; set; }
+        public DateTime? CommencedAt { get; set; }  // This is your "Commencement" time
         public DateTime? ScheduledCompletionAt { get; set; }
-        public DateTime? CompletedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }  // This is your "Completion" time
 
         // Duration tracking
         public TimeSpan? CalculatedDuration { get; set; }
@@ -41,14 +42,47 @@ namespace WienerNeustadtSimulation.Models
         public Action<Activity>? OnReadyToCommence { get; set; }
         public Action<Activity>? OnCompleted { get; set; }
 
-        protected Activity(string entityId, double entityLength, string location, string area, DateTime requestedAt)
+        protected Activity(string activityType, string entityId, double entityLength, string location, string area, string controlUnit, DateTime requestedAt)
         {
-            ActivityId = Guid.NewGuid().ToString();
+            ActivityType = activityType;
             EntityId = entityId;
             EntityLength = entityLength;
             Location = location;
             Area = area;
+            ControlUnit = controlUnit;
             RequestedAt = requestedAt;
+
+            // Generate activity ID in the new format: Act_{Abbreviation}_{YYMMDDhhmmss}_{CU}_{EntityID}
+            ActivityId = GenerateActivityId(activityType, requestedAt, controlUnit, entityId);
+
+            // Auto-register in registry
+            ActivityRegistry.Instance.Register(this);
+
+            Console.WriteLine($"[Activity] {ActivityId} initialized at {RequestedAt:yyyy-MM-ddTHH:mm:ss}");
+        }
+
+        private string GenerateActivityId(string activityType, DateTime timestamp, string cu, string entityId)
+        {
+            string abbreviation = GetActivityAbbreviation(activityType);
+            string timestampStr = timestamp.ToString("yyMMddHHmmss");
+            return $"Act_{abbreviation}_{timestampStr}_{cu}_{entityId}";
+        }
+
+        protected virtual string GetActivityAbbreviation(string activityType)
+        {
+            // Default abbreviations - can be overridden in subclasses
+            return activityType switch
+            {
+                "IncomingTrainPreparation" => "ITP",
+                "Uncoupling" => "DEC",
+                "Coupling" => "COP",
+                "Securing" => "SEC",
+                "PushOff" => "PO",
+                "Entry" => "ENT",
+                "Moving" => "MOV",
+                "Leaving" => "LVG",
+                _ => "ACT"
+            };
         }
 
         // Calculate duration with worker modifiers
