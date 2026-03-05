@@ -62,11 +62,12 @@ namespace WienerNeustadtSimulation.Models
 
             ActivityId = GenerateActivityId(activityType, requestedAt, controlUnit, entityId);
 
-            // Log initialization
             Console.WriteLine($"{requestedAt:dd/MM/yyyy-HH:mm:ss} | {controlUnit}: initialized {ActivityId}");
 
+            // Auto-register in registry
             ActivityRegistry.Instance.Register(this);
 
+            // Auto-submit to ResourceControlUnit
             if (_resourceControlUnit != null)
             {
                 _resourceControlUnit.Submit(this);
@@ -99,7 +100,6 @@ namespace WienerNeustadtSimulation.Models
         // Calculate duration with worker modifiers
         public TimeSpan CalculateDuration(Dictionary<string, double> workerMultipliers)
         {
-            // Get modifiers for allocated workers
             var modifiers = new List<double>();
             foreach (var workerId in AllocatedWorkerIds)
             {
@@ -107,10 +107,8 @@ namespace WienerNeustadtSimulation.Models
                     modifiers.Add(workerMultipliers[workerId]);
             }
 
-            // Calculate average modifier
             AverageWorkerMultiplier = modifiers.Count > 0 ? modifiers.Average() : 1.0;
 
-            // Duration = EntityLength × BaseSecondsPerMeter × AverageModifier
             double totalSeconds = EntityLength * BaseSecondsPerMeter * AverageWorkerMultiplier.Value;
             CalculatedDuration = TimeSpan.FromSeconds(totalSeconds);
 
@@ -151,8 +149,6 @@ namespace WienerNeustadtSimulation.Models
             if (AllResourcesArrivedAt == null)
             {
                 AllResourcesArrivedAt = currentTime;
-
-                // Trigger callback - the CU will calculate duration and schedule completion
                 OnReadyToCommence?.Invoke(this);
             }
         }

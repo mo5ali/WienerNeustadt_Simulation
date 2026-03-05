@@ -8,22 +8,16 @@ using WienerNeustadtSimulation.Models;
 
 namespace WienerNeustadtSimulation.Control
 {
-    /// <summary>
-    /// Manages incoming trains from entry through arrival track to push-off and dismantling.
-    /// Combines entry queue management + arrival track processing.
-    /// </summary>
     public class ArrivalControlUnit
     {
         private readonly SimulationEngine _engine;
         private readonly ClassificationControlUnit _classificationControl;
         private readonly ResourceControlUnit _resourceControl;
 
-        // Entry-related state (from EntryControlUnit)
         private readonly Queue<Train> _entryQueue;
         private readonly List<Track> _arrivalTracks;
         private readonly Dictionary<string, DateTime> _entryTimes;
 
-        // Arrival track processing state
         private readonly Dictionary<string, Track> _destinationToTrackMap;
         private readonly List<Track> _classificationTracks;
         private readonly Dictionary<string, WagonGroupDto> _wagonGroupData;
@@ -55,13 +49,6 @@ namespace WienerNeustadtSimulation.Control
             _trainWagonGroupMaps = new Dictionary<string, Dictionary<string, Track>>();
         }
 
-        // ============================================================
-        // ENTRY PHASE
-        // ============================================================
-
-        /// <summary>
-        /// Called from Program.cs when a train arrives at the system entry.
-        /// </summary>
         public void HandleTrainArrival(TrainDto trainDto, DateTime simTimeUtc)
         {
             var train = CreateTrainEntity(trainDto);
@@ -103,7 +90,6 @@ namespace WienerNeustadtSimulation.Control
                         firstTime = false;
                     }
 
-                    // NOTE: this sleep blocks the whole sim thread; consider replacing with _engine.Schedule retry later.
                     System.Threading.Thread.Sleep(30000);
                 }
             }
@@ -115,7 +101,7 @@ namespace WienerNeustadtSimulation.Control
                 () =>
                 {
                     assignedTrack.CurrentOccupancies.Add(train.ID);
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.RealLifeID}, and starts waiting for preparation");
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.RealLifeID}");
 
                     var wagonGroupToTrackMap = RunSortingMethod(train);
                     _trainWagonGroupMaps[train.ID] = wagonGroupToTrackMap;
@@ -201,57 +187,55 @@ namespace WienerNeustadtSimulation.Control
 
         private void RequestTrainPreparation(Train train, Track arrivalTrack)
         {
-            // This request defines requirements + baseSecondsPerMeter.
-            // ResourceCU will allocate + schedule worker travel, then call OnFulfilled ONLY when all arrived.
-            var prepReq = new TrainPreparationRequest(train.ID, train.Length, arrivalTrack.RealLifeID, arrivalTrack.Area);
+            var prepActivity = new ManipulationActivity(
+                activityType: "IncomingTrainPreparation",
+                entityId: train.ID,
+                entityLength: train.Length,
+                location: arrivalTrack.RealLifeID,
+                area: arrivalTrack.Area,
+                controlUnit: "ArrivalCU",
+                requestedAt: _engine.Now
+            );
 
-            prepReq.OnFulfilled = _ =>
+            prepActivity.OnReadyToCommence = _ =>
             {
-                // Resources arrived; commence now.
-                CommenceAndScheduleActivity(train, arrivalTrack, prepReq);
+                CommenceAndScheduleActivity(train, arrivalTrack, prepActivity);
             };
-
-            _resourceControl.Submit(prepReq);
         }
 
-        private void CommenceAndScheduleActivity(Train train, Track arrivalTrack, ResourceRequest req)
+        private void CommenceAndScheduleActivity(Train train, Track arrivalTrack, Activity activity)
         {
-            req.CommencedAtUtc = _engine.Now;
+            activity.CommencedAt = _engine.Now;
 
-            var allocatedWorkers = _resourceControl.GetWorkersByIds(req.AllocatedWorkerIds);
+            var allocatedWorkers = _resourceControl.GetWorkersByIds(activity.AllocatedWorkerIds);
 
-            double avgMultiplier = 1.0;
-            if (allocatedWorkers.Count > 0)
+            var workerMultipliers = new Dictionary<string, double>();
+            foreach (var worker in allocatedWorkers)
             {
-                avgMultiplier = allocatedWorkers
-                    .Select(w => _resourceControl.GetWorkerTimeMultiplierForActivity(w, req.ActivityTypeKey))
-                    .Average();
+                workerMultipliers[worker.Id] = _resourceControl.GetWorkerTimeMultiplierForActivity(worker, activity.ActivityType);
             }
 
-            var durationSeconds = req.EntityLengthMeters * req.BaseSecondsPerMeter * avgMultiplier;
-            if (durationSeconds < 0) durationSeconds = 0;
+            var duration = activity.CalculateDuration(workerMultipliers);
 
-            var duration = TimeSpan.FromSeconds(durationSeconds);
-
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: COMMENCE '{req.ForActivity}' for train {train.ID}");
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: length={req.EntityLengthMeters:F1}m base={req.BaseSecondsPerMeter:F1}s/m avgMult={avgMultiplier:F2} -> duration={duration.TotalSeconds:F0}s");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: Commence '{activity.ActivityId}'");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: length={activity.EntityLength:F1}m base={activity.BaseSecondsPerMeter:F1}s/m avgMult={activity.AverageWorkerMultiplier:F2} -> duration={duration.TotalSeconds:F0}s");
 
             _engine.Schedule(
                 _engine.Now.Add(duration),
-                () => CompleteActivity(train, arrivalTrack, req),
-                $"ActivityComplete-{req.RequestId}"
+                () => CompleteActivity(train, arrivalTrack, activity),
+                $"ActivityComplete-{activity.ActivityId}"
             );
         }
 
-        private void CompleteActivity(Train train, Track arrivalTrack, ResourceRequest req)
+        private void CompleteActivity(Train train, Track arrivalTrack, Activity activity)
         {
-            req.FinishedAtUtc = _engine.Now;
+            activity.CompletedAt = _engine.Now;
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: DONE '{req.ForActivity}' for train {train.ID}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: DONE '{activity.ActivityId}' for train {train.ID}");
 
-            _resourceControl.Release(req);
+            _resourceControl.Release(activity);
 
-            // TODO: Next step - request pushoff using same pattern (PushOffRequest)
+            // TODO: Next step
         }
     }
 }

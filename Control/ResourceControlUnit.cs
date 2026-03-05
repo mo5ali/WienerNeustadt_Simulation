@@ -18,7 +18,7 @@ namespace WienerNeustadtSimulation.Control
         private readonly HashSet<string> _availableLocoIds;
 
         private const double FixedTravelDistanceMeters = 100.0;
-        private const double DefaultWorkerSpeedMetersPerMinute = 60.0;
+        private const double DefaultWorkerSpeedMetersPerMinute = 80.0;
         private const double LocoSpeedMetersPerMinute = 25.0;
 
         public ResourceControlUnit(SimulationEngine engine, ResourcePoolRoot resourcePool)
@@ -38,7 +38,11 @@ namespace WienerNeustadtSimulation.Control
         public void Submit(Activity activity)
         {
             int requiredLocos = activity.RequiresLocomotive ? 1 : 0;
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{activity.ActivityId}' submitted ({activity.RequiredWorkers} workers {requiredLocos} loco)");
+            string resourceDesc = $"{activity.RequiredWorkers} worker{(activity.RequiredWorkers != 1 ? "s" : "")}";
+            if (requiredLocos > 0)
+                resourceDesc += $" {requiredLocos} loco";
+
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{activity.ActivityId}' submitted ({resourceDesc})");
 
             if (TryAllocateAndDispatchResources(activity))
             {
@@ -81,32 +85,33 @@ namespace WienerNeustadtSimulation.Control
                 allocatedLocos.Add(locoId);
             }
 
-            // Build allocation message
+            // Build allocation message with NAMES
             List<string> resourceNames = new List<string>();
             foreach (var wId in allocatedWorkers)
             {
                 var worker = _workers.FirstOrDefault(w => w.Id == wId);
-                resourceNames.Add(worker?.Name ?? wId);
+                string firstName = worker?.Name?.Split(' ')[0] ?? wId;
+                resourceNames.Add(firstName);
             }
             foreach (var lId in allocatedLocos)
             {
                 resourceNames.Add(lId);
             }
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: allocated {string.Join(", ", resourceNames)} to '{activity.ActivityId}'");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: allocated {string.Join(", ", resourceNames)}  to '{activity.ActivityId}'");
 
             // Schedule travel for workers
             foreach (var workerId in allocatedWorkers)
             {
                 var worker = _workers.FirstOrDefault(w => w.Id == workerId);
-                var workerName = worker?.Name ?? workerId;
+                string firstName = worker?.Name?.Split(' ')[0] ?? workerId;
                 var travelTime = CalculateWorkerTravelTime(workerId);
 
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {workerName} traveling to track {activity.Location} ({FixedTravelDistanceMeters}m {travelTime.TotalSeconds:F0}s) for '{activity.ActivityId}'");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {firstName} traveling to track {activity.Location} ({FixedTravelDistanceMeters:F0}m {travelTime.TotalSeconds:F0}s) for '{activity.ActivityId}'");
 
                 _engine.Schedule(
                     _engine.Now.Add(travelTime),
-                    () => OnWorkerArrived(activity, workerId, workerName),
+                    () => OnWorkerArrived(activity, workerId, firstName),
                     $"WorkerArrives-{workerId}-{activity.ActivityId}"
                 );
             }
@@ -116,7 +121,7 @@ namespace WienerNeustadtSimulation.Control
             {
                 var travelTime = CalculateLocoTravelTime();
 
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} driving to track {activity.Location} ({FixedTravelDistanceMeters}m {travelTime.TotalSeconds:F0}s) for '{activity.ActivityId}'");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} driving to track {activity.Location} ({FixedTravelDistanceMeters:F0}m {travelTime.TotalSeconds:F0}s) for '{activity.ActivityId}'");
 
                 _engine.Schedule(
                     _engine.Now.Add(travelTime),
@@ -150,7 +155,7 @@ namespace WienerNeustadtSimulation.Control
         {
             activity.RecordWorkerArrival(workerId, _engine.Now);
 
-            int arrived = activity.WorkerArrivalTimes.Count;
+            int arrived = activity.WorkerArrivalTimes.Count + activity.LocoArrivalTimes.Count;
             int total = activity.RequiredWorkers + (activity.RequiresLocomotive ? 1 : 0);
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {workerName} arrived for '{activity.ActivityId}' ({arrived}/{total})");
@@ -174,7 +179,8 @@ namespace WienerNeustadtSimulation.Control
             {
                 _availableWorkerIds.Add(workerId);
                 var worker = _workers.FirstOrDefault(w => w.Id == workerId);
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {worker?.Name ?? workerId} returned to pool");
+                string firstName = worker?.Name?.Split(' ')[0] ?? workerId;
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {firstName} returned to pool");
             }
 
             foreach (var locoId in activity.AllocatedLocoIds)
