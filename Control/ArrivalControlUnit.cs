@@ -233,9 +233,80 @@ namespace WienerNeustadtSimulation.Control
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: DONE '{activity.ActivityId}' for train {train.ID}");
 
-            _resourceControl.Release(activity);
+            // If this was train preparation, start push-off
+            if (activity.ActivityType == "IncomingTrainPreparation")
+            {
+                // Release workers only
+                foreach (var workerId in activity.AllocatedWorkerIds)
+                {
+                    var worker = _resourceControl.GetWorkersByIds(new[] { workerId }).FirstOrDefault();
+                    string firstName = worker?.Name?.Split(' ')[0] ?? workerId;
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {firstName} returned to pool");
+                    _resourceControl.ReturnWorker(workerId);
+                }
+                activity.AllocatedWorkerIds.Clear();
 
-            // TODO: Next step
+                // Keep loco - pass the activity itself to PushOff
+                RequestPushOff(train, arrivalTrack, activity);
+            }
+            else
+            {
+                // Normal completion - release all resources
+                _resourceControl.Release(activity);
+            }
+        }
+
+        private void RequestPushOff(Train train, Track arrivalTrack, Activity itpActivity)
+        {
+            var wagonGroupToTrackMap = _trainWagonGroupMaps.ContainsKey(train.ID)
+                ? _trainWagonGroupMaps[train.ID]
+                : new Dictionary<string, Track>();
+
+            var pushOffActivity = new PushOffActivity(
+                trainId: train.ID,
+                trainLength: train.Length,
+                wagonGroupIds: train.WagonGroupIds,
+                wagonGroupDestinations: wagonGroupToTrackMap,
+                fromLocation: arrivalTrack.RealLifeID,
+                area: arrivalTrack.Area,
+                requestedAt: _engine.Now,
+                engine: _engine,
+                wagonGroupData: _wagonGroupData
+            );
+
+            // Loco is still allocated to ITP activity - just use it
+            pushOffActivity.AllocatedLocoIds.AddRange(itpActivity.AllocatedLocoIds);
+
+            pushOffActivity.OnReadyToCommence = _ =>
+            {
+                pushOffActivity.CommencePushOff();
+            };
+
+            pushOffActivity.OnCompleted = _ =>
+            {
+                // Release workers
+                foreach (var workerId in pushOffActivity.AllocatedWorkerIds)
+                {
+                    var worker = _resourceControl.GetWorkersByIds(new[] { workerId }).FirstOrDefault();
+                    string firstName = worker?.Name?.Split(' ')[0] ?? workerId;
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {firstName} returned to pool");
+                    _resourceControl.ReturnWorker(workerId);
+                }
+                pushOffActivity.AllocatedWorkerIds.Clear();
+
+                // Loco stays - just log where it is
+                if (pushOffActivity.AllocatedLocoIds.Count > 0)
+                {
+                    var locoId = pushOffActivity.AllocatedLocoIds[0];
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} remains in yard");
+                }
+
+                // Clean up
+                arrivalTrack.CurrentOccupancies.Remove(train.ID);
+                arrivalTrack.Reserved = false;
+
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} fully processed and removed from system");
+            };
         }
     }
 }

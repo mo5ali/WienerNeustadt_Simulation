@@ -50,7 +50,7 @@ namespace WienerNeustadtSimulation.Models
             _resourceControlUnit = resourceCU;
         }
 
-        protected Activity(string activityType, string entityId, double entityLength, string location, string area, string controlUnit, DateTime requestedAt)
+        protected Activity(string activityType, string entityId, double entityLength, string location, string area, string controlUnit, DateTime requestedAt, bool autoSubmit = true)
         {
             ActivityType = activityType;
             EntityId = entityId;
@@ -67,8 +67,8 @@ namespace WienerNeustadtSimulation.Models
             // Auto-register in registry
             ActivityRegistry.Instance.Register(this);
 
-            // Auto-submit to ResourceControlUnit
-            if (_resourceControlUnit != null)
+            // Auto-submit to ResourceControlUnit (unless this is a sub-activity)
+            if (autoSubmit && _resourceControlUnit != null)
             {
                 _resourceControlUnit.Submit(this);
             }
@@ -90,6 +90,7 @@ namespace WienerNeustadtSimulation.Models
                 "Coupling" => "COP",
                 "Securing" => "SEC",
                 "PushOff" => "PO",
+                "PushOffDrive" => "POD",
                 "Entry" => "ENT",
                 "Moving" => "MOV",
                 "Leaving" => "LVG",

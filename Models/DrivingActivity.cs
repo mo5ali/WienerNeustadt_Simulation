@@ -18,8 +18,9 @@ namespace WienerNeustadtSimulation.Models
             string area,
             string controlUnit,
             DateTime requestedAt,
-            double speed)
-            : base(activityType, entityId, entityLength, location, area, controlUnit, requestedAt)
+            double speed,
+            bool autoSubmit = false)  // Default false for sub-activities
+            : base(activityType, entityId, entityLength, location, area, controlUnit, requestedAt, autoSubmit)
         {
             Speed = speed;
         }

@@ -58,14 +58,12 @@ namespace WienerNeustadtSimulation.Control
             bool needsWorkers = activity.RequiredWorkers > 0;
             bool needsLoco = activity.RequiresLocomotive;
 
-            // Check availability
             if (needsWorkers && _availableWorkerIds.Count < activity.RequiredWorkers)
                 return false;
 
             if (needsLoco && _availableLocoIds.Count == 0)
                 return false;
 
-            // Allocate workers
             List<string> allocatedWorkers = new List<string>();
             if (needsWorkers)
             {
@@ -75,7 +73,6 @@ namespace WienerNeustadtSimulation.Control
                 activity.AllocatedWorkerIds.AddRange(allocatedWorkers);
             }
 
-            // Allocate locomotive
             List<string> allocatedLocos = new List<string>();
             if (needsLoco)
             {
@@ -85,7 +82,6 @@ namespace WienerNeustadtSimulation.Control
                 allocatedLocos.Add(locoId);
             }
 
-            // Build allocation message with NAMES
             List<string> resourceNames = new List<string>();
             foreach (var wId in allocatedWorkers)
             {
@@ -100,7 +96,6 @@ namespace WienerNeustadtSimulation.Control
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: allocated {string.Join(", ", resourceNames)}  to '{activity.ActivityId}'");
 
-            // Schedule travel for workers
             foreach (var workerId in allocatedWorkers)
             {
                 var worker = _workers.FirstOrDefault(w => w.Id == workerId);
@@ -116,7 +111,6 @@ namespace WienerNeustadtSimulation.Control
                 );
             }
 
-            // Schedule travel for locomotive
             foreach (var locoId in allocatedLocos)
             {
                 var travelTime = CalculateLocoTravelTime();
@@ -171,10 +165,23 @@ namespace WienerNeustadtSimulation.Control
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} arrived for '{activity.ActivityId}' ({arrived}/{total})");
         }
 
+        // Return individual worker to pool
+        public void ReturnWorker(string workerId)
+        {
+            _availableWorkerIds.Add(workerId);
+            ProcessQueue();
+        }
+
+        // Return individual loco to pool
+        public void ReturnLoco(string locoId)
+        {
+            _availableLocoIds.Add(locoId);
+            ProcessQueue();
+        }
+
+        // Release all resources from an activity
         public void Release(Activity activity)
         {
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: releasing resources for '{activity.ActivityId}'");
-
             foreach (var workerId in activity.AllocatedWorkerIds)
             {
                 _availableWorkerIds.Add(workerId);
