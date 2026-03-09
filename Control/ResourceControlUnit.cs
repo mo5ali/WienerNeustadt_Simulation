@@ -179,7 +179,7 @@ namespace WienerNeustadtSimulation.Control
             ProcessQueue();
         }
 
-        // Release all resources from an activity
+        // Release all resources from an activityy
         public void Release(Activity activity)
         {
             foreach (var workerId in activity.AllocatedWorkerIds)
