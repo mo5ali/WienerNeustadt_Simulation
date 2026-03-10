@@ -73,10 +73,10 @@ namespace WienerNeustadtSimulation
                 // Parse wagon group data from input
                 var wagonGroupData = ParseWagonGroupData(root);
 
-                // NEW: Parse wagon data
+                // Parse wagon data
                 var wagonData = ParseWagonData(root);
 
-                // NEW: Calculate wagon group lengths from their wagonsnhzn
+                // Calculate wagon group lengths from their wagons
                 foreach (var wg in wagonGroupData.Values)
                 {
                     if (wg.WagonIds != null && wg.WagonIds.Count > 0)
@@ -94,13 +94,23 @@ namespace WienerNeustadtSimulation
                     }
                 }
 
-                // Create control units (in reverse dependency order)
-                Console.WriteLine("[Initializing control units...]");
-                var classificationControl = new ClassificationControlUnit(engine);
+                // Create control units (in correct dependency order!)
+                Console.WriteLine("\n[Initializing control units...]");
 
+                // 1. ResourceControlUnit (no dependencies)
                 var resourceControl = new ResourceControlUnit(engine, resourcePool);
+                Console.WriteLine("✓ ResourceControlUnit initialized");
 
-                // ArrivalControlUnit now handles BOTH entry and arrival phases
+                // 2. ClassificationControlUnit (depends on ResourceCU)
+                var classificationControl = new ClassificationControlUnit(
+                    engine,
+                    resourceControl,
+                    classificationTracks,
+                    wagonGroupData
+                );
+                Console.WriteLine("✓ ClassificationControlUnit initialized");
+
+                // 3. ArrivalControlUnit (depends on both ResourceCU and ClassificationCU)
                 var arrivalControl = new ArrivalControlUnit(
                     engine,
                     classificationControl,
@@ -109,11 +119,7 @@ namespace WienerNeustadtSimulation
                     classificationTracks,
                     wagonGroupData
                 );
-
-
-                Console.WriteLine("✓ ArrivalControlUnit initialized");
-                Console.WriteLine("✓ ClassificationControlUnit initialized");
-                Console.WriteLine("✓ ResourceControlUnit initialized\n");
+                Console.WriteLine("✓ ArrivalControlUnit initialized\n");
 
 
                 // Schedule inbound train arrivals
@@ -233,6 +239,7 @@ namespace WienerNeustadtSimulation
 
             return dict;
         }
+
         static Dictionary<string, WagonDto> ParseWagonData(InboundRoot root)
         {
             var dict = new Dictionary<string, WagonDto>();

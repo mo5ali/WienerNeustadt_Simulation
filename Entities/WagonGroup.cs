@@ -1,47 +1,40 @@
-﻿namespace WienerNeustadtSimulation.Entities
+﻿using System;
+using System.Collections.Generic;
+
+namespace WienerNeustadtSimulation.Entities
 {
-    public class WagonGroup // Represents a group of wagons within a train.
+    public class WagonGroup
     {
-        public string ID { get; } // 7-digit identifier (5: Train ID, 2: Wagon Group ID)
-        public double Length { get; set; } // Total length in meters (from file or calculated)
-        public List<string> WagonIds { get; set; } // List of wagon IDs in this group
-        public string Destination { get; set; } // e.g., "Vienna", "Graz"
+        public string Id { get; set; }
+        public double Length { get; set; }
+        public string Destination { get; set; }
+        public List<string> WagonIds { get; set; }
 
-        // Computed properties from ID
-        public string ParentTrainId => ID.Substring(0, 5);
-        public string GroupNumber => ID.Substring(5, 2);
+        // Track location
+        public string CurrentTrackId { get; set; }
+        public string CurrentArea { get; set; }
 
-        /// <param name="id">7-digit wagon group ID</param>
-        /// <param name="length">Length in meters (optional if calculated later)</param>
-        public WagonGroup(string id, double length = 0, string destination = "") // Constructor for WagonGroup.
+        // State
+        public bool IsSecured { get; set; }
+        public bool IsCoupled { get; set; }
+        public DateTime ArrivedAt { get; set; }
+
+        // Reference to parent train (when coupled into a train)
+        public OutboundTrain? ParentTrain { get; set; }
+
+        public WagonGroup(string id, double length, string destination, List<string> wagonIds)
         {
-
-            if (string.IsNullOrWhiteSpace(id) || id.Length != 7 || !long.TryParse(id, out _)) // Validate ID is 7 digits
-            {
-                throw new ArgumentException("WagonGroup ID must be exactly 7 digits.", nameof(id));
-            }
-
-            ID = id;
+            Id = id;
             Length = length;
-            WagonIds = new List<string>(); // Initialize empty list of IDs
-            Destination = destination; // Initialize destination
-        }
-
-        // Method to calculate total length from wagon objects (call after resolving IDs)
-        public void CalculateLength(Dictionary<string, Wagon> wagonLookup)
-        {
-            if (WagonIds == null || WagonIds.Count == 0)
-            {
-                Length = 0;
-                return;
-            }
-
-            Length = WagonIds.Sum(id => wagonLookup[id].Length);
+            Destination = destination;
+            WagonIds = wagonIds ?? new List<string>();
+            IsSecured = false;
+            IsCoupled = false;
         }
 
         public override string ToString()
         {
-            return $"WagonGroup {ID} (Train: {ParentTrainId}, Group#: {GroupNumber}) - {Length}m, {WagonIds.Count} wagons";
+            return $"WG-{Id} ({Length:F1}m, {WagonIds.Count} wagons → {Destination})";
         }
     }
 }

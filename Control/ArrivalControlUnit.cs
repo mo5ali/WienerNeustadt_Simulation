@@ -173,8 +173,8 @@ namespace WienerNeustadtSimulation.Control
                     if (classificationTrack == null)
                         Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: no free classification tracks");
 
-                    _destinationToTrackMap[destination] = classificationTrack;
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: track {classificationTrack.RealLifeID} set for '{destination}'");
+                    _destinationToTrackMap[destination] = classificationTrack!;
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: track {classificationTrack!.RealLifeID} set for '{destination}'");
                 }
 
                 var assignedTrack = _destinationToTrackMap[destination];
@@ -187,7 +187,6 @@ namespace WienerNeustadtSimulation.Control
 
         private void RequestTrainPreparation(Train train, Track arrivalTrack)
         {
-            // CREATE ACTIVITY
             var prepActivity = new ManipulationActivity(
                 activityType: "IncomingTrainPreparation",
                 entityId: train.ID,
@@ -198,7 +197,6 @@ namespace WienerNeustadtSimulation.Control
                 requestedAt: _engine.Now
             );
 
-            // CREATE REQUEST (HCCM pattern!)
             var resourceRequest = new ResourceRequest(
                 activity: prepActivity,
                 workers: prepActivity.RequiredWorkers,
@@ -207,7 +205,6 @@ namespace WienerNeustadtSimulation.Control
                 controlUnit: "ArrivalCU"
             );
 
-            // SUBMIT REQUEST TO RESOURCE CU
             _resourceControl.SubmitRequest(resourceRequest);
 
             prepActivity.OnReadyToCommence = _ =>
@@ -246,10 +243,8 @@ namespace WienerNeustadtSimulation.Control
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: DONE '{activity.ActivityId}' for train {train.ID}");
 
-            // If this was train preparation, start push-off
             if (activity.ActivityType == "IncomingTrainPreparation")
             {
-                // Release workers only
                 foreach (var workerId in activity.AllocatedWorkerIds)
                 {
                     var worker = _resourceControl.GetWorkersByIds(new[] { workerId }).FirstOrDefault();
@@ -259,12 +254,10 @@ namespace WienerNeustadtSimulation.Control
                 }
                 activity.AllocatedWorkerIds.Clear();
 
-                // Keep loco - pass the activity itself to PushOff
                 RequestPushOff(train, arrivalTrack, activity);
             }
             else
             {
-                // Normal completion - release all resources
                 _resourceControl.Release(activity);
             }
         }
@@ -275,7 +268,7 @@ namespace WienerNeustadtSimulation.Control
                 ? _trainWagonGroupMaps[train.ID]
                 : new Dictionary<string, Track>();
 
-            // CREATE ACTIVITY
+            // CREATE PUSHOFF ACTIVITY WITH CLASSIFICATIONCU REFERENCE
             var pushOffActivity = new PushOffActivity(
                 trainId: train.ID,
                 trainLength: train.Length,
@@ -285,22 +278,20 @@ namespace WienerNeustadtSimulation.Control
                 area: arrivalTrack.Area,
                 requestedAt: _engine.Now,
                 engine: _engine,
-                wagonGroupData: _wagonGroupData
+                wagonGroupData: _wagonGroupData,
+                classificationControl: _classificationControl  // ← PASS IT HERE!
             );
 
-            // Loco is still allocated to ITP activity - just use it
             pushOffActivity.AllocatedLocoIds.AddRange(itpActivity.AllocatedLocoIds);
 
-            // CREATE REQUEST (HCCM pattern!)
             var resourceRequest = new ResourceRequest(
                 activity: pushOffActivity,
                 workers: pushOffActivity.RequiredWorkers,
-                loco: false, // Loco already with train!
+                loco: false,
                 time: _engine.Now,
                 controlUnit: "ArrivalCU"
             );
 
-            // SUBMIT REQUEST TO RESOURCE CU
             _resourceControl.SubmitRequest(resourceRequest);
 
             pushOffActivity.OnReadyToCommence = _ =>
@@ -310,7 +301,6 @@ namespace WienerNeustadtSimulation.Control
 
             pushOffActivity.OnCompleted = _ =>
             {
-                // Release workers
                 foreach (var workerId in pushOffActivity.AllocatedWorkerIds)
                 {
                     var worker = _resourceControl.GetWorkersByIds(new[] { workerId }).FirstOrDefault();
@@ -320,14 +310,12 @@ namespace WienerNeustadtSimulation.Control
                 }
                 pushOffActivity.AllocatedWorkerIds.Clear();
 
-                // Loco stays - just log where it is
                 if (pushOffActivity.AllocatedLocoIds.Count > 0)
                 {
                     var locoId = pushOffActivity.AllocatedLocoIds[0];
                     Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} remains in yard");
                 }
 
-                // Clean up
                 arrivalTrack.CurrentOccupancies.Remove(train.ID);
                 arrivalTrack.Reserved = false;
 
