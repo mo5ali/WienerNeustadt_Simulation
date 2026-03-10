@@ -9,7 +9,7 @@ namespace WienerNeustadtSimulation.Control
     public class ResourceControlUnit
     {
         private readonly SimulationEngine _engine;
-        private readonly Queue<Activity> _requestQueue;
+        private readonly Queue<ResourceRequest> _requestQueue;
 
         private readonly List<WorkerDto> _workers;
         private readonly List<ShuntingLocomotiveDto> _shuntingLocomotives;
@@ -24,7 +24,7 @@ namespace WienerNeustadtSimulation.Control
         public ResourceControlUnit(SimulationEngine engine, ResourcePoolRoot resourcePool)
         {
             _engine = engine;
-            _requestQueue = new Queue<Activity>();
+            _requestQueue = new Queue<ResourceRequest>();
 
             _workers = resourcePool.Workers ?? new List<WorkerDto>();
             _shuntingLocomotives = resourcePool.ShuntingLocomotives ?? new List<ShuntingLocomotiveDto>();
@@ -35,44 +35,48 @@ namespace WienerNeustadtSimulation.Control
             Console.WriteLine($"  → ResourceControlUnit: {_workers.Count} workers, {_shuntingLocomotives.Count} locomotives initialized");
         }
 
-        public void Submit(Activity activity)
+        public void SubmitRequest(ResourceRequest request)
         {
-            int requiredLocos = activity.RequiresLocomotive ? 1 : 0;
-            string resourceDesc = $"{activity.RequiredWorkers} worker{(activity.RequiredWorkers != 1 ? "s" : "")}";
-            if (requiredLocos > 0)
-                resourceDesc += $" {requiredLocos} loco";
+            string resourceDesc = $"{request.RequiredWorkers} worker{(request.RequiredWorkers != 1 ? "s" : "")}";
+            if (request.RequiresLocomotive)
+                resourceDesc += " 1 loco";
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{activity.ActivityId}' submitted ({resourceDesc})");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.RequestId}' submitted ({resourceDesc})");
 
-            if (TryAllocateAndDispatchResources(activity))
+            if (TryAllocateAndDispatchResources(request))
             {
                 return;
             }
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{activity.ActivityId}' QUEUED (insufficient resources)");
-            _requestQueue.Enqueue(activity);
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.RequestId}' QUEUED (insufficient resources)");
+            _requestQueue.Enqueue(request);
         }
 
-        private bool TryAllocateAndDispatchResources(Activity activity)
+        private bool TryAllocateAndDispatchResources(ResourceRequest request)
         {
-            bool needsWorkers = activity.RequiredWorkers > 0;
-            bool needsLoco = activity.RequiresLocomotive;
+            Activity activity = request.Activity;
 
-            if (needsWorkers && _availableWorkerIds.Count < activity.RequiredWorkers)
+            bool needsWorkers = request.RequiredWorkers > 0;
+            bool needsLoco = request.RequiresLocomotive;
+
+            // Check availability
+            if (needsWorkers && _availableWorkerIds.Count < request.RequiredWorkers)
                 return false;
 
             if (needsLoco && _availableLocoIds.Count == 0)
                 return false;
 
+            // Allocate workers
             List<string> allocatedWorkers = new List<string>();
             if (needsWorkers)
             {
-                allocatedWorkers = _availableWorkerIds.Take(activity.RequiredWorkers).ToList();
+                allocatedWorkers = _availableWorkerIds.Take(request.RequiredWorkers).ToList();
                 foreach (var id in allocatedWorkers)
                     _availableWorkerIds.Remove(id);
                 activity.AllocatedWorkerIds.AddRange(allocatedWorkers);
             }
 
+            // Allocate locomotive
             List<string> allocatedLocos = new List<string>();
             if (needsLoco)
             {
@@ -82,6 +86,7 @@ namespace WienerNeustadtSimulation.Control
                 allocatedLocos.Add(locoId);
             }
 
+            // Build allocation message with NAMES
             List<string> resourceNames = new List<string>();
             foreach (var wId in allocatedWorkers)
             {
@@ -94,8 +99,9 @@ namespace WienerNeustadtSimulation.Control
                 resourceNames.Add(lId);
             }
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: allocated {string.Join(", ", resourceNames)}  to '{activity.ActivityId}'");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: allocated {string.Join(", ", resourceNames)}  to '{request.Activity.ActivityId}'");
 
+            // Schedule travel for workers
             foreach (var workerId in allocatedWorkers)
             {
                 var worker = _workers.FirstOrDefault(w => w.Id == workerId);
@@ -111,6 +117,7 @@ namespace WienerNeustadtSimulation.Control
                 );
             }
 
+            // Schedule travel for locomotive
             foreach (var locoId in allocatedLocos)
             {
                 var travelTime = CalculateLocoTravelTime();
@@ -165,21 +172,18 @@ namespace WienerNeustadtSimulation.Control
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} arrived for '{activity.ActivityId}' ({arrived}/{total})");
         }
 
-        // Return individual worker to pool
         public void ReturnWorker(string workerId)
         {
             _availableWorkerIds.Add(workerId);
             ProcessQueue();
         }
 
-        // Return individual loco to pool
         public void ReturnLoco(string locoId)
         {
             _availableLocoIds.Add(locoId);
             ProcessQueue();
         }
 
-        // Release all resources from an activityyy
         public void Release(Activity activity)
         {
             foreach (var workerId in activity.AllocatedWorkerIds)
@@ -214,7 +218,7 @@ namespace WienerNeustadtSimulation.Control
             if (TryAllocateAndDispatchResources(next))
             {
                 _requestQueue.Dequeue();
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: dequeued '{next.ActivityId}'");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: dequeued '{next.RequestId}'");
             }
         }
 

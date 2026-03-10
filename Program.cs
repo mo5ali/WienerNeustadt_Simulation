@@ -99,7 +99,6 @@ namespace WienerNeustadtSimulation
                 var classificationControl = new ClassificationControlUnit(engine);
 
                 var resourceControl = new ResourceControlUnit(engine, resourcePool);
-                Activity.SetResourceControlUnit(resourceControl);
 
                 // ArrivalControlUnit now handles BOTH entry and arrival phases
                 var arrivalControl = new ArrivalControlUnit(
@@ -162,7 +161,7 @@ namespace WienerNeustadtSimulation
 
                 Console.WriteLine("\n═══════════════════════════════════════════════════════════");
                 Console.WriteLine("                   SIMULATION COMPLETE                     ");
-                Console.WriteLine("═════════════════════════════════════════��═════════════════\n");
+                Console.WriteLine("════════════════════════════════════════════════════════════\n");
 
                 Console.WriteLine("✓ Simulation finished successfully");
                 return 0;

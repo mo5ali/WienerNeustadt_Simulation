@@ -42,15 +42,10 @@ namespace WienerNeustadtSimulation.Models
         public Action<Activity>? OnReadyToCommence { get; set; }
         public Action<Activity>? OnCompleted { get; set; }
 
-        // Reference to ResourceCU for auto-submission
-        private static Control.ResourceControlUnit? _resourceControlUnit;
+        // REMOVED: Reference to ResourceCU for auto-submission
+        // NO MORE AUTO-SUBMIT!
 
-        public static void SetResourceControlUnit(Control.ResourceControlUnit resourceCU)
-        {
-            _resourceControlUnit = resourceCU;
-        }
-
-        protected Activity(string activityType, string entityId, double entityLength, string location, string area, string controlUnit, DateTime requestedAt, bool autoSubmit = true)
+        protected Activity(string activityType, string entityId, double entityLength, string location, string area, string controlUnit, DateTime requestedAt)
         {
             ActivityType = activityType;
             EntityId = entityId;
@@ -67,11 +62,8 @@ namespace WienerNeustadtSimulation.Models
             // Auto-register in registry
             ActivityRegistry.Instance.Register(this);
 
-            // Auto-submit to ResourceControlUnit (unless this is a sub-activity)
-            if (autoSubmit && _resourceControlUnit != null)
-            {
-                _resourceControlUnit.Submit(this);
-            }
+            // REMOVED: Auto-submit to ResourceControlUnit
+            // Activities no longer auto-submit - they create Requests instead!
         }
 
         private string GenerateActivityId(string activityType, DateTime timestamp, string cu, string entityId)

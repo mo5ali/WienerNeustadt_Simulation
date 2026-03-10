@@ -15,9 +15,8 @@ namespace WienerNeustadtSimulation.Models
             string location,
             string area,
             string controlUnit,
-            DateTime requestedAt,
-            bool autoSubmit = true)
-            : base(activityType, entityId, entityLength, location, area, controlUnit, requestedAt, autoSubmit)
+            DateTime requestedAt)
+            : base(activityType, entityId, entityLength, location, area, controlUnit, requestedAt)
         {
         }
 
@@ -38,11 +37,11 @@ namespace WienerNeustadtSimulation.Models
         {
             return type switch
             {
+                "IncomingTrainPreparation" => true,
                 "PushOff" => false,
                 "Coupling" => false,
                 "Uncoupling" => false,
                 "Securing" => false,
-                "IncomingTrainPreparation" => false,
                 _ => false
             };
         }

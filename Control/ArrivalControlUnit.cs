@@ -187,6 +187,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void RequestTrainPreparation(Train train, Track arrivalTrack)
         {
+            // CREATE ACTIVITY
             var prepActivity = new ManipulationActivity(
                 activityType: "IncomingTrainPreparation",
                 entityId: train.ID,
@@ -196,6 +197,18 @@ namespace WienerNeustadtSimulation.Control
                 controlUnit: "ArrivalCU",
                 requestedAt: _engine.Now
             );
+
+            // CREATE REQUEST (HCCM pattern!)
+            var resourceRequest = new ResourceRequest(
+                activity: prepActivity,
+                workers: prepActivity.RequiredWorkers,
+                loco: prepActivity.RequiresLocomotive,
+                time: _engine.Now,
+                controlUnit: "ArrivalCU"
+            );
+
+            // SUBMIT REQUEST TO RESOURCE CU
+            _resourceControl.SubmitRequest(resourceRequest);
 
             prepActivity.OnReadyToCommence = _ =>
             {
@@ -262,6 +275,7 @@ namespace WienerNeustadtSimulation.Control
                 ? _trainWagonGroupMaps[train.ID]
                 : new Dictionary<string, Track>();
 
+            // CREATE ACTIVITY
             var pushOffActivity = new PushOffActivity(
                 trainId: train.ID,
                 trainLength: train.Length,
@@ -276,6 +290,18 @@ namespace WienerNeustadtSimulation.Control
 
             // Loco is still allocated to ITP activity - just use it
             pushOffActivity.AllocatedLocoIds.AddRange(itpActivity.AllocatedLocoIds);
+
+            // CREATE REQUEST (HCCM pattern!)
+            var resourceRequest = new ResourceRequest(
+                activity: pushOffActivity,
+                workers: pushOffActivity.RequiredWorkers,
+                loco: false, // Loco already with train!
+                time: _engine.Now,
+                controlUnit: "ArrivalCU"
+            );
+
+            // SUBMIT REQUEST TO RESOURCE CU
+            _resourceControl.SubmitRequest(resourceRequest);
 
             pushOffActivity.OnReadyToCommence = _ =>
             {
