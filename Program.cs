@@ -8,6 +8,8 @@ using WienerNeustadtSimulation.Engine;
 using WienerNeustadtSimulation.Control;
 using WienerNeustadtSimulation.Models;
 using WienerNeustadtSimulation.Infrastructure;
+using System.Runtime.InteropServices;
+using WienerNeustadtSimulation.Entities;
 
 namespace WienerNeustadtSimulation
 {
@@ -148,7 +150,30 @@ namespace WienerNeustadtSimulation
                     scheduledCount++;
                 }
                 Console.WriteLine($"✓ Scheduled {scheduledCount} train arrival events\n");
-
+                // we will not consider wagons for now, so dont even mention them, so no "0 wagons"
+                //instead of this 
+                //01.01.2025 - 09:26:20 | ResourceCU: Charles traveling to track 703(100m 75s) for 'Act_PO_250101092620_ArrivalCU_12341'
+                //01.01.2025 - 09:26:20 | ResourceCU: Lewis traveling to track 703(100m 75s) for 'Act_PO_250101092620_ArrivalCU_12341'
+                //01.01.2025 - 09:26:20 | ResourceCU: Max traveling to track 703(100m 75s) for 'Act_PO_250101092620_ArrivalCU_12341'
+                //make this
+                //01.01.2025 - 09:26:20 | ResourceCU: Charles(75s100m) Lewis(75s100m) Max(75s100m) traveling to track 703 for 'Act_PO_250101092620_ArrivalCU_12341'
+                // remove these (dont mention the check at all unless it is positive (train completed))
+                //01.01.2025 - 09:37:06 | ClassificationCU: checking completion for track 615
+                //01.01.2025 - 09:37:06 | ClassificationCU: track 615 has 1 WGs, total length = 32, 0m, 0 wagons
+                //01.01.2025 - 09:37:06 | ClassificationCU: train not yet complete(32, 0m < 100m)
+                //make those one line
+                //01.01.2025 - 09:43:52 | ClassificationCU: DONE 'Act_SEC_250101093535_ClassificationCU_1234102'
+                //01.01.2025 - 09:43:52 | ClassificationCU: 1234102 is now SECURED
+                //so they become
+                //01.01.2025 - 09:43:52 | ClassificationCU: DONE 'Act_SEC_250101093535_ClassificationCU_1234102' 1234102 is SECURED
+                //when an activity in done dont do this
+                //01.01.2025-09:38:00 | ArrivalCU: DONE 'Act_ITP_250101090600_ArrivalCU_12342' for train 12342
+                //01.01.2025 - 09:38:00 | ResourceCU: Fernando returned to pool
+                //01.01.2025 - 09:38:00 | ResourceCU: George returned to pool
+                //01.01.2025 - 09:38:00 | ResourceCU: Lando returned to pool
+                // if none of the workers are immediatly aclocated to another task say..
+                //01.01.2025-09:38:00 | ArrivalCU: DONE 'Act_ITP_250101090600_ArrivalCU_12342' for train 12342
+                //01.01.2025 - 09:38:00 | ResourceCU: Fernando, George, Lando become available, returning to waiting area
                 // Run simulation
                 Console.WriteLine("═══════════════════════════════════════════════════════════");
                 Console.WriteLine("                    SIMULATION START                       ");
