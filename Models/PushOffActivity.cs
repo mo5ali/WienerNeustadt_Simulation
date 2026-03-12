@@ -49,13 +49,9 @@ namespace WienerNeustadtSimulation.Models
 
             _pushGroups = GroupConsecutiveWagonsByDestination();
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: dismantling train {EntityId} into {_pushGroups.Count} push group(s)");
-
-            foreach (var group in _pushGroups)
-            {
-                string wgList = string.Join(", ", group.WagonGroupIds);
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: group [{wgList}] → track {group.DestinationTrack.RealLifeID} ({group.TotalLength:F1}m)");
-            }
+            // COMPACT: Just log initialization and commencement
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: initialized {ActivityId}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: Commence {ActivityId}");
 
             ExecuteNextPush();
         }
@@ -70,8 +66,6 @@ namespace WienerNeustadtSimulation.Models
 
             var group = _pushGroups[_completedPushes];
             string combinedId = string.Join("+", group.WagonGroupIds);
-
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: pushing wagon group(s) [{string.Join(", ", group.WagonGroupIds)}] to track {group.DestinationTrack.RealLifeID}");
 
             var driveActivity = new DrivingActivity(
                 activityType: "PushOffDrive",
@@ -97,6 +91,7 @@ namespace WienerNeustadtSimulation.Models
             driveActivity.CommencedAt = _engine.Now;
             driveActivity.ScheduledCompletionAt = _engine.Now.Add(pushDuration);
 
+            // COMPACT: Just log loco driving
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: {driveActivity.AllocatedLocoIds[0]} driving {distanceMeters:F0}m to track {group.DestinationTrack.RealLifeID} (ETA {pushDuration.TotalSeconds:F0}s)");
 
             _engine.Schedule(
@@ -109,8 +104,6 @@ namespace WienerNeustadtSimulation.Models
         private void OnPushCompleted(WagonGroupPush group, DrivingActivity driveActivity)
         {
             driveActivity.CompletedAt = _engine.Now;
-
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: wagon group(s) [{string.Join(", ", group.WagonGroupIds)}] arrived at track {group.DestinationTrack.RealLifeID}");
 
             // Create WagonGroup entities and add to track
             foreach (var wgId in group.WagonGroupIds)
@@ -129,7 +122,7 @@ namespace WienerNeustadtSimulation.Models
                     id: wgId,
                     length: wgData.Length ?? 0,
                     destination: wgData.Destination ?? "Unknown",
-                    wagonIds: new List<string>() // You can populate this if you have wagon IDs
+                    wagonIds: new List<string>()
                 );
 
                 wagonGroup.CurrentTrackId = group.DestinationTrack.RealLifeID;
@@ -139,9 +132,7 @@ namespace WienerNeustadtSimulation.Models
                 // Add to track occupancy
                 group.DestinationTrack.CurrentOccupancies.Add(wgId);
 
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: ✨ Created {wagonGroup} on track {group.DestinationTrack.RealLifeID}");
-
-                // Notify ClassificationControlUnit
+                // Notify ClassificationControlUnit (this will log entity creation)
                 _classificationControl.HandleWagonGroupArrival(wagonGroup, group.DestinationTrack, _engine.Now);
             }
 
@@ -153,7 +144,7 @@ namespace WienerNeustadtSimulation.Models
         {
             CompletedAt = _engine.Now;
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: DONE '{ActivityId}' - train {EntityId} dismantled, all wagon groups pushed");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: DONE '{ActivityId}' - train {EntityId} dismantled");
 
             OnCompleted?.Invoke(this);
         }

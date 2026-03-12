@@ -49,49 +49,27 @@ namespace WienerNeustadtSimulation.Control
         }
 
         // Called by PushOffActivity when wagon group arrives
+        // Called by PushOffActivity when wagon group arrives
+        // Called by PushOffActivity when wagon group arrives
+        // Called by PushOffActivity when wagon group arrives
         public void HandleWagonGroupArrival(WagonGroup wagonGroup, Track classificationTrack, DateTime time)
         {
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: {wagonGroup} arrived at track {classificationTrack.RealLifeID}");
-
             // Track wagon group
             if (!_wagonGroupsByTrack.ContainsKey(classificationTrack.RealLifeID))
                 _wagonGroupsByTrack[classificationTrack.RealLifeID] = new List<WagonGroup>();
 
             _wagonGroupsByTrack[classificationTrack.RealLifeID].Add(wagonGroup);
 
+            // COMPACT: Log entity creation with wagon group IDs
+            var wgIdsList = string.Join(", ", _wagonGroupsByTrack[classificationTrack.RealLifeID].Select(wg => wg.Id));
+            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: WGs [{wgIdsList}] arrived at track {classificationTrack.RealLifeID} ~ entity(s) created");
+
             // File preparation request
             var request = new WagonGroupPreparationRequest(wagonGroup, time);
             _preparationRequests.Enqueue(request);
 
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: filed WagonGroupPreparationRequest for {wagonGroup.Id}");
-
             // Process requests immediately
             ProcessRequests(time);
-        }
-
-        // Process all pending requests
-        public void ProcessRequests(DateTime time)
-        {
-            // Process preparation requests
-            while (_preparationRequests.Count > 0)
-            {
-                var request = _preparationRequests.Dequeue();
-                HandleWagonGroupPreparation(request, time);
-            }
-
-            // Process completion checks
-            while (_completionCheckRequests.Count > 0)
-            {
-                var request = _completionCheckRequests.Dequeue();
-                HandleCompletionCheck(request, time);
-            }
-
-            // Process departure requests
-            while (_departureRequests.Count > 0)
-            {
-                var request = _departureRequests.Dequeue();
-                HandleTrainDeparture(request, time);
-            }
         }
 
         private void HandleWagonGroupPreparation(WagonGroupPreparationRequest request, DateTime time)
@@ -99,16 +77,17 @@ namespace WienerNeustadtSimulation.Control
             var wagonGroup = request.WagonGroup;
             var trackId = wagonGroup.CurrentTrackId;
 
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: processing WagonGroupPreparationRequest for {wagonGroup.Id}");
-
             // Check if track is empty (only this wagon group)
             bool isTrackEmpty = _wagonGroupsByTrack[trackId].Count == 1;
 
             Activity activity;
+            string activityIdPreview;
+
             if (isTrackEmpty)
             {
                 // Track is empty → SECURE wagon group
-                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: track {trackId} is EMPTY → requesting SECURING");
+                activityIdPreview = $"Act_SEC_{time:yyMMddHHmmss}_ClassifCU_{wagonGroup.Id}";
+                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: track {trackId} is EMPTY → initialize {activityIdPreview}");
 
                 activity = new SecuringActivity(
                     wagonGroupId: wagonGroup.Id,
@@ -125,7 +104,8 @@ namespace WienerNeustadtSimulation.Control
                 var existingTrain = _trainsByTrack.ContainsKey(trackId) ? _trainsByTrack[trackId] : null;
                 string couplingToId = existingTrain?.Id ?? "existing-wgs";
 
-                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: track {trackId} has wagon groups → requesting COUPLING to {couplingToId}");
+                activityIdPreview = $"Act_COP_{time:yyMMddHHmmss}_ClassifCU_{wagonGroup.Id}";
+                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: track {trackId} has WGs → initialize {activityIdPreview}");
 
                 activity = new CouplingActivity(
                     wagonGroupId: wagonGroup.Id,
@@ -138,7 +118,7 @@ namespace WienerNeustadtSimulation.Control
                 );
             }
 
-            // Create and submit resource request
+            // Create and submit resource request (HCCM pattern)
             var resourceRequest = new ResourceRequest(
                 activity: activity,
                 workers: activity.RequiredWorkers,
@@ -169,14 +149,20 @@ namespace WienerNeustadtSimulation.Control
 
             var duration = activity.CalculateDuration(workerMultipliers);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: Commence '{activity.ActivityId}'");
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: length={activity.EntityLength:F1}m base={activity.BaseSecondsPerMeter:F1}s/m avgMult={activity.AverageWorkerMultiplier:F2} -> duration={duration.TotalSeconds:F0}s");
+            // COMPACT format: [32m base=8s/m avgMult=1 > dur=256s]
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: Commence '{activity.ActivityId}' [{activity.EntityLength:F0}m base={activity.BaseSecondsPerMeter:F0}s/m avgMult={activity.AverageWorkerMultiplier:F0} > dur={duration.TotalSeconds:F0}s]");
 
             _engine.Schedule(
                 _engine.Now.Add(duration),
                 () => CompleteActivity(wagonGroup, trackId, activity),
                 $"ActivityComplete-{activity.ActivityId}"
             );
+        }
+
+        // Helper method to generate activity ID preview
+        private string ActivityId(string wgId, string activityType)
+        {
+            return $"Act_{activityType}_{_engine.Now:yyMMddHHmmss}_ClassifCU_{wgId}";
         }
 
         private void CompleteActivity(WagonGroup wagonGroup, string trackId, Activity activity)
@@ -454,6 +440,30 @@ namespace WienerNeustadtSimulation.Control
             {
                 Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {train.LocomotiveId} returned to pool");
                 _resourceControl.ReturnLoco(train.LocomotiveId);
+            }
+        }
+        // Process all pending requests
+        public void ProcessRequests(DateTime time)
+        {
+            // Process preparation requests
+            while (_preparationRequests.Count > 0)
+            {
+                var request = _preparationRequests.Dequeue();
+                HandleWagonGroupPreparation(request, time);
+            }
+
+            // Process completion checks
+            while (_completionCheckRequests.Count > 0)
+            {
+                var request = _completionCheckRequests.Dequeue();
+                HandleCompletionCheck(request, time);
+            }
+
+            // Process departure requests
+            while (_departureRequests.Count > 0)
+            {
+                var request = _departureRequests.Dequeue();
+                HandleTrainDeparture(request, time);
             }
         }
     }
