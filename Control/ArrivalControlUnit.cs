@@ -245,13 +245,8 @@ namespace WienerNeustadtSimulation.Control
 
             if (activity.ActivityType == "IncomingTrainPreparation")
             {
-                foreach (var workerId in activity.AllocatedWorkerIds)
-                {
-                    var worker = _resourceControl.GetWorkersByIds(new[] { workerId }).FirstOrDefault();
-                    string firstName = worker?.Name?.Split(' ')[0] ?? workerId;
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {firstName} returned to pool");
-                    _resourceControl.ReturnWorker(workerId);
-                }
+                // Batch return workers using new method
+                _resourceControl.ReturnWorkers(activity.AllocatedWorkerIds.ToList());
                 activity.AllocatedWorkerIds.Clear();
 
                 RequestPushOff(train, arrivalTrack, activity);
