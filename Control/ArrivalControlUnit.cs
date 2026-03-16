@@ -5,6 +5,7 @@ using WienerNeustadtSimulation.Engine;
 using WienerNeustadtSimulation.Entities;
 using WienerNeustadtSimulation.Infrastructure;
 using WienerNeustadtSimulation.Models;
+using WienerNeustadtSimulation.Output;
 
 namespace WienerNeustadtSimulation.Control
 {
@@ -56,6 +57,7 @@ namespace WienerNeustadtSimulation.Control
             _entryTimes[train.ID] = simTimeUtc;
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | Train {train.ID} queued at entry. Queue length: {_entryQueue.Count}");
+            SimulationLogger.Instance.LogTrainEvent(train.ID, "Entry", simTimeUtc);
 
             var firstTrain = _entryQueue.Peek();
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: handling train {firstTrain.ID} of length {firstTrain.Length} meters");
@@ -73,6 +75,7 @@ namespace WienerNeustadtSimulation.Control
                         {
                             assignedTrack = track;
                             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} assigned arrival track {track.RealLifeID} ");
+                            SimulationLogger.Instance.LogTrainEvent(train.ID, "AssignedArrivalTrack", _engine.Now, assignedTrack.RealLifeID);
                             track.Reserved = true;
                             break;
                         }

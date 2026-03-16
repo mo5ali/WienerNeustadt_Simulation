@@ -10,6 +10,7 @@ using WienerNeustadtSimulation.Models;
 using WienerNeustadtSimulation.Infrastructure;
 using System.Runtime.InteropServices;
 using WienerNeustadtSimulation.Entities;
+using WienerNeustadtSimulation.Output;
 
 namespace WienerNeustadtSimulation
 {
@@ -22,6 +23,12 @@ namespace WienerNeustadtSimulation
                 Console.WriteLine("╔════════════════════════════════════════════════════════════╗");
                 Console.WriteLine("║   Wiener Neustadt Train Shunting Yard Simulation           ║");
                 Console.WriteLine("╚════════════════════════════════════════════════════════════╝\n");
+
+                // Initialize logger
+                var outputFolder = Path.Combine(AppContext.BaseDirectory, "OutputFiles");
+                var logPath = Path.Combine(outputFolder, "SimulationLog.csv");
+                SimulationLogger.Instance.Initialize(logPath);
+                Console.WriteLine($"📝 Logging to: {logPath}\n");
 
                 // Load input data
                 var inboundPath = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "InputFiles", "InboundTrains.json");
@@ -124,6 +131,7 @@ namespace WienerNeustadtSimulation
                 Console.WriteLine("✓ ArrivalControlUnit initialized\n");
 
 
+
                 // Schedule inbound train arrivals
                 Console.WriteLine("[Scheduling train arrivals...]");
                 int scheduledCount = 0;
@@ -181,14 +189,21 @@ namespace WienerNeustadtSimulation
 
                 engine.Run();
 
+                // Close logger
+                SimulationLogger.Instance.Close();
+
                 // Print activity summary
                 ActivityRegistry.Instance.PrintSummary();
 
                 // Export activities to JSON
-                var outputFolder = Path.Combine(AppContext.BaseDirectory, "OutputFiles");
                 Directory.CreateDirectory(outputFolder);
                 var activityLogPath = Path.Combine(outputFolder, "ActivityLog.json");
                 ActivityRegistry.Instance.ExportToJson(activityLogPath);
+
+                // ✨ NEW: Generate dashboard
+                var dashboardGenerator = new DashboardGenerator();
+                var dashboardPath = Path.Combine(outputFolder, "TrainTimeline.html");
+                dashboardGenerator.GenerateFromLog(logPath, dashboardPath);
 
                 Console.WriteLine("\n═══════════════════════════════════════════════════════════");
                 Console.WriteLine("                   SIMULATION COMPLETE                     ");
