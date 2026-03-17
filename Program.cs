@@ -11,6 +11,7 @@ using WienerNeustadtSimulation.Infrastructure;
 using System.Runtime.InteropServices;
 using WienerNeustadtSimulation.Entities;
 using WienerNeustadtSimulation.Output;
+using OfficeOpenXml;  // ← ADD THIS
 
 namespace WienerNeustadtSimulation
 {
@@ -20,6 +21,9 @@ namespace WienerNeustadtSimulation
         {
             try
             {
+                // Set EPPlus license
+                OfficeOpenXml.ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
+
                 Console.WriteLine("╔════════════════════════════════════════════════════════════╗");
                 Console.WriteLine("║   Wiener Neustadt Train Shunting Yard Simulation           ║");
                 Console.WriteLine("╚════════════════════════════════════════════════════════════╝\n");
@@ -202,8 +206,14 @@ namespace WienerNeustadtSimulation
 
                 // ✨ NEW: Generate dashboard
                 var dashboardGenerator = new DashboardGenerator();
+
+
                 var dashboardPath = Path.Combine(outputFolder, "TrainTimeline.html");
                 dashboardGenerator.GenerateFromLog(logPath, dashboardPath);
+
+                var excelDashboard = new ExcelDashboardGenerator();
+                var excelPath = Path.Combine(outputFolder, "TrainTimeline.xlsx");
+                excelDashboard.GenerateFromLog(logPath, excelPath);
 
                 Console.WriteLine("\n═══════════════════════════════════════════════════════════");
                 Console.WriteLine("                   SIMULATION COMPLETE                     ");
