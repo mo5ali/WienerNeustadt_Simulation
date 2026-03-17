@@ -104,6 +104,7 @@ namespace WienerNeustadtSimulation.Control
                 () =>
                 {
                     assignedTrack.CurrentOccupancies.Add(train.ID);
+                    SimulationLogger.Instance.LogTrainEvent(train.ID, "ArrivedArrivalTrack", _engine.Now, assignedTrack.RealLifeID);
                     Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.RealLifeID}");
 
                     var wagonGroupToTrackMap = RunSortingMethod(train);
@@ -177,6 +178,7 @@ namespace WienerNeustadtSimulation.Control
                         Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: no free classification tracks");
 
                     _destinationToTrackMap[destination] = classificationTrack!;
+                    SimulationLogger.Instance.LogTrainEvent(train.ID, "ClassificationTrackAssigned", _engine.Now, $"{destination} -> {classificationTrack.RealLifeID}");
                     Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: track {classificationTrack!.RealLifeID} set for '{destination}'");
                 }
 
@@ -209,6 +211,7 @@ namespace WienerNeustadtSimulation.Control
             );
 
             _resourceControl.SubmitRequest(resourceRequest);
+            SimulationLogger.Instance.LogTrainEvent(train.ID, "PreparationRequested", _engine.Now);
 
             prepActivity.OnReadyToCommence = _ =>
             {
@@ -231,6 +234,7 @@ namespace WienerNeustadtSimulation.Control
             var duration = activity.CalculateDuration(workerMultipliers);
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: Commence '{activity.ActivityId}'");
+            SimulationLogger.Instance.LogTrainEvent(train.ID, "PreparationStarted", _engine.Now);
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: length={activity.EntityLength:F1}m base={activity.BaseSecondsPerMeter:F1}s/m avgMult={activity.AverageWorkerMultiplier:F2} -> duration={duration.TotalSeconds:F0}s");
 
             _engine.Schedule(
@@ -253,6 +257,7 @@ namespace WienerNeustadtSimulation.Control
                 activity.AllocatedWorkerIds.Clear();
 
                 RequestPushOff(train, arrivalTrack, activity);
+                SimulationLogger.Instance.LogTrainEvent(train.ID, "PreparationComplete", _engine.Now);
             }
             else
             {
@@ -291,6 +296,7 @@ namespace WienerNeustadtSimulation.Control
             );
 
             _resourceControl.SubmitRequest(resourceRequest);
+            SimulationLogger.Instance.LogTrainEvent(train.ID, "PushOffRequested", _engine.Now);
 
             pushOffActivity.OnReadyToCommence = _ =>
             {
@@ -316,7 +322,8 @@ namespace WienerNeustadtSimulation.Control
 
                 arrivalTrack.CurrentOccupancies.Remove(train.ID);
                 arrivalTrack.Reserved = false;
-
+                SimulationLogger.Instance.LogTrainEvent(train.ID, "PushOffComplete", _engine.Now);
+                SimulationLogger.Instance.LogTrainEvent(train.ID, "ExitedSystem", _engine.Now);
                 Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} fully processed and removed from system");
             };
         }

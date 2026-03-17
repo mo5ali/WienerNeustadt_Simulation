@@ -5,6 +5,7 @@ using WienerNeustadtSimulation.Engine;
 using WienerNeustadtSimulation.Entities;
 using WienerNeustadtSimulation.Infrastructure;
 using WienerNeustadtSimulation.Models;
+using WienerNeustadtSimulation.Output;
 
 namespace WienerNeustadtSimulation.Control
 {
@@ -63,7 +64,7 @@ namespace WienerNeustadtSimulation.Control
             // COMPACT: Log entity creation with wagon group IDs
             var wgIdsList = string.Join(", ", _wagonGroupsByTrack[classificationTrack.RealLifeID].Select(wg => wg.Id));
             Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: WGs [{wgIdsList}] arrived at track {classificationTrack.RealLifeID} ~ entity(s) created");
-
+            SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "ArrivedClassificationTrack", time, classificationTrack.RealLifeID);
             // File preparation request
             var request = new WagonGroupPreparationRequest(wagonGroup, time);
             _preparationRequests.Enqueue(request);
