@@ -5,6 +5,7 @@ using WienerNeustadtSimulation.Engine;
 using WienerNeustadtSimulation.Infrastructure;
 using WienerNeustadtSimulation.Entities;
 using WienerNeustadtSimulation.Control;
+using WienerNeustadtSimulation.Output;
 
 namespace WienerNeustadtSimulation.Models
 {
@@ -52,6 +53,7 @@ namespace WienerNeustadtSimulation.Models
             // COMPACT: Just log initialization and commencement
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: initialized {ActivityId}");
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: Commence {ActivityId}");
+            SimulationLogger.Instance.LogTrainEvent(EntityId, "PushOffStarted", _engine.Now, $"{_pushGroups.Count} groups");
 
             ExecuteNextPush();
         }
@@ -93,6 +95,7 @@ namespace WienerNeustadtSimulation.Models
 
             // COMPACT: Just log loco driving
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: {driveActivity.AllocatedLocoIds[0]} driving {distanceMeters:F0}m to track {group.DestinationTrack.RealLifeID} (ETA {pushDuration.TotalSeconds:F0}s)");
+            SimulationLogger.Instance.LogWagonGroupEvent(string.Join("+", group.WagonGroupIds), "PushingToTrack", _engine.Now, group.DestinationTrack.RealLifeID);
 
             _engine.Schedule(
                 _engine.Now.Add(pushDuration),
@@ -132,6 +135,8 @@ namespace WienerNeustadtSimulation.Models
                 // Add to track occupancy
                 group.DestinationTrack.CurrentOccupancies.Add(wgId);
 
+                SimulationLogger.Instance.LogWagonGroupEvent(wgId, "EntityCreated", _engine.Now, group.DestinationTrack.RealLifeID);
+
                 // Notify ClassificationControlUnit (this will log entity creation)
                 _classificationControl.HandleWagonGroupArrival(wagonGroup, group.DestinationTrack, _engine.Now);
             }
@@ -145,6 +150,7 @@ namespace WienerNeustadtSimulation.Models
             CompletedAt = _engine.Now;
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: DONE '{ActivityId}' - train {EntityId} dismantled");
+            SimulationLogger.Instance.LogTrainEvent(EntityId, "PushOffComplete", _engine.Now);
 
             OnCompleted?.Invoke(this);
         }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using WienerNeustadtSimulation.Engine;
 using WienerNeustadtSimulation.Models;
+using WienerNeustadtSimulation.Output;
 
 namespace WienerNeustadtSimulation.Control
 {
@@ -42,6 +43,7 @@ namespace WienerNeustadtSimulation.Control
                 resourceDesc += " + 1 loco";
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.RequestId}' submitted ({resourceDesc})");
+            SimulationLogger.Instance.LogActivityEvent(request.RequestId, "ResourceRequest", _engine.Now, "Submitted", resourceDesc);
 
             if (TryAllocateAndDispatchResources(request))
             {
@@ -94,6 +96,7 @@ namespace WienerNeustadtSimulation.Control
                 string firstName = worker?.Name?.Split(' ')[0] ?? wId;
                 var travelTime = CalculateWorkerTravelTime(wId);
                 workerDetails.Add($"{firstName}({travelTime.TotalSeconds:F0}s{FixedTravelDistanceMeters:F0}m)");
+                SimulationLogger.Instance.LogWorkerEvent(wId, "Allocated", _engine.Now, activity.ActivityId);
             }
 
             List<string> locoDetails = new List<string>();
@@ -101,6 +104,7 @@ namespace WienerNeustadtSimulation.Control
             {
                 var travelTime = CalculateLocoTravelTime();
                 locoDetails.Add($"{lId}({travelTime.TotalSeconds:F0}s{FixedTravelDistanceMeters:F0}m)");
+                SimulationLogger.Instance.LogWorkerEvent(lId, "Allocated", _engine.Now, activity.ActivityId);
             }
 
             // COMPACT MESSAGE: All resources in ONE line
@@ -165,6 +169,7 @@ namespace WienerNeustadtSimulation.Control
             int total = activity.RequiredWorkers + (activity.RequiresLocomotive ? 1 : 0);
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {workerName} arrived for '{activity.ActivityId}' ({arrived}/{total})");
+            SimulationLogger.Instance.LogWorkerEvent(workerId, "Arrived", _engine.Now, activity.ActivityId);
         }
 
         private void OnLocoArrived(Activity activity, string locoId)
@@ -175,17 +180,20 @@ namespace WienerNeustadtSimulation.Control
             int total = activity.RequiredWorkers + (activity.RequiresLocomotive ? 1 : 0);
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} arrived for '{activity.ActivityId}' ({arrived}/{total})");
+            SimulationLogger.Instance.LogWorkerEvent(locoId, "Arrived", _engine.Now, activity.ActivityId);
         }
 
         public void ReturnWorker(string workerId)
         {
             _availableWorkerIds.Add(workerId);
+            SimulationLogger.Instance.LogWorkerEvent(workerId, "Returned", _engine.Now);
             ProcessQueue();
         }
 
         public void ReturnLoco(string locoId)
         {
             _availableLocoIds.Add(locoId);
+            SimulationLogger.Instance.LogWorkerEvent(locoId, "Returned", _engine.Now);
             ProcessQueue();
         }
 
@@ -199,6 +207,7 @@ namespace WienerNeustadtSimulation.Control
             foreach (var workerId in workerIds)
             {
                 _availableWorkerIds.Add(workerId);
+                SimulationLogger.Instance.LogWorkerEvent(workerId, "Returned", _engine.Now);
             }
 
             // Get worker names
@@ -228,6 +237,7 @@ namespace WienerNeustadtSimulation.Control
             {
                 _availableLocoIds.Add(locoId);
                 Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} returned to pool");
+                SimulationLogger.Instance.LogWorkerEvent(locoId, "Returned", _engine.Now);
             }
 
             activity.AllocatedLocoIds.Clear();
