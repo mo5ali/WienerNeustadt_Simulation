@@ -55,11 +55,12 @@ namespace WienerNeustadtSimulation.Models
         {
             CommencedAt = _engine.Now;
 
-            _pushGroups = GroupConsecutiveWagonsByDestination();
-
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: initialized {ActivityId}");
+            // "initialized" is already printed by the base Activity constructor.
+            // Only print "Commence" here.
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | PushOff: Commence {ActivityId}");
             SimulationLogger.Instance.LogTrainEvent(EntityId, "PushOffStarted", _engine.Now, $"{_pushGroups.Count} groups");
+
+            _pushGroups = GroupConsecutiveWagonsByDestination();
 
             ExecuteNextPush();
         }

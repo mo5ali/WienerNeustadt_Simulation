@@ -145,27 +145,37 @@ namespace WienerNeustadtSimulation.Control
 
         private void OnWorkerArrived(Activity activity, string workerId, string workerName)
         {
-            activity.RecordWorkerArrival(workerId, _engine.Now);
-
-            int arrived = activity.WorkerArrivalTimes.Count + activity.LocoArrivalTimes.Count;
+            // Pre-calculate the count BEFORE recording, then add 1 for this arrival.
+            // This way the log line prints BEFORE RecordWorkerArrival fires
+            // CheckAndTriggerCommencement → OnReadyToCommence, ensuring the arrival
+            // message always appears before the "Commence" message in the log.
+            int arrived = activity.WorkerArrivalTimes.Count + activity.LocoArrivalTimes.Count + 1;
             int total = activity.RequiredWorkers + (activity.RequiresLocomotive ? 1 : 0);
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {workerName} arrived for '{activity.ActivityId}' ({arrived}/{total})");
             SimulationLogger.Instance.LogWorkerEvent(workerId, "Arrived", _engine.Now, activity.ActivityId);
+
+            // Record AFTER logging — this may immediately fire OnReadyToCommence
+            // if this is the last required resource, and that callback will print
+            // the "Commence" line. Logging first guarantees correct print order.
+            activity.RecordWorkerArrival(workerId, _engine.Now);
         }
 
         private void OnLocoArrived(Activity activity, string locoId)
         {
-            activity.RecordLocoArrival(locoId, _engine.Now);
-
-            int arrived = activity.WorkerArrivalTimes.Count + activity.LocoArrivalTimes.Count;
+            // Same pattern: log first, record after.
+            int arrived = activity.WorkerArrivalTimes.Count + activity.LocoArrivalTimes.Count + 1;
             int total = activity.RequiredWorkers + (activity.RequiresLocomotive ? 1 : 0);
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} arrived for '{activity.ActivityId}' ({arrived}/{total})");
             SimulationLogger.Instance.LogWorkerEvent(locoId, "Arrived", _engine.Now, activity.ActivityId);
+
+            // Record AFTER logging — this may immediately fire OnReadyToCommence
+            // if the loco was the last required resource.
+            activity.RecordLocoArrival(locoId, _engine.Now);
         }
 
-        // ─── Uniform release ───────────────────────────────────────────────────
+        // ─── Uniform release ────────────────���────────────────────────��─────────
 
         /// <summary>
         /// The single, uniform release path. Every control unit calls this on activity
@@ -182,21 +192,16 @@ namespace WienerNeustadtSimulation.Control
             {
                 if (activity.WorkersReleasedIndividually)
                 {
-                    // Each worker goes back alone and is immediately dispatchable.
-                    // Every ReturnWorkerInternal call triggers a queue check, so if a
-                    // pending request can be satisfied by the first returning worker,
-                    // it gets dispatched before the second worker is even processed.
                     foreach (var workerId in workerIds)
                         ReturnWorkerInternal(workerId);
                 }
                 else
                 {
-                    // Batch return: all workers back at once, one queue check.
                     ReturnWorkersBatch(workerIds);
                 }
             }
 
-            // ── Locomotive ───────────────────────────────────────────────────────
+            // ── Locomotive ──────────────────────────────────��────────────────────
             if (!activity.LocoStaysWithEntity)
             {
                 var locoIds = activity.AllocatedLocoIds.ToList();
@@ -210,17 +215,13 @@ namespace WienerNeustadtSimulation.Control
                     ProcessQueue();
                 }
             }
-            // If LocoStaysWithEntity == true, AllocatedLocoIds is deliberately left
-            // intact so the caller (e.g. ClassificationCU) can read the loco ID and
-            // attach it to the entity. The caller is responsible for calling ReturnLoco()
-            // when the entity eventually leaves the system.
+            // If LocoStaysWithEntity == true, AllocatedLocoIds is left intact for
+            // the caller to read the loco ID and attach it to the entity.
+            // The caller is responsible for calling ReturnLoco() when the entity exits.
         }
 
-        // ─── Low-level pool helpers ───────���────────────────────────────────────
+        // ─── Low-level pool helpers ────────────────────────────────────────────
 
-        // Returns one worker and triggers a queue check. Workers are still in the
-        // available pool while walking back — if a request is dispatched immediately
-        // they head to the new task instead.
         private void ReturnWorkerInternal(string workerId)
         {
             _availableWorkerIds.Add(workerId);
@@ -233,7 +234,6 @@ namespace WienerNeustadtSimulation.Control
             ProcessQueue();
         }
 
-        // Returns all workers at once and triggers one queue check.
         private void ReturnWorkersBatch(List<string> workerIds)
         {
             foreach (var workerId in workerIds)
