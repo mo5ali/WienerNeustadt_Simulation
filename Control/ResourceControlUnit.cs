@@ -36,6 +36,8 @@ namespace WienerNeustadtSimulation.Control
             Console.WriteLine($"  → ResourceControlUnit: {_workers.Count} workers, {_shuntingLocomotives.Count} locomotives initialized");
         }
 
+        // ─── Request submission ────────────────────────────────────────────────
+
         public void SubmitRequest(ResourceRequest request)
         {
             string resourceDesc = $"{request.RequiredWorkers} worker{(request.RequiredWorkers != 1 ? "s" : "")}";
@@ -46,13 +48,13 @@ namespace WienerNeustadtSimulation.Control
             SimulationLogger.Instance.LogActivityEvent(request.RequestId, "ResourceRequest", _engine.Now, "Submitted", resourceDesc);
 
             if (TryAllocateAndDispatchResources(request))
-            {
                 return;
-            }
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.RequestId}' QUEUED (insufficient resources)");
             _requestQueue.Enqueue(request);
         }
+
+        // ─── Allocation ────────────────────────────────────────────────────────
 
         private bool TryAllocateAndDispatchResources(ResourceRequest request)
         {
@@ -61,7 +63,6 @@ namespace WienerNeustadtSimulation.Control
             bool needsWorkers = request.RequiredWorkers > 0;
             bool needsLoco = request.RequiresLocomotive;
 
-            // Check availability
             if (needsWorkers && _availableWorkerIds.Count < request.RequiredWorkers)
                 return false;
 
@@ -88,14 +89,14 @@ namespace WienerNeustadtSimulation.Control
                 allocatedLocos.Add(locoId);
             }
 
-            // Build compact allocation message with NAMES
+            // Build compact allocation message
             List<string> workerDetails = new List<string>();
             foreach (var wId in allocatedWorkers)
             {
                 var worker = _workers.FirstOrDefault(w => w.Id == wId);
                 string firstName = worker?.Name?.Split(' ')[0] ?? wId;
                 var travelTime = CalculateWorkerTravelTime(wId);
-                workerDetails.Add($"{firstName}({travelTime.TotalSeconds:F0}s{FixedTravelDistanceMeters:F0}m)");
+                workerDetails.Add($"{firstName}({travelTime.TotalSeconds:F0}s/{FixedTravelDistanceMeters:F0}m)");
                 SimulationLogger.Instance.LogWorkerEvent(wId, "Allocated", _engine.Now, activity.ActivityId);
             }
 
@@ -103,16 +104,13 @@ namespace WienerNeustadtSimulation.Control
             foreach (var lId in allocatedLocos)
             {
                 var travelTime = CalculateLocoTravelTime();
-                locoDetails.Add($"{lId}({travelTime.TotalSeconds:F0}s{FixedTravelDistanceMeters:F0}m)");
+                locoDetails.Add($"{lId}({travelTime.TotalSeconds:F0}s/{FixedTravelDistanceMeters:F0}m)");
                 SimulationLogger.Instance.LogWorkerEvent(lId, "Allocated", _engine.Now, activity.ActivityId);
             }
 
-            // COMPACT MESSAGE: All resources in ONE line
             var allResources = workerDetails.Concat(locoDetails).ToList();
             if (allResources.Count > 0)
-            {
                 Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {string.Join(" ", allResources)} traveling to track {activity.Location} for '{activity.ActivityId}'");
-            }
 
             // Schedule travel for workers
             foreach (var workerId in allocatedWorkers)
@@ -143,23 +141,7 @@ namespace WienerNeustadtSimulation.Control
             return true;
         }
 
-        private TimeSpan CalculateWorkerTravelTime(string workerId)
-        {
-            var worker = _workers.FirstOrDefault(w => string.Equals(w.Id, workerId, StringComparison.OrdinalIgnoreCase));
-            var speed = worker?.MovementSpeedMetersPerMinute ?? DefaultWorkerSpeedMetersPerMinute;
-
-            if (speed <= 0)
-                speed = DefaultWorkerSpeedMetersPerMinute;
-
-            var minutes = FixedTravelDistanceMeters / speed;
-            return TimeSpan.FromMinutes(minutes);
-        }
-
-        private TimeSpan CalculateLocoTravelTime()
-        {
-            var minutes = FixedTravelDistanceMeters / LocoSpeedMetersPerMinute;
-            return TimeSpan.FromMinutes(minutes);
-        }
+        // ─── Arrival callbacks ─────────────────────────────────────────────────
 
         private void OnWorkerArrived(Activity activity, string workerId, string workerName)
         {
@@ -183,67 +165,106 @@ namespace WienerNeustadtSimulation.Control
             SimulationLogger.Instance.LogWorkerEvent(locoId, "Arrived", _engine.Now, activity.ActivityId);
         }
 
-        public void ReturnWorker(string workerId)
+        // ─── Uniform release ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// The single, uniform release path. Every control unit calls this on activity
+        /// completion. The activity's own declared policies (LocoStaysWithEntity,
+        /// WorkersReleasedIndividually) drive all resource return behaviour.
+        /// </summary>
+        public void Release(Activity activity)
+        {
+            // ── Workers ──────────────────────────────────────────────────────────
+            var workerIds = activity.AllocatedWorkerIds.ToList();
+            activity.AllocatedWorkerIds.Clear();
+
+            if (workerIds.Count > 0)
+            {
+                if (activity.WorkersReleasedIndividually)
+                {
+                    // Each worker goes back alone and is immediately dispatchable.
+                    // Every ReturnWorkerInternal call triggers a queue check, so if a
+                    // pending request can be satisfied by the first returning worker,
+                    // it gets dispatched before the second worker is even processed.
+                    foreach (var workerId in workerIds)
+                        ReturnWorkerInternal(workerId);
+                }
+                else
+                {
+                    // Batch return: all workers back at once, one queue check.
+                    ReturnWorkersBatch(workerIds);
+                }
+            }
+
+            // ── Locomotive ───────────────────────────────────────────────────────
+            if (!activity.LocoStaysWithEntity)
+            {
+                var locoIds = activity.AllocatedLocoIds.ToList();
+                activity.AllocatedLocoIds.Clear();
+
+                foreach (var locoId in locoIds)
+                {
+                    _availableLocoIds.Add(locoId);
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} returned to pool");
+                    SimulationLogger.Instance.LogWorkerEvent(locoId, "Returned", _engine.Now);
+                    ProcessQueue();
+                }
+            }
+            // If LocoStaysWithEntity == true, AllocatedLocoIds is deliberately left
+            // intact so the caller (e.g. ClassificationCU) can read the loco ID and
+            // attach it to the entity. The caller is responsible for calling ReturnLoco()
+            // when the entity eventually leaves the system.
+        }
+
+        // ─── Low-level pool helpers ───────���────────────────────────────────────
+
+        // Returns one worker and triggers a queue check. Workers are still in the
+        // available pool while walking back — if a request is dispatched immediately
+        // they head to the new task instead.
+        private void ReturnWorkerInternal(string workerId)
         {
             _availableWorkerIds.Add(workerId);
+
+            var worker = _workers.FirstOrDefault(w => w.Id == workerId);
+            string firstName = worker?.Name?.Split(' ')[0] ?? workerId;
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {firstName} available, returning to waiting area");
             SimulationLogger.Instance.LogWorkerEvent(workerId, "Returned", _engine.Now);
+
             ProcessQueue();
         }
 
-        public void ReturnLoco(string locoId)
+        // Returns all workers at once and triggers one queue check.
+        private void ReturnWorkersBatch(List<string> workerIds)
         {
-            _availableLocoIds.Add(locoId);
-            SimulationLogger.Instance.LogWorkerEvent(locoId, "Returned", _engine.Now);
-            ProcessQueue();
-        }
-
-        // NEW: Batch return workers
-        public void ReturnWorkers(List<string> workerIds)
-        {
-            if (workerIds == null || workerIds.Count == 0)
-                return;
-
-            // Return all workers to pool
             foreach (var workerId in workerIds)
             {
                 _availableWorkerIds.Add(workerId);
                 SimulationLogger.Instance.LogWorkerEvent(workerId, "Returned", _engine.Now);
             }
 
-            // Get worker names
-            var workerNames = workerIds.Select(wId =>
+            var names = workerIds.Select(wId =>
             {
-                var worker = _workers.FirstOrDefault(w => w.Id == wId);
-                return worker?.Name?.Split(' ')[0] ?? wId;
-            }).ToList();
-
-            // COMPACT MESSAGE
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {string.Join(", ", workerNames)} become available, returning to waiting area");
+                var w = _workers.FirstOrDefault(w => w.Id == wId);
+                return w?.Name?.Split(' ')[0] ?? wId;
+            });
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {string.Join(", ", names)} available, returning to waiting area");
 
             ProcessQueue();
         }
 
-        public void Release(Activity activity)
+        /// <summary>
+        /// Returns a locomotive to the pool. Called explicitly by a control unit when
+        /// an entity that was carrying a loco exits the system (e.g. outbound train departure).
+        /// </summary>
+        public void ReturnLoco(string locoId)
         {
-            // Batch return workers
-            if (activity.AllocatedWorkerIds.Count > 0)
-            {
-                ReturnWorkers(activity.AllocatedWorkerIds.ToList());
-                activity.AllocatedWorkerIds.Clear();
-            }
-
-            // Return locos
-            foreach (var locoId in activity.AllocatedLocoIds)
-            {
-                _availableLocoIds.Add(locoId);
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} returned to pool");
-                SimulationLogger.Instance.LogWorkerEvent(locoId, "Returned", _engine.Now);
-            }
-
-            activity.AllocatedLocoIds.Clear();
-
+            _availableLocoIds.Add(locoId);
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} returned to pool");
+            SimulationLogger.Instance.LogWorkerEvent(locoId, "Returned", _engine.Now);
             ProcessQueue();
         }
+
+        // ─── Queue ─────────────────────────────────────────────────────────────
 
         private void ProcessQueue()
         {
@@ -259,6 +280,21 @@ namespace WienerNeustadtSimulation.Control
                 _requestQueue.Dequeue();
                 Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: dequeued '{next.RequestId}'");
             }
+        }
+
+        // ─── Utility ───────────────────────────────────────────────────────────
+
+        private TimeSpan CalculateWorkerTravelTime(string workerId)
+        {
+            var worker = _workers.FirstOrDefault(w => string.Equals(w.Id, workerId, StringComparison.OrdinalIgnoreCase));
+            var speed = worker?.MovementSpeedMetersPerMinute ?? DefaultWorkerSpeedMetersPerMinute;
+            if (speed <= 0) speed = DefaultWorkerSpeedMetersPerMinute;
+            return TimeSpan.FromMinutes(FixedTravelDistanceMeters / speed);
+        }
+
+        private TimeSpan CalculateLocoTravelTime()
+        {
+            return TimeSpan.FromMinutes(FixedTravelDistanceMeters / LocoSpeedMetersPerMinute);
         }
 
         public List<WorkerDto> GetWorkersByIds(IEnumerable<string> ids)

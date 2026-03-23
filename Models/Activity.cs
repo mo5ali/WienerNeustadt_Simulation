@@ -30,6 +30,15 @@ namespace WienerNeustadtSimulation.Models
         public abstract bool RequiresLocomotive { get; }
         public abstract double BaseSecondsPerMeter { get; }
 
+        // Post-completion resource policy (defined by subclass)
+        // true  ? loco remains coupled to the entity after this activity ends; ResourceCU must NOT return it
+        // false ? loco is done with this activity and must be returned to the pool
+        public abstract bool LocoStaysWithEntity { get; }
+
+        // true  ? workers are returned individually (each triggers queue check; models en-route availability)
+        // false ? workers are returned as a batch (one queue check at the end)
+        public abstract bool WorkersReleasedIndividually { get; }
+
         // Allocated resources
         public List<string> AllocatedWorkerIds { get; set; } = new List<string>();
         public List<string> AllocatedLocoIds { get; set; } = new List<string>();
@@ -41,9 +50,6 @@ namespace WienerNeustadtSimulation.Models
         // Callbacks
         public Action<Activity>? OnReadyToCommence { get; set; }
         public Action<Activity>? OnCompleted { get; set; }
-
-        // REMOVED: Reference to ResourceCU for auto-submission
-        // NO MORE AUTO-SUBMIT!
 
         protected Activity(string activityType, string entityId, double entityLength, string location, string area, string controlUnit, DateTime requestedAt)
         {
@@ -59,11 +65,7 @@ namespace WienerNeustadtSimulation.Models
 
             Console.WriteLine($"{requestedAt:dd/MM/yyyy-HH:mm:ss} | {controlUnit}: initialized {ActivityId}");
 
-            // Auto-register in registry
             ActivityRegistry.Instance.Register(this);
-
-            // REMOVED: Auto-submit to ResourceControlUnit
-            // Activities no longer auto-submit - they create Requests instead!
         }
 
         private string GenerateActivityId(string activityType, DateTime timestamp, string cu, string entityId)
@@ -86,6 +88,8 @@ namespace WienerNeustadtSimulation.Models
                 "Entry" => "ENT",
                 "Moving" => "MOV",
                 "Leaving" => "LVG",
+                "LeavingPreparation" => "LVP",
+                "Departure" => "DEP",
                 _ => "ACT"
             };
         }

@@ -8,6 +8,13 @@ namespace WienerNeustadtSimulation.Models
         public override bool RequiresLocomotive => GetRequiresLocomotiveForType(ActivityType);
         public override double BaseSecondsPerMeter => GetBaseSecondsPerMeterForType(ActivityType);
 
+        // IncomingTrainPreparation allocates the loco that then stays for the PushOff.
+        // All other manipulation activities have no loco.
+        public override bool LocoStaysWithEntity => ActivityType == "IncomingTrainPreparation";
+
+        // Workers are always returned as a batch for manipulation activities.
+        public override bool WorkersReleasedIndividually => false;
+
         public ManipulationActivity(
             string activityType,
             string entityId,
@@ -38,10 +45,6 @@ namespace WienerNeustadtSimulation.Models
             return type switch
             {
                 "IncomingTrainPreparation" => true,
-                "PushOff" => false,
-                "Coupling" => false,
-                "Uncoupling" => false,
-                "Securing" => false,
                 _ => false
             };
         }

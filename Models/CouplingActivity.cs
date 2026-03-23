@@ -8,6 +8,14 @@ namespace WienerNeustadtSimulation.Models
         public override bool RequiresLocomotive => false;
         public override double BaseSecondsPerMeter => 12.0;
 
+        // Set at construction time: true when coupling a locomotive to an outbound train
+        // (loco stays with the train until departure); false for wagon group coupling.
+        public override bool LocoStaysWithEntity { get; }
+
+        // Workers are released individually so each is immediately dispatchable en-route
+        // back to the waiting area.
+        public override bool WorkersReleasedIndividually => true;
+
         public string WagonGroupId { get; set; }
         public string CouplingToTrainId { get; set; }
 
@@ -18,16 +26,15 @@ namespace WienerNeustadtSimulation.Models
             string location,
             string area,
             string controlUnit,
-            DateTime requestedAt)
+            DateTime requestedAt,
+            bool locoStaysWithEntity = false)
             : base("Coupling", wagonGroupId, wagonGroupLength, location, area, controlUnit, requestedAt)
         {
             WagonGroupId = wagonGroupId;
             CouplingToTrainId = couplingToTrainId;
+            LocoStaysWithEntity = locoStaysWithEntity;
         }
 
-        protected override string GetActivityAbbreviation(string activityType)
-        {
-            return "COP";
-        }
+        protected override string GetActivityAbbreviation(string activityType) => "COP";
     }
 }

@@ -8,6 +8,10 @@ namespace WienerNeustadtSimulation.Models
         public override bool RequiresLocomotive => false;
         public override double BaseSecondsPerMeter => 8.0;
 
+        // No loco involved; single worker goes back to pool as a batch (same thing).
+        public override bool LocoStaysWithEntity => false;
+        public override bool WorkersReleasedIndividually => false;
+
         public string WagonGroupId { get; set; }
 
         public SecuringActivity(
@@ -22,9 +26,6 @@ namespace WienerNeustadtSimulation.Models
             WagonGroupId = wagonGroupId;
         }
 
-        protected override string GetActivityAbbreviation(string activityType)
-        {
-            return "SEC";
-        }
+        protected override string GetActivityAbbreviation(string activityType) => "SEC";
     }
 }

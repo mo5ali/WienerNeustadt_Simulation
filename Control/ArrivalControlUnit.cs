@@ -74,7 +74,7 @@ namespace WienerNeustadtSimulation.Control
                         if (track.CurrentOccupancies.Count == 0 && track.Reserved == false)
                         {
                             assignedTrack = track;
-                            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} assigned arrival track {track.RealLifeID} ");
+                            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} assigned arrival track {track.RealLifeID}");
                             SimulationLogger.Instance.LogTrainEvent(train.ID, "AssignedArrivalTrack", _engine.Now, assignedTrack.RealLifeID);
                             track.Reserved = true;
                             break;
@@ -224,12 +224,9 @@ namespace WienerNeustadtSimulation.Control
             activity.CommencedAt = _engine.Now;
 
             var allocatedWorkers = _resourceControl.GetWorkersByIds(activity.AllocatedWorkerIds);
-
             var workerMultipliers = new Dictionary<string, double>();
             foreach (var worker in allocatedWorkers)
-            {
                 workerMultipliers[worker.Id] = _resourceControl.GetWorkerTimeMultiplierForActivity(worker, activity.ActivityType);
-            }
 
             var duration = activity.CalculateDuration(workerMultipliers);
 
@@ -252,9 +249,10 @@ namespace WienerNeustadtSimulation.Control
 
             if (activity.ActivityType == "IncomingTrainPreparation")
             {
-                // Batch return workers using new method
-                _resourceControl.ReturnWorkers(activity.AllocatedWorkerIds.ToList());
-                activity.AllocatedWorkerIds.Clear();
+                // Uniform release:
+                //   ManipulationActivity (ITP): LocoStaysWithEntity=true  → loco kept in AllocatedLocoIds for hand-off ✓
+                //                               WorkersReleasedIndividually=false → workers batch-returned ✓
+                _resourceControl.Release(activity);
 
                 RequestPushOff(train, arrivalTrack, activity);
                 SimulationLogger.Instance.LogTrainEvent(train.ID, "PreparationComplete", _engine.Now);
@@ -271,7 +269,6 @@ namespace WienerNeustadtSimulation.Control
                 ? _trainWagonGroupMaps[train.ID]
                 : new Dictionary<string, Track>();
 
-            // CREATE PUSHOFF ACTIVITY WITH CLASSIFICATIONCU REFERENCE
             var pushOffActivity = new PushOffActivity(
                 trainId: train.ID,
                 trainLength: train.Length,
@@ -282,15 +279,18 @@ namespace WienerNeustadtSimulation.Control
                 requestedAt: _engine.Now,
                 engine: _engine,
                 wagonGroupData: _wagonGroupData,
-                classificationControl: _classificationControl  // ← PASS IT HERE!
+                classificationControl: _classificationControl
             );
 
+            // Hand over the loco that stayed allocated on the ITP activity.
+            // LocoStaysWithEntity=true on ManipulationActivity(ITP) guaranteed
+            // Release() left AllocatedLocoIds intact for exactly this hand-off.
             pushOffActivity.AllocatedLocoIds.AddRange(itpActivity.AllocatedLocoIds);
 
             var resourceRequest = new ResourceRequest(
                 activity: pushOffActivity,
                 workers: pushOffActivity.RequiredWorkers,
-                loco: false,
+                loco: false, // Loco already assigned above
                 time: _engine.Now,
                 controlUnit: "ArrivalCU"
             );
@@ -305,20 +305,10 @@ namespace WienerNeustadtSimulation.Control
 
             pushOffActivity.OnCompleted = _ =>
             {
-                foreach (var workerId in pushOffActivity.AllocatedWorkerIds)
-                {
-                    var worker = _resourceControl.GetWorkersByIds(new[] { workerId }).FirstOrDefault();
-                    string firstName = worker?.Name?.Split(' ')[0] ?? workerId;
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {firstName} returned to pool");
-                    _resourceControl.ReturnWorker(workerId);
-                }
-                pushOffActivity.AllocatedWorkerIds.Clear();
-
-                if (pushOffActivity.AllocatedLocoIds.Count > 0)
-                {
-                    var locoId = pushOffActivity.AllocatedLocoIds[0];
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} remains in yard");
-                }
+                // Uniform release:
+                //   PushOffActivity: LocoStaysWithEntity=false          → loco returned to pool ✓
+                //                    WorkersReleasedIndividually=true   → each worker dispatched alone ✓
+                _resourceControl.Release(pushOffActivity);
 
                 arrivalTrack.CurrentOccupancies.Remove(train.ID);
                 arrivalTrack.Reserved = false;
