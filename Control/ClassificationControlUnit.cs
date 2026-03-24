@@ -58,8 +58,8 @@ namespace WienerNeustadtSimulation.Control
 
             _wagonGroupsByTrack[classificationTrack.RealLifeID].Add(wagonGroup);
 
-            var wgIdsList = string.Join(", ", _wagonGroupsByTrack[classificationTrack.RealLifeID].Select(wg => wg.Id));
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: WGs [{wgIdsList}] arrived at track {classificationTrack.RealLifeID} ~ entity(s) created");
+            // ONLY show the newly arrived WG, not all WGs on the track
+            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: WG {wagonGroup.Id} arrived at track {classificationTrack.RealLifeID}");
             SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "ArrivedClassificationTrack", time, classificationTrack.RealLifeID);
 
             _preparationRequests.Enqueue(new WagonGroupPreparationRequest(wagonGroup, time));
@@ -79,7 +79,7 @@ namespace WienerNeustadtSimulation.Control
 
             if (isTrackEmpty)
             {
-                var activityIdPreview = $"Act_SEC_{time:yyMMddHHmmss}_ClassifCU_{wagonGroup.Id}";
+                var activityIdPreview = $"Act_SEC_{wagonGroup.Id}_{time:HHmmss}";
                 Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} is EMPTY → initialize {activityIdPreview}");
                 SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "SecuringRequested", time);
 
@@ -97,7 +97,7 @@ namespace WienerNeustadtSimulation.Control
                 var existingTrain = _trainsByTrack.ContainsKey(trackId) ? _trainsByTrack[trackId] : null;
                 string couplingToId = existingTrain?.Id ?? "existing-wgs";
 
-                var activityIdPreview = $"Act_COP_{time:yyMMddHHmmss}_ClassifCU_{wagonGroup.Id}";
+                var activityIdPreview = $"Act_COP_{wagonGroup.Id}_{time:HHmmss}";
                 Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} has WGs → initialize {activityIdPreview}");
                 SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "CouplingRequested", time);
 

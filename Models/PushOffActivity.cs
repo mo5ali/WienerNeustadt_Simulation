@@ -98,7 +98,7 @@ namespace WienerNeustadtSimulation.Models
             driveActivity.CommencedAt = _engine.Now;
             driveActivity.ScheduledCompletionAt = _engine.Now.Add(pushDuration);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | PushOff: {driveActivity.AllocatedLocoIds[0]} driving {distanceMeters:F0}m to track {group.DestinationTrack.RealLifeID} (ETA {pushDuration.TotalSeconds:F0}s)");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | PushOff drive: {distanceMeters:F0}m {pushDuration.TotalSeconds:F0}s, {EntityId} to track {group.DestinationTrack.RealLifeID}");
             SimulationLogger.Instance.LogWagonGroupEvent(string.Join("+", group.WagonGroupIds), "PushingToTrack", _engine.Now, group.DestinationTrack.RealLifeID);
 
             _engine.Schedule(

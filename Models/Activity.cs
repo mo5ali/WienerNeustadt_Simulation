@@ -63,7 +63,17 @@ namespace WienerNeustadtSimulation.Models
 
             ActivityId = GenerateActivityId(activityType, requestedAt, controlUnit, entityId);
 
-            Console.WriteLine($"{requestedAt:dd/MM/yyyy-HH:mm:ss.ff} | {controlUnit}: initialized {ActivityId}");
+            // Don't print "initialized" for sub-activities or activities that already have a preview message
+            if (activityType != "PushOffDrive" &&
+                activityType != "Entry" &&
+                activityType != "Moving" &&
+                activityType != "Departure" &&
+                activityType != "Securing" &&    // Already printed in ClassifCU
+                activityType != "Coupling")       // Already printed in ClassifCU
+            {
+                Console.WriteLine($"{requestedAt:dd/MM/yyyy-HH:mm:ss.ff} | {controlUnit}: initialized {ActivityId}");
+            }
+
 
             ActivityRegistry.Instance.Register(this);
         }
