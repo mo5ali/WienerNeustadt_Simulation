@@ -59,7 +59,7 @@ namespace WienerNeustadtSimulation.Control
             _wagonGroupsByTrack[classificationTrack.RealLifeID].Add(wagonGroup);
 
             var wgIdsList = string.Join(", ", _wagonGroupsByTrack[classificationTrack.RealLifeID].Select(wg => wg.Id));
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: WGs [{wgIdsList}] arrived at track {classificationTrack.RealLifeID} ~ entity(s) created");
+            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: WGs [{wgIdsList}] arrived at track {classificationTrack.RealLifeID} ~ entity(s) created");
             SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "ArrivedClassificationTrack", time, classificationTrack.RealLifeID);
 
             _preparationRequests.Enqueue(new WagonGroupPreparationRequest(wagonGroup, time));
@@ -80,7 +80,7 @@ namespace WienerNeustadtSimulation.Control
             if (isTrackEmpty)
             {
                 var activityIdPreview = $"Act_SEC_{time:yyMMddHHmmss}_ClassifCU_{wagonGroup.Id}";
-                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: track {trackId} is EMPTY → initialize {activityIdPreview}");
+                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} is EMPTY → initialize {activityIdPreview}");
                 SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "SecuringRequested", time);
 
                 activity = new SecuringActivity(
@@ -98,7 +98,7 @@ namespace WienerNeustadtSimulation.Control
                 string couplingToId = existingTrain?.Id ?? "existing-wgs";
 
                 var activityIdPreview = $"Act_COP_{time:yyMMddHHmmss}_ClassifCU_{wagonGroup.Id}";
-                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: track {trackId} has WGs → initialize {activityIdPreview}");
+                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} has WGs → initialize {activityIdPreview}");
                 SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "CouplingRequested", time);
 
                 // WG-to-WG coupling: loco not involved, does not stay.
@@ -141,7 +141,7 @@ namespace WienerNeustadtSimulation.Control
 
             var duration = activity.CalculateDuration(workerMultipliers);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: Commence '{activity.ActivityId}' [{activity.EntityLength:F0}m base={activity.BaseSecondsPerMeter:F0}s/m avgMult={activity.AverageWorkerMultiplier:F0} > dur={duration.TotalSeconds:F0}s]");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: Commence '{activity.ActivityId}' [{activity.EntityLength:F0}m base={activity.BaseSecondsPerMeter:F0}s/m avgMult={activity.AverageWorkerMultiplier:F0} > dur={duration.TotalSeconds:F0}s]");
             SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, activity.ActivityType + "Started", _engine.Now);
 
             _engine.Schedule(
@@ -159,13 +159,13 @@ namespace WienerNeustadtSimulation.Control
             {
                 wagonGroup.IsSecured = true;
                 SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "Secured", _engine.Now);
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: DONE '{activity.ActivityId}' - {wagonGroup.Id} is SECURED");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: DONE '{activity.ActivityId}' - {wagonGroup.Id} is SECURED");
             }
             else if (activity is CouplingActivity)
             {
                 wagonGroup.IsCoupled = true;
                 SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "Coupled", _engine.Now);
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: DONE '{activity.ActivityId}' - {wagonGroup.Id} is COUPLED");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: DONE '{activity.ActivityId}' - {wagonGroup.Id} is COUPLED");
             }
 
             // Uniform release: SecuringActivity and CouplingActivity (WG-to-WG) both
@@ -193,7 +193,7 @@ namespace WienerNeustadtSimulation.Control
 
             if (totalLength >= MIN_TRAIN_LENGTH)
             {
-                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: TRAIN COMPLETE on track {trackId} ({totalLength:F1}m >= {MIN_TRAIN_LENGTH}m, {wagonGroups.Count} WGs)");
+                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: TRAIN COMPLETE on track {trackId} ({totalLength:F1}m >= {MIN_TRAIN_LENGTH}m, {wagonGroups.Count} WGs)");
                 SimulationLogger.Instance.LogTrainEvent($"Train-{trackId}", "TrainComplete", time, $"{totalLength:F1}m");
 
                 CreateOutboundTrain(trackId, destination, wagonGroups, time);
@@ -212,7 +212,7 @@ namespace WienerNeustadtSimulation.Control
 
             _trainsByTrack[trackId] = train;
 
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: Created {train}");
+            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: Created {train}");
             SimulationLogger.Instance.LogTrainEvent(train.Id, "OutboundTrainCreated", time, destination);
 
             RequestLocomotive(train, time);
@@ -222,7 +222,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void RequestLocomotive(OutboundTrain train, DateTime time)
         {
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: requesting locomotive for {train.Id}");
+            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: requesting locomotive for {train.Id}");
             SimulationLogger.Instance.LogTrainEvent(train.Id, "LocomotiveRequested", time);
 
             // locoStaysWithEntity: true — the loco stays coupled to the outbound train
@@ -267,8 +267,8 @@ namespace WienerNeustadtSimulation.Control
 
             var duration = activity.CalculateDuration(workerMultipliers);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: Coupling locomotive to {train.Id}");
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: duration={duration.TotalSeconds:F0}s");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: Coupling locomotive to {train.Id}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: duration={duration.TotalSeconds:F0}s");
 
             _engine.Schedule(
                 _engine.Now.Add(duration),
@@ -287,7 +287,7 @@ namespace WienerNeustadtSimulation.Control
             train.LocomotiveId = activity.AllocatedLocoIds.FirstOrDefault();
             SimulationLogger.Instance.LogTrainEvent(train.Id, "LocomotiveCoupled", _engine.Now, train.LocomotiveId);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: ✓ Locomotive {train.LocomotiveId} coupled to {train.Id}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: ✓ Locomotive {train.LocomotiveId} coupled to {train.Id}");
 
             // Uniform release:
             //   CouplingActivity (locoStaysWithEntity=true)  → loco NOT returned to pool ✓
@@ -301,7 +301,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void RequestLeavingPreparation(OutboundTrain train, DateTime time)
         {
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: requesting leaving preparation for {train.Id}");
+            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: requesting leaving preparation for {train.Id}");
             SimulationLogger.Instance.LogTrainEvent(train.Id, "LeavingPrepRequested", time);
 
             var leavingPrepActivity = new LeavingPreparationActivity(
@@ -336,8 +336,8 @@ namespace WienerNeustadtSimulation.Control
 
             var duration = activity.CalculateFixedDuration();
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: Commencing leaving preparation for {train.Id}");
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: duration={duration.TotalMinutes:F1} minutes (brake test, documents, permissions)");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: Commencing leaving preparation for {train.Id}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: duration={duration.TotalMinutes:F1} minutes (brake test, documents, permissions)");
 
             _engine.Schedule(
                 _engine.Now.Add(duration),
@@ -353,7 +353,7 @@ namespace WienerNeustadtSimulation.Control
             train.LeavingPreparationComplete = true;
             SimulationLogger.Instance.LogTrainEvent(train.Id, "LeavingPrepComplete", _engine.Now);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: ✓ Leaving preparation complete for {train.Id}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: ✓ Leaving preparation complete for {train.Id}");
 
             // Uniform release:
             //   LeavingPreparationActivity: LocoStaysWithEntity=false (no loco) ✓
@@ -363,7 +363,7 @@ namespace WienerNeustadtSimulation.Control
             var departureRequest = new TrainDepartureRequest(train, _engine.Now);
             _departureRequests.Enqueue(departureRequest);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: filed TrainDepartureRequest for {train.Id}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: filed TrainDepartureRequest for {train.Id}");
 
             ProcessRequests(_engine.Now);
         }
@@ -374,7 +374,7 @@ namespace WienerNeustadtSimulation.Control
         {
             var train = request.Train;
 
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss} | ClassifCU: processing departure for {train.Id}");
+            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: processing departure for {train.Id}");
             SimulationLogger.Instance.LogTrainEvent(train.Id, "DepartureProcessing", time);
 
             var departureDrive = new DrivingActivity(
@@ -406,8 +406,8 @@ namespace WienerNeustadtSimulation.Control
             double distanceToExit = 500.0;
             var duration = activity.CalculateDrivingDuration(distanceToExit);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: {train.Id} departing (driving {distanceToExit:F0}m to exit)");
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: ETA {duration.TotalMinutes:F1} minutes");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: {train.Id} departing (driving {distanceToExit:F0}m to exit)");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: ETA {duration.TotalMinutes:F1} minutes");
 
             _engine.Schedule(
                 _engine.Now.Add(duration),
@@ -421,8 +421,8 @@ namespace WienerNeustadtSimulation.Control
             activity.CompletedAt = _engine.Now;
             SimulationLogger.Instance.LogTrainEvent(train.Id, "Departed", _engine.Now, $"{train.TotalLength:F1}m to {train.Destination}");
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: 🚂 {train.Id} EXITED THE SYSTEM");
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ClassifCU: Train departed with {train.WagonGroups.Count} wagon groups, {train.TotalWagonCount} wagons, {train.TotalLength:F1}m");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: 🚂 {train.Id} EXITED THE SYSTEM");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: Train departed with {train.WagonGroups.Count} wagon groups, {train.TotalWagonCount} wagons, {train.TotalLength:F1}m");
 
             _wagonGroupsByTrack.Remove(train.CurrentTrackId);
             _trainsByTrack.Remove(train.CurrentTrackId);
@@ -432,7 +432,7 @@ namespace WienerNeustadtSimulation.Control
             // We return it explicitly here now that the train has exited the system.
             if (train.LocomotiveId != null)
             {
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {train.LocomotiveId} returned to pool");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {train.LocomotiveId} returned to pool");
                 _resourceControl.ReturnLoco(train.LocomotiveId);
             }
         }

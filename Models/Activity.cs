@@ -63,7 +63,7 @@ namespace WienerNeustadtSimulation.Models
 
             ActivityId = GenerateActivityId(activityType, requestedAt, controlUnit, entityId);
 
-            Console.WriteLine($"{requestedAt:dd/MM/yyyy-HH:mm:ss} | {controlUnit}: initialized {ActivityId}");
+            Console.WriteLine($"{requestedAt:dd/MM/yyyy-HH:mm:ss.ff} | {controlUnit}: initialized {ActivityId}");
 
             ActivityRegistry.Instance.Register(this);
         }
@@ -71,8 +71,8 @@ namespace WienerNeustadtSimulation.Models
         private string GenerateActivityId(string activityType, DateTime timestamp, string cu, string entityId)
         {
             string abbreviation = GetActivityAbbreviation(activityType);
-            string timestampStr = timestamp.ToString("yyMMddHHmmss");
-            return $"Act_{abbreviation}_{timestampStr}_{cu}_{entityId}";
+            string timestampStr = timestamp.ToString("HHmmss");
+            return $"Act_{abbreviation}_{entityId}_{timestampStr}";
         }
 
         protected virtual string GetActivityAbbreviation(string activityType)

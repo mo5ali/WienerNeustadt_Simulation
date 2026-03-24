@@ -56,11 +56,11 @@ namespace WienerNeustadtSimulation.Control
             _entryQueue.Enqueue(train);
             _entryTimes[train.ID] = simTimeUtc;
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | Train {train.ID} queued at entry. Queue length: {_entryQueue.Count}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | Train {train.ID} queued at entry. Queue length: {_entryQueue.Count}");
             SimulationLogger.Instance.LogTrainEvent(train.ID, "Entry", simTimeUtc);
 
             var firstTrain = _entryQueue.Peek();
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: handling train {firstTrain.ID} of length {firstTrain.Length} meters");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: handling train {firstTrain.ID} of length {firstTrain.Length} meters");
 
             Track assignedTrack = null;
             bool firstTime = true;
@@ -74,7 +74,7 @@ namespace WienerNeustadtSimulation.Control
                         if (track.CurrentOccupancies.Count == 0 && track.Reserved == false)
                         {
                             assignedTrack = track;
-                            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} assigned arrival track {track.RealLifeID}");
+                            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: train {train.ID} assigned arrival track {track.RealLifeID}");
                             SimulationLogger.Instance.LogTrainEvent(train.ID, "AssignedArrivalTrack", _engine.Now, assignedTrack.RealLifeID);
                             track.Reserved = true;
                             break;
@@ -84,11 +84,11 @@ namespace WienerNeustadtSimulation.Control
 
                 if (assignedTrack == null)
                 {
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: no arrival track currently available for train {train.ID}");
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: no arrival track currently available for train {train.ID}");
 
                     if (firstTime)
                     {
-                        Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: starting waiting activity for train {train.ID}");
+                        Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: starting waiting activity for train {train.ID}");
                         train.Status = "waiting for arrival track";
                         firstTime = false;
                     }
@@ -105,7 +105,7 @@ namespace WienerNeustadtSimulation.Control
                 {
                     assignedTrack.CurrentOccupancies.Add(train.ID);
                     SimulationLogger.Instance.LogTrainEvent(train.ID, "ArrivedArrivalTrack", _engine.Now, assignedTrack.RealLifeID);
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.RealLifeID}");
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: train {train.ID} arrives at arrival track {assignedTrack.RealLifeID}");
 
                     var wagonGroupToTrackMap = RunSortingMethod(train);
                     _trainWagonGroupMaps[train.ID] = wagonGroupToTrackMap;
@@ -115,7 +115,7 @@ namespace WienerNeustadtSimulation.Control
                 $"TrainArrivesAtArrivalTrack-{train.ID}"
             );
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} driving to arrival track {assignedTrack.RealLifeID} (ETA: {driveTime.TotalMinutes} minutes)");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: train {train.ID} driving to arrival track {assignedTrack.RealLifeID} (ETA: {driveTime.TotalMinutes} minutes)");
             _entryQueue.Dequeue();
         }
 
@@ -154,7 +154,7 @@ namespace WienerNeustadtSimulation.Control
             {
                 if (!_wagonGroupData.ContainsKey(wgId))
                 {
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: WARNING - wagon group {wgId} not found");
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | SORTING: WARNING - wagon group {wgId} not found");
                     continue;
                 }
 
@@ -175,16 +175,16 @@ namespace WienerNeustadtSimulation.Control
                     }
 
                     if (classificationTrack == null)
-                        Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: no free classification tracks");
+                        Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | SORTING: no free classification tracks");
 
                     _destinationToTrackMap[destination] = classificationTrack!;
                     SimulationLogger.Instance.LogTrainEvent(train.ID, "ClassificationTrackAssigned", _engine.Now, $"{destination} -> {classificationTrack.RealLifeID}");
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: track {classificationTrack!.RealLifeID} set for '{destination}'");
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | SORTING: track {classificationTrack!.RealLifeID} set for '{destination}'");
                 }
 
                 var assignedTrack = _destinationToTrackMap[destination];
                 wagonGroupToTrackMap[wgId] = assignedTrack;
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | SORTING: wagon group {wgId} → destination '{destination}' → track {assignedTrack.RealLifeID}");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | SORTING: wagon group {wgId} → destination '{destination}' → track {assignedTrack.RealLifeID}");
             }
 
             return wagonGroupToTrackMap;
@@ -230,9 +230,9 @@ namespace WienerNeustadtSimulation.Control
 
             var duration = activity.CalculateDuration(workerMultipliers);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: Commence '{activity.ActivityId}'");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: Commence '{activity.ActivityId}'");
             SimulationLogger.Instance.LogTrainEvent(train.ID, "PreparationStarted", _engine.Now);
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: length={activity.EntityLength:F1}m base={activity.BaseSecondsPerMeter:F1}s/m avgMult={activity.AverageWorkerMultiplier:F2} -> duration={duration.TotalSeconds:F0}s");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: length={activity.EntityLength:F1}m base={activity.BaseSecondsPerMeter:F1}s/m avgMult={activity.AverageWorkerMultiplier:F2} -> duration={duration.TotalSeconds:F0}s");
 
             _engine.Schedule(
                 _engine.Now.Add(duration),
@@ -245,7 +245,7 @@ namespace WienerNeustadtSimulation.Control
         {
             activity.CompletedAt = _engine.Now;
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: DONE '{activity.ActivityId}' for train {train.ID}");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: DONE '{activity.ActivityId}' for train {train.ID}");
 
             if (activity.ActivityType == "IncomingTrainPreparation")
             {
@@ -314,7 +314,7 @@ namespace WienerNeustadtSimulation.Control
                 arrivalTrack.Reserved = false;
                 SimulationLogger.Instance.LogTrainEvent(train.ID, "PushOffComplete", _engine.Now);
                 SimulationLogger.Instance.LogTrainEvent(train.ID, "ExitedSystem", _engine.Now);
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ArrivalCU: train {train.ID} fully processed and removed from system");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: train {train.ID} fully processed and removed from system");
             };
         }
     }

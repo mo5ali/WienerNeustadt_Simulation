@@ -44,13 +44,13 @@ namespace WienerNeustadtSimulation.Control
             if (request.RequiresLocomotive)
                 resourceDesc += " + 1 loco";
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.RequestId}' submitted ({resourceDesc})");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: request '{request.RequestId}' submitted ({resourceDesc})");
             SimulationLogger.Instance.LogActivityEvent(request.RequestId, "ResourceRequest", _engine.Now, "Submitted", resourceDesc);
 
             if (TryAllocateAndDispatchResources(request))
                 return;
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: request '{request.RequestId}' QUEUED (insufficient resources)");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: request '{request.RequestId}' QUEUED (insufficient resources)");
             _requestQueue.Enqueue(request);
         }
 
@@ -110,7 +110,7 @@ namespace WienerNeustadtSimulation.Control
 
             var allResources = workerDetails.Concat(locoDetails).ToList();
             if (allResources.Count > 0)
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {string.Join(" ", allResources)} traveling to track {activity.Location} for '{activity.ActivityId}'");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {string.Join(" ", allResources)} traveling to track {activity.Location} for '{activity.ActivityId}'");
 
             // Schedule travel for workers
             foreach (var workerId in allocatedWorkers)
@@ -152,7 +152,7 @@ namespace WienerNeustadtSimulation.Control
             int arrived = activity.WorkerArrivalTimes.Count + activity.LocoArrivalTimes.Count + 1;
             int total = activity.RequiredWorkers + (activity.RequiresLocomotive ? 1 : 0);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {workerName} arrived for '{activity.ActivityId}' ({arrived}/{total})");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {workerName} arrived for '{activity.ActivityId}' ({arrived}/{total})");
             SimulationLogger.Instance.LogWorkerEvent(workerId, "Arrived", _engine.Now, activity.ActivityId);
 
             // Record AFTER logging — this may immediately fire OnReadyToCommence
@@ -167,7 +167,7 @@ namespace WienerNeustadtSimulation.Control
             int arrived = activity.WorkerArrivalTimes.Count + activity.LocoArrivalTimes.Count + 1;
             int total = activity.RequiredWorkers + (activity.RequiresLocomotive ? 1 : 0);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} arrived for '{activity.ActivityId}' ({arrived}/{total})");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {locoId} arrived for '{activity.ActivityId}' ({arrived}/{total})");
             SimulationLogger.Instance.LogWorkerEvent(locoId, "Arrived", _engine.Now, activity.ActivityId);
 
             // Record AFTER logging — this may immediately fire OnReadyToCommence
@@ -175,7 +175,7 @@ namespace WienerNeustadtSimulation.Control
             activity.RecordLocoArrival(locoId, _engine.Now);
         }
 
-        // ─── Uniform release ────────────────���────────────────────────��─────────
+        // ─── Uniform release ────────────────────────────────────────────────────
 
         /// <summary>
         /// The single, uniform release path. Every control unit calls this on activity
@@ -190,29 +190,19 @@ namespace WienerNeustadtSimulation.Control
 
             if (workerIds.Count > 0)
             {
-                if (activity.WorkersReleasedIndividually)
-                {
-                    foreach (var workerId in workerIds)
-                        ReturnWorkerInternal(workerId);
-                }
-                else
-                {
-                    ReturnWorkersBatch(workerIds);
-                }
+                // ALWAYS use batch return for console output (consolidated message)
+                ReturnWorkersBatch(workerIds);
             }
 
-            // ── Locomotive ──────────────────────────────────��────────────────────
+            // ── Locomotive ───────────────────────────────────────────────────────
             if (!activity.LocoStaysWithEntity)
             {
                 var locoIds = activity.AllocatedLocoIds.ToList();
                 activity.AllocatedLocoIds.Clear();
 
-                foreach (var locoId in locoIds)
+                if (locoIds.Count > 0)
                 {
-                    _availableLocoIds.Add(locoId);
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} returned to pool");
-                    SimulationLogger.Instance.LogWorkerEvent(locoId, "Returned", _engine.Now);
-                    ProcessQueue();
+                    ReturnLocosBatch(locoIds);
                 }
             }
             // If LocoStaysWithEntity == true, AllocatedLocoIds is left intact for
@@ -228,7 +218,7 @@ namespace WienerNeustadtSimulation.Control
 
             var worker = _workers.FirstOrDefault(w => w.Id == workerId);
             string firstName = worker?.Name?.Split(' ')[0] ?? workerId;
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {firstName} available, returning to waiting area");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {firstName} available, returning to waiting area");
             SimulationLogger.Instance.LogWorkerEvent(workerId, "Returned", _engine.Now);
 
             ProcessQueue();
@@ -247,7 +237,21 @@ namespace WienerNeustadtSimulation.Control
                 var w = _workers.FirstOrDefault(w => w.Id == wId);
                 return w?.Name?.Split(' ')[0] ?? wId;
             });
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {string.Join(", ", names)} available, returning to waiting area");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {string.Join(", ", names)} available, returning to waiting area");
+
+            ProcessQueue();
+        }
+
+        private void ReturnLocosBatch(List<string> locoIds)
+        {
+            foreach (var locoId in locoIds)
+            {
+                _availableLocoIds.Add(locoId);
+                SimulationLogger.Instance.LogWorkerEvent(locoId, "Returned", _engine.Now);
+            }
+
+            var locoList = string.Join(", ", locoIds);
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {locoList} returned to pool");
 
             ProcessQueue();
         }
@@ -259,7 +263,7 @@ namespace WienerNeustadtSimulation.Control
         public void ReturnLoco(string locoId)
         {
             _availableLocoIds.Add(locoId);
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: {locoId} returned to pool");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {locoId} returned to pool");
             SimulationLogger.Instance.LogWorkerEvent(locoId, "Returned", _engine.Now);
             ProcessQueue();
         }
@@ -271,14 +275,14 @@ namespace WienerNeustadtSimulation.Control
             if (_requestQueue.Count == 0)
                 return;
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: processing queue ({_requestQueue.Count} waiting)");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: processing queue ({_requestQueue.Count} waiting)");
 
             var next = _requestQueue.Peek();
 
             if (TryAllocateAndDispatchResources(next))
             {
                 _requestQueue.Dequeue();
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss} | ResourceCU: dequeued '{next.RequestId}'");
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: dequeued '{next.RequestId}'");
             }
         }
 
