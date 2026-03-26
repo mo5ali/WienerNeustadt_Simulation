@@ -68,8 +68,10 @@ namespace WienerNeustadtSimulation.Models
                 activityType != "Entry" &&
                 activityType != "Moving" &&
                 activityType != "Departure" &&
-                activityType != "Securing" &&    // Already printed in ClassifCU
-                activityType != "Coupling")       // Already printed in ClassifCU
+                activityType != "Securing" &&
+                activityType != "Coupling" &&
+                activityType != "OutboundTrainPreparation" &&  // NEW - printed in ClassifCU
+                activityType != "DepartureDrive")               // NEW - printed in ClassifCU
             {
                 Console.WriteLine($"{requestedAt:dd/MM/yyyy-HH:mm:ss.ff} | {controlUnit}: initialized {ActivityId}");
             }
@@ -99,6 +101,8 @@ namespace WienerNeustadtSimulation.Models
                 "Moving" => "MOV",
                 "Leaving" => "LVG",
                 "LeavingPreparation" => "LVP",
+                "OutboundTrainPreparation" => "OBTP",  // NEW
+                "DepartureDrive" => "DEPD",             // NEW
                 "Departure" => "DEP",
                 _ => "ACT"
             };

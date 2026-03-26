@@ -17,6 +17,8 @@ namespace WienerNeustadtSimulation.Control
 
         private readonly HashSet<string> _availableWorkerIds;
         private readonly HashSet<string> _availableLocoIds;
+        private readonly HashSet<string> _availableTrainLocoIds = new();  // NEW: Train locomotives (infinite)
+        private bool _exitGateAvailable = true;  // NEW: Exit gate (one resource)
 
         private const double FixedTravelDistanceMeters = 100.0;
         private const double DefaultWorkerSpeedMetersPerMinute = 80.0;
@@ -33,7 +35,13 @@ namespace WienerNeustadtSimulation.Control
             _availableWorkerIds = new HashSet<string>(_workers.Select(w => w.Id ?? "").Where(id => !string.IsNullOrWhiteSpace(id)));
             _availableLocoIds = new HashSet<string>(_shuntingLocomotives.Select(l => l.Id ?? "").Where(id => !string.IsNullOrWhiteSpace(id)));
 
-            Console.WriteLine($"  → ResourceControlUnit: {_workers.Count} workers, {_shuntingLocomotives.Count} locomotives initialized");
+            // Initialize infinite train locomotives (we'll create IDs on demand)
+            for (int i = 1; i <= 100; i++)
+            {
+                _availableTrainLocoIds.Add($"TL{i:D3}");
+            }
+
+            Console.WriteLine($"  → ResourceControlUnit: {_workers.Count} workers, {_shuntingLocomotives.Count} shunting locomotives, infinite train locomotives initialized");
         }
 
         // ─── Request submission ────────────────────────────────────────────────
@@ -44,7 +52,15 @@ namespace WienerNeustadtSimulation.Control
             if (request.RequiresLocomotive)
                 resourceDesc += " + 1 loco";
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: request '{request.RequestId}' submitted ({resourceDesc})");
+            // NEW: Check for train locomotive
+            if (request.Activity is OutboundTrainPreparationActivity)
+                resourceDesc = $"{request.RequiredWorkers} workers + 1 train locomotive";
+
+            // NEW: Check for exit gate
+            if (request.Activity is DepartureDriveActivity)
+                resourceDesc = "exit gate";
+
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: request 'Req_{request.Activity.ActivityId}' received ({resourceDesc})");
             SimulationLogger.Instance.LogActivityEvent(request.RequestId, "ResourceRequest", _engine.Now, "Submitted", resourceDesc);
 
             if (TryAllocateAndDispatchResources(request))
@@ -60,6 +76,23 @@ namespace WienerNeustadtSimulation.Control
         {
             Activity activity = request.Activity;
 
+            // Handle exit gate for departure
+            if (activity is DepartureDriveActivity)
+            {
+                if (!_exitGateAvailable)
+                    return false;
+
+                _exitGateAvailable = false;
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: Exit cleared for 'Req_{activity.ActivityId}'");
+
+                // No travel time for exit gate, directly trigger commencement
+                activity.OnReadyToCommence?.Invoke(activity);
+                return true;
+            }
+
+            // Handle train locomotive for OBTP
+            bool needsTrainLoco = activity is OutboundTrainPreparationActivity;
+
             bool needsWorkers = request.RequiredWorkers > 0;
             bool needsLoco = request.RequiresLocomotive;
 
@@ -67,6 +100,9 @@ namespace WienerNeustadtSimulation.Control
                 return false;
 
             if (needsLoco && _availableLocoIds.Count == 0)
+                return false;
+
+            if (needsTrainLoco && _availableTrainLocoIds.Count == 0)
                 return false;
 
             // Allocate workers
@@ -79,7 +115,7 @@ namespace WienerNeustadtSimulation.Control
                 activity.AllocatedWorkerIds.AddRange(allocatedWorkers);
             }
 
-            // Allocate locomotive
+            // Allocate shunting locomotive
             List<string> allocatedLocos = new List<string>();
             if (needsLoco)
             {
@@ -89,14 +125,24 @@ namespace WienerNeustadtSimulation.Control
                 allocatedLocos.Add(locoId);
             }
 
-            // Build compact allocation message
+            // Allocate train locomotive
+            List<string> allocatedTrainLocos = new List<string>();
+            if (needsTrainLoco)
+            {
+                var trainLocoId = _availableTrainLocoIds.First();
+                _availableTrainLocoIds.Remove(trainLocoId);
+                activity.AllocatedLocoIds.Add(trainLocoId);
+                allocatedTrainLocos.Add(trainLocoId);
+            }
+
+            // Build compact allocation message (workers + train loco)
             List<string> workerDetails = new List<string>();
             foreach (var wId in allocatedWorkers)
             {
                 var worker = _workers.FirstOrDefault(w => w.Id == wId);
                 string firstName = worker?.Name?.Split(' ')[0] ?? wId;
                 var travelTime = CalculateWorkerTravelTime(wId);
-                workerDetails.Add($"{firstName}({travelTime.TotalSeconds:F0}s/{FixedTravelDistanceMeters:F0}m)");
+                workerDetails.Add($"{firstName}({travelTime.TotalSeconds:F0}s/100m)");
                 SimulationLogger.Instance.LogWorkerEvent(wId, "Allocated", _engine.Now, activity.ActivityId);
             }
 
@@ -104,8 +150,16 @@ namespace WienerNeustadtSimulation.Control
             foreach (var lId in allocatedLocos)
             {
                 var travelTime = CalculateLocoTravelTime();
-                locoDetails.Add($"{lId}({travelTime.TotalSeconds:F0}s/{FixedTravelDistanceMeters:F0}m)");
+                locoDetails.Add($"{lId}({travelTime.TotalSeconds:F0}s/100m)");
                 SimulationLogger.Instance.LogWorkerEvent(lId, "Allocated", _engine.Now, activity.ActivityId);
+            }
+
+            // Train locomotives
+            foreach (var tlId in allocatedTrainLocos)
+            {
+                var travelTime = CalculateTrainLocoTravelTime();
+                locoDetails.Add($"{tlId}({travelTime.TotalSeconds:F0}s/100m)");
+                SimulationLogger.Instance.LogWorkerEvent(tlId, "Allocated", _engine.Now, activity.ActivityId);
             }
 
             var allResources = workerDetails.Concat(locoDetails).ToList();
@@ -126,7 +180,7 @@ namespace WienerNeustadtSimulation.Control
                 );
             }
 
-            // Schedule travel for locomotive
+            // Schedule travel for shunting locomotive
             foreach (var locoId in allocatedLocos)
             {
                 var travelTime = CalculateLocoTravelTime();
@@ -138,10 +192,38 @@ namespace WienerNeustadtSimulation.Control
                 );
             }
 
+            // Schedule travel for train locomotive
+            foreach (var trainLocoId in allocatedTrainLocos)
+            {
+                var travelTime = CalculateTrainLocoTravelTime();
+
+                _engine.Schedule(
+                    _engine.Now.Add(travelTime),
+                    () => OnTrainLocoArrived(activity, trainLocoId),
+                    $"TrainLocoArrives-{trainLocoId}-{activity.ActivityId}"
+                );
+            }
+
             return true;
         }
 
         // ─── Arrival callbacks ─────────────────────────────────────────────────
+        private void OnTrainLocoArrived(Activity activity, string trainLocoId)
+        {
+            int arrived = activity.WorkerArrivalTimes.Count + activity.LocoArrivalTimes.Count + 1;
+            int total = activity.RequiredWorkers + 1;  // 2 workers + 1 train loco
+
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: Train locomotive arrived for '{activity.ActivityId}' ({arrived}/{total})");
+            SimulationLogger.Instance.LogWorkerEvent(trainLocoId, "Arrived", _engine.Now, activity.ActivityId);
+
+            activity.RecordLocoArrival(trainLocoId, _engine.Now);
+        }
+
+        private TimeSpan CalculateTrainLocoTravelTime()
+        {
+            double speed = 80.0;  // Same as fastest workers
+            return TimeSpan.FromMinutes(FixedTravelDistanceMeters / speed);
+        }
 
         private void OnWorkerArrived(Activity activity, string workerId, string workerName)
         {
@@ -184,17 +266,25 @@ namespace WienerNeustadtSimulation.Control
         /// </summary>
         public void Release(Activity activity)
         {
-            // ── Workers ──────────────────────────────────────────────────────────
+            // Exit gate release
+            if (activity is DepartureDriveActivity)
+            {
+                _exitGateAvailable = true;
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: Exit gate released");
+                ProcessQueue();
+                return;
+            }
+
+            // Workers
             var workerIds = activity.AllocatedWorkerIds.ToList();
             activity.AllocatedWorkerIds.Clear();
 
             if (workerIds.Count > 0)
             {
-                // ALWAYS use batch return for console output (consolidated message)
                 ReturnWorkersBatch(workerIds);
             }
 
-            // ── Locomotive ───────────────────────────────────────────────────────
+            // Locomotives (shunting or train)
             if (!activity.LocoStaysWithEntity)
             {
                 var locoIds = activity.AllocatedLocoIds.ToList();
@@ -202,12 +292,31 @@ namespace WienerNeustadtSimulation.Control
 
                 if (locoIds.Count > 0)
                 {
-                    ReturnLocosBatch(locoIds);
+                    // Check if train locomotives (start with "TL")
+                    var trainLocos = locoIds.Where(id => id.StartsWith("TL")).ToList();
+                    var shuntingLocos = locoIds.Except(trainLocos).ToList();
+
+                    if (trainLocos.Any())
+                        ReturnTrainLocosBatch(trainLocos);
+
+                    if (shuntingLocos.Any())
+                        ReturnLocosBatch(shuntingLocos);
                 }
             }
-            // If LocoStaysWithEntity == true, AllocatedLocoIds is left intact for
-            // the caller to read the loco ID and attach it to the entity.
-            // The caller is responsible for calling ReturnLoco() when the entity exits.
+        }
+
+        private void ReturnTrainLocosBatch(List<string> trainLocoIds)
+        {
+            foreach (var tlId in trainLocoIds)
+            {
+                _availableTrainLocoIds.Add(tlId);
+                SimulationLogger.Instance.LogWorkerEvent(tlId, "Returned", _engine.Now);
+            }
+
+            var locoList = string.Join(", ", trainLocoIds);
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {locoList} returned to train waiting area");
+
+            ProcessQueue();
         }
 
         // ─── Low-level pool helpers ────────────────────────────────────────────
