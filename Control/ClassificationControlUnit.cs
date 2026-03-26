@@ -234,8 +234,13 @@ namespace WienerNeustadtSimulation.Control
             Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: TRAIN COMPLETE '{train.Id}' on track {trackId} ({train.TotalLength:F0}m, {train.WagonGroups.Count} WGs)");
             SimulationLogger.Instance.LogTrainEvent(train.Id, "OutboundTrainCreated", time, destination);
 
+            // CRITICAL FIX: Remove wagon groups from tracking - they're now part of a train
+            // and should NOT be counted again in future completion checks
+            _wagonGroupsByTrack.Remove(trackId);  // ← ADD THIS LINE
+
             RequestOutboundTrainPreparation(train, time);
         }
+
 
         // ─── Outbound Train Preparation (OBTP) ─────────────────────────────────
 
