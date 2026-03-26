@@ -1,0 +1,104 @@
+{
+  "inboundTrains": [
+    {
+      "ID": "11001",
+      "WagonGroupIds": ["1100101", "1100102", "1100103"],
+      "HasLoco": true,
+      "LocomotiveId": "LOCO-11",
+      "Status": "Arriving",
+      "Designation": "Inbound",
+      "Time": "2025-01-01T09:00:00Z"
+    },
+    {
+      "ID": "11002",
+      "WagonGroupIds": ["1100201", "1100202", "1100203"],
+      "HasLoco": true,
+      "LocomotiveId": "LOCO-12",
+      "Status": "Arriving",
+      "Designation": "Inbound",
+      "Time": "2025-01-01T09:00:00Z"
+    },
+    {
+      "ID": "11003",
+      "WagonGroupIds": ["1100301", "1100302"],
+      "HasLoco": true,
+      "LocomotiveId": "LOCO-13",
+      "Status": "Arriving",
+      "Designation": "Inbound",
+      "Time": "2025-01-01T09:02:00Z"
+    },
+    {
+      "ID": "11004",
+      "WagonGroupIds": ["1100401", "1100402", "1100403"],
+      "HasLoco": true,
+      "LocomotiveId": "LOCO-14",
+      "Status": "Arriving",
+      "Designation": "Inbound",
+      "Time": "2025-01-01T09:02:00Z"
+    },
+    {
+      "ID": "11005",
+      "WagonGroupIds": ["1100501", "1100502"],
+      "HasLoco": true,
+      "LocomotiveId": "LOCO-15",
+      "Status": "Arriving",
+      "Designation": "Inbound",
+      "Time": "2025-01-01T09:04:00Z"
+    },
+    {
+      "ID": "11006",
+      "WagonGroupIds": ["1100601", "1100602", "1100603"],
+      "HasLoco": true,
+      "LocomotiveId": "LOCO-16",
+      "Status": "Arriving",
+      "Designation": "Inbound",
+      "Time": "2025-01-01T09:04:00Z"
+    }
+  ],
+  "wagonGroups": [
+    { "ID": "1100101", "WagonIds": ["110010101", "110010102", "110010103", "110010104"], "Destination": "Graz" },
+    { "ID": "1100102", "WagonIds": ["110010201", "110010202", "110010203"], "Destination": "Vienna" },
+    { "ID": "1100103", "WagonIds": ["110010301", "110010302"], "Destination": "Salzburg" },
+    
+    { "ID": "1100201", "WagonIds": ["110020101", "110020102", "110020103", "110020104"], "Destination": "Graz" },
+    { "ID": "1100202", "WagonIds": ["110020201", "110020202"], "Destination": "Ljubljana" },
+    { "ID": "1100203", "WagonIds": ["110020301", "110020302", "110020303"], "Destination": "Vienna" },
+    
+    { "ID": "1100301", "WagonIds": ["110030101", "110030102", "110030103", "110030104", "110030105"], "Destination": "Graz" },
+    { "ID": "1100302", "WagonIds": ["110030201", "110030202"], "Destination": "Budapest" },
+    
+    { "ID": "1100401", "WagonIds": ["110040101", "110040102", "110040103"], "Destination": "Vienna" },
+    { "ID": "1100402", "WagonIds": ["110040201", "110040202", "110040203", "110040204"], "Destination": "Ljubljana" },
+    { "ID": "1100403", "WagonIds": ["110040301", "110040302"], "Destination": "Salzburg" },
+    
+    { "ID": "1100501", "WagonIds": ["110050101", "110050102", "110050103"], "Destination": "Graz" },
+    { "ID": "1100502", "WagonIds": ["110050201", "110050202", "110050203", "110050204"], "Destination": "Ljubljana" },
+    
+    { "ID": "1100601", "WagonIds": ["110060101", "110060102", "110060103"], "Destination": "Vienna" },
+    { "ID": "1100602", "WagonIds": ["110060201", "110060202"], "Destination": "Budapest" },
+    { "ID": "1100603", "WagonIds": ["110060301", "110060302"], "Destination": "Salzburg" }
+  ],
+  "wagons": [
+    { "ID": "110010101", "Length": 16.0 }, { "ID": "110010102", "Length": 16.0 }, { "ID": "110010103", "Length": 16.0 }, { "ID": "110010104", "Length": 16.0 },
+    { "ID": "110010201", "Length": 16.0 }, { "ID": "110010202", "Length": 16.0 }, { "ID": "110010203", "Length": 16.0 },
+    { "ID": "110010301", "Length": 16.0 }, { "ID": "110010302", "Length": 16.0 },
+    
+    { "ID": "110020101", "Length": 16.0 }, { "ID": "110020102", "Length": 16.0 }, { "ID": "110020103", "Length": 16.0 }, { "ID": "110020104", "Length": 16.0 },
+    { "ID": "110020201", "Length": 16.0 }, { "ID": "110020202", "Length": 16.0 },
+    { "ID": "110020301", "Length": 16.0 }, { "ID": "110020302", "Length": 16.0 }, { "ID": "110020303", "Length": 16.0 },
+    
+    { "ID": "110030101", "Length": 16.0 }, { "ID": "110030102", "Length": 16.0 }, { "ID": "110030103", "Length": 16.0 }, { "ID": "110030104", "Length": 16.0 }, { "ID": "110030105", "Length": 16.0 },
+    { "ID": "110030201", "Length": 16.0 }, { "ID": "110030202", "Length": 16.0 },
+    
+    { "ID": "110040101", "Length": 16.0 }, { "ID": "110040102", "Length": 16.0 }, { "ID": "110040103", "Length": 16.0 },
+    { "ID": "110040201", "Length": 16.0 }, { "ID": "110040202", "Length": 16.0 }, { "ID": "110040203", "Length": 16.0 }, { "ID": "110040204", "Length": 16.0 },
+    { "ID": "110040301", "Length": 16.0 }, { "ID": "110040302", "Length": 16.0 },
+    
+    { "ID": "110050101", "Length": 16.0 }, { "ID": "110050102", "Length": 16.0 }, { "ID": "110050103", "Length": 16.0 },
+    { "ID": "110050201", "Length": 16.0 }, { "ID": "110050202", "Length": 16.0 }, { "ID": "110050203", "Length": 16.0 }, { "ID": "110050204", "Length": 16.0 },
+    
+    { "ID": "110060101", "Length": 16.0 }, { "ID": "110060102", "Length": 16.0 }, { "ID": "110060103", "Length": 16.0 },
+    { "ID": "110060201", "Length": 16.0 }, { "ID": "110060202", "Length": 16.0 },
+    { "ID": "110060301", "Length": 16.0 }, { "ID": "110060302", "Length": 16.0 }
+  ]
+}

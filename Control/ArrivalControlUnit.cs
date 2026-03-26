@@ -149,6 +149,7 @@ namespace WienerNeustadtSimulation.Control
         private Dictionary<string, Track> RunSortingMethod(Train train)
         {
             var wagonGroupToTrackMap = new Dictionary<string, Track>();
+            var sortingOutputs = new List<string>();  // Collect all sorting assignments
 
             foreach (var wgId in train.WagonGroupIds)
             {
@@ -159,17 +160,26 @@ namespace WienerNeustadtSimulation.Control
                 }
 
                 var wgData = _wagonGroupData[wgId];
-                var destination = wgData.Destination ?? "Unknown";
+                var destination = wgData.Destination;
+
+                if (string.IsNullOrEmpty(destination))
+                {
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | SORTING: WARNING - wagon group {wgId} has no destination");
+                    continue;
+                }
+
+                bool isNewAssignment = false;
 
                 if (!_destinationToTrackMap.ContainsKey(destination))
                 {
-                    Track classificationTrack = null;
+                    Track? classificationTrack = null;
 
                     foreach (var track in _classificationTracks)
                     {
-                        if (track.Designation == "Classification" && !_destinationToTrackMap.ContainsValue(track))
+                        if (track.CurrentOccupancies.Count == 0 && track.Reserved == false)
                         {
                             classificationTrack = track;
+                            track.Reserved = true;
                             break;
                         }
                     }
@@ -179,12 +189,22 @@ namespace WienerNeustadtSimulation.Control
 
                     _destinationToTrackMap[destination] = classificationTrack!;
                     SimulationLogger.Instance.LogTrainEvent(train.ID, "ClassificationTrackAssigned", _engine.Now, $"{destination} -> {classificationTrack.RealLifeID}");
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | SORTING: track {classificationTrack!.RealLifeID} set for '{destination}'");
+
+                    isNewAssignment = true;  // Mark as new
                 }
 
                 var assignedTrack = _destinationToTrackMap[destination];
                 wagonGroupToTrackMap[wgId] = assignedTrack;
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | SORTING: wagon group {wgId} → destination '{destination}' → track {assignedTrack.RealLifeID}");
+
+                // Build sorting output with asterisks for new assignments
+                string trackDisplay = isNewAssignment ? $"*{assignedTrack.RealLifeID}*" : assignedTrack.RealLifeID;
+                sortingOutputs.Add($"[{wgId} → {destination} → {trackDisplay}]");
+            }
+
+            // Print consolidated sorting line
+            if (sortingOutputs.Count > 0)
+            {
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | SORTING: {string.Join(" ", sortingOutputs)}");
             }
 
             return wagonGroupToTrackMap;
