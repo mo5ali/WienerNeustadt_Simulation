@@ -102,16 +102,15 @@
             text-align: right;
         }
 
-        /* File Upload */
+        /* File Upload - inline in control panel */
         #file-upload {
-            margin: 30px;
-            padding: 40px;
-            border: 3px dashed #ccc;
-            border-radius: 10px;
-            text-align: center;
+            padding: 6px 12px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
             background: #fafafa;
             cursor: pointer;
             transition: all 0.3s;
+            white-space: nowrap;
         }
 
             #file-upload:hover {
@@ -129,7 +128,7 @@
         }
 
         #file-label {
-            font-size: 18px;
+            font-size: 12px;
             color: #666;
         }
 
@@ -140,43 +139,18 @@
 
         /* Main Content */
         #main-content {
-            padding: 30px;
             display: none;
+            width: 100%;
+            height: calc(100vh - 8px - 70px);
+            background-image: url('vis_background_v1.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
         }
 
             #main-content.visible {
                 display: block;
             }
-
-        /* Event Log */
-        #event-log {
-            margin-top: 20px;
-            padding: 20px;
-            background: #fafafa;
-            border-radius: 8px;
-            max-height: 400px;
-            overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-        }
-
-        .event-line {
-            padding: 5px 0;
-            border-bottom: 1px solid #eee;
-        }
-
-            .event-line:last-child {
-                border-bottom: none;
-            }
-
-        .event-time {
-            color: #2196F3;
-            font-weight: bold;
-        }
-
-        .event-text {
-            color: #333;
-        }
     </style>
 </head>
 <body>
@@ -195,21 +169,16 @@
                 <span id="speed-label">10x</span>
             </div>
             <button onclick="reset()">Reset</button>
+            <div id="file-upload" onclick="document.getElementById('file-input').click()">
+                <input type="file" id="file-input" accept=".csv" onchange="loadCSV(event)">
+                <p id="file-label">📂 Load CSV</p>
+            </div>
         </div>
         <div id="sim-time">09:00:00</div>
     </div>
 
-    <!-- File Upload -->
-    <div id="file-upload" onclick="document.getElementById('file-input').click()">
-        <input type="file" id="file-input" accept=".csv" onchange="loadCSV(event)">
-        <p id="file-label">📂 Click to load simulation CSV file</p>
-    </div>
-
-    <!-- Main Content -->
-    <div id="main-content">
-        <h2>Simulation Visualization</h2>
-        <div id="event-log"></div>
-    </div>
+    <!-- Main Content: background image shown after CSV is loaded -->
+    <div id="main-content"></div>
 
     <script>
         let events = [];
@@ -218,7 +187,7 @@
         let playbackSpeed = 10;
         let animationFrameId = null;
         let startRealTime = null;
-        let pausedSimTime = 0; // Track elapsed sim time when paused
+        let pausedSimTime = 0;
         let simStartTime = null;
         let simEndTime = null;
 
@@ -235,7 +204,6 @@
                 document.getElementById('file-label').textContent = `✅ Loaded: ${file.name} (${events.length} events)`;
                 document.getElementById('main-content').classList.add('visible');
 
-                // Set initial time display
                 if (events.length > 0) {
                     document.getElementById('sim-time').textContent = formatTimeOnly(simStartTime);
                 }
@@ -289,7 +257,6 @@
                 btn.textContent = 'Play';
                 btn.classList.remove('pause');
 
-                // Calculate how much sim time has elapsed
                 const realElapsed = Date.now() - startRealTime;
                 pausedSimTime += realElapsed * playbackSpeed;
 
@@ -304,43 +271,36 @@
             playbackSpeed = parseInt(document.getElementById('speed-slider').value);
             document.getElementById('speed-label').textContent = `${playbackSpeed}x`;
 
-            // If playing, update the baseline to account for speed change
             if (isPlaying) {
                 const realElapsed = Date.now() - startRealTime;
-                pausedSimTime += realElapsed * oldSpeed; // Add elapsed time at OLD speed
-                startRealTime = Date.now(); // Reset real time counter
+                pausedSimTime += realElapsed * oldSpeed;
+                startRealTime = Date.now();
             }
         }
 
         function animate() {
             if (!isPlaying || !events.length) return;
 
-            // Calculate current simulation time
             const realElapsed = Date.now() - startRealTime;
             const totalSimElapsed = pausedSimTime + (realElapsed * playbackSpeed);
             const currentSimTime = new Date(simStartTime.getTime() + totalSimElapsed);
 
-            // Update sim time display
             document.getElementById('sim-time').textContent = formatTimeOnly(currentSimTime);
 
-            // Update progress
             const totalDuration = simEndTime - simStartTime;
             const currentProgress = currentSimTime - simStartTime;
             const progressPercent = Math.min((currentProgress / totalDuration) * 100, 100);
             document.getElementById('progress-fill').style.width = `${progressPercent}%`;
 
-            // Process events
             while (currentEventIndex < events.length) {
                 const eventTime = new Date(events[currentEventIndex].timestamp);
                 if (eventTime <= currentSimTime) {
-                    displayEvent(events[currentEventIndex]);
                     currentEventIndex++;
                 } else {
                     break;
                 }
             }
 
-            // Check if finished
             if (currentEventIndex >= events.length || currentSimTime >= simEndTime) {
                 isPlaying = false;
                 document.getElementById('play-pause-btn').textContent = 'Replay';
@@ -351,24 +311,11 @@
             animationFrameId = requestAnimationFrame(animate);
         }
 
-        function displayEvent(event) {
-            const eventLog = document.getElementById('event-log');
-            const eventLine = document.createElement('div');
-            eventLine.className = 'event-line';
-            const timestamp = new Date(event.timestamp);
-            eventLine.innerHTML = `<span class="event-time">${formatTimeOnly(timestamp)}</span> | <span class="event-text">${event.entityId} - ${event.event} ${event.details}</span>`;
-            eventLog.appendChild(eventLine);
-
-            // Auto-scroll to bottom
-            eventLog.scrollTop = eventLog.scrollHeight;
-        }
-
         function reset() {
             currentEventIndex = 0;
             isPlaying = false;
             startRealTime = null;
             pausedSimTime = 0;
-            document.getElementById('event-log').innerHTML = '';
             document.getElementById('progress-fill').style.width = '0%';
             if (events.length > 0) {
                 document.getElementById('sim-time').textContent = formatTimeOnly(simStartTime);
