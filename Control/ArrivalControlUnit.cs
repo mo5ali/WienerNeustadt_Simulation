@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using WienerNeustadtSimulation.Engine;
 using WienerNeustadtSimulation.Entities;
@@ -57,7 +58,12 @@ namespace WienerNeustadtSimulation.Control
             _entryTimes[train.ID] = simTimeUtc;
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | Train {train.ID} queued at entry. Queue length: {_entryQueue.Count}");
-            SimulationLogger.Instance.LogTrainEvent(train.ID, "Entry", simTimeUtc);
+            SimulationLogger.Instance.LogTrainEvent(
+                train.ID,
+                "Entry",
+                _engine.Now,
+                details: BuildTrainDetails(trainDto, _wagonGroupData)
+);
 
             var firstTrain = _entryQueue.Peek();
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: handling train {firstTrain.ID} of length {firstTrain.Length} meters");
@@ -118,7 +124,30 @@ namespace WienerNeustadtSimulation.Control
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: train {train.ID} driving to arrival track {assignedTrack.RealLifeID} (ETA: {driveTime.TotalMinutes} minutes)");
             _entryQueue.Dequeue();
         }
+        static string BuildTrainDetails(TrainDto t, Dictionary<string, WagonGroupDto> wagonGroupData)
+        {
+            var wgIds = t.WagonGroupIds ?? new List<string>();
 
+            double totalLen = 0;
+            var wgs = new List<string>();
+
+            foreach (var wgId in wgIds)
+            {
+                if (!wagonGroupData.TryGetValue(wgId, out var wg) || wg == null)
+                {
+                    wgs.Add($"{wgId}:0:Unknown");
+                    continue;
+                }
+
+                var len = wg.Length ?? 0;
+                totalLen += len;
+                var dest = (wg.Destination ?? "Unknown").Replace(":", "").Replace(",", "");
+
+                wgs.Add($"{wgId}:{len.ToString(CultureInfo.InvariantCulture)}:{dest}");
+            }
+
+            return $"trainId={t.ID}|length={totalLen.ToString(CultureInfo.InvariantCulture)}|wgIds={string.Join(",", wgIds)}|wgs={string.Join(",", wgs)}";
+        }
         private Train CreateTrainEntity(TrainDto trainDto)
         {
             double calculatedLength = 0;

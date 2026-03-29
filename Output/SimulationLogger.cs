@@ -91,7 +91,7 @@ namespace WienerNeustadtSimulation.Output
         {
             if (!_isInitialized) return;
 
-            _writer.WriteLine($"TrainEvent;{trainId};{eventName};{simTime:yyyy-MM-ddTHH:mm:ss};{details}");
+            _writer.WriteLine($"{simTime:yyyy-MM-ddTHH:mm:ss};TrainEvent;{eventName};{trainId};{details}");
             _writer.Flush();
         }
 
@@ -99,7 +99,7 @@ namespace WienerNeustadtSimulation.Output
         {
             if (!_isInitialized) return;
 
-            _writer.WriteLine($"WagonGroupEvent;{wagonGroupId};{eventName};{simTime:yyyy-MM-ddTHH:mm:ss};{details}");
+            _writer.WriteLine($"{simTime:yyyy-MM-ddTHH:mm:ss};WagonGroupEvent;{wagonGroupId};{eventName};{details}");
             _writer.Flush();
         }
 
@@ -107,7 +107,7 @@ namespace WienerNeustadtSimulation.Output
         {
             if (!_isInitialized) return;
 
-            _writer.WriteLine($"WorkerEvent;{workerId};{eventName};{simTime:yyyy-MM-ddTHH:mm:ss};{details}");
+            _writer.WriteLine($"{simTime:yyyy-MM-ddTHH:mm:ss};WorkerEvent;{workerId};{eventName};{details}");
             _writer.Flush();
         }
 
@@ -115,7 +115,7 @@ namespace WienerNeustadtSimulation.Output
         {
             if (!_isInitialized) return;
 
-            _writer.WriteLine($"ActivityEvent;{activityId};{activityType};{simTime:yyyy-MM-ddTHH:mm:ss};{status}|{details}");
+            _writer.WriteLine($"{simTime:yyyy-MM-ddTHH:mm:ss};ActivityEvent;{activityId};{activityType};{status}|{details}");
             _writer.Flush();
         }
 
