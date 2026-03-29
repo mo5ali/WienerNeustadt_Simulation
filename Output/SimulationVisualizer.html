@@ -156,14 +156,26 @@
         /* Worker Icons Overlay */
         #worker-grid {
             position: absolute;
-            top: 80px;
-            left: 1010px;
+            top: 40px;
+            left: 700px;
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
             max-width: 400px;
         }
 
+        /* Shunting Loco Icons Overlay */
+        #shuntloco-grid {
+            position: absolute;
+            top: 40px;
+            left: 1100px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            max-width: 400px;
+        }
+
+        /* Shared icon style */
         .worker-icon {
             display: flex;
             flex-direction: column;
@@ -215,9 +227,10 @@
         <div id="sim-time">09:00:00</div>
     </div>
 
-    <!-- Main Content: background image + worker icons overlay -->
+    <!-- Main Content: background image + overlays -->
     <div id="main-content">
         <div id="worker-grid"></div>
+        <div id="shuntloco-grid"></div>
     </div>
 
     <script>
@@ -230,7 +243,8 @@
         let pausedSimTime = 0;
         let simStartTime = null;
         let simEndTime = null;
-        let workers = []; // { id, name, speed }
+        let workers = [];
+        let shuntLocos = [];
 
         function loadCSV(event) {
             const file = event.target.files[0];
@@ -247,6 +261,7 @@
                 document.getElementById('main-content').classList.add('visible');
 
                 renderWorkerGrid();
+                renderShuntLocoGrid();
 
                 if (events.length > 0) {
                     document.getElementById('sim-time').textContent = formatTimeOnly(simStartTime);
@@ -257,17 +272,17 @@
 
         function parseMeta(content) {
             workers = [];
+            shuntLocos = [];
             const lines = content.trim().split('\n');
             for (const line of lines) {
                 const trimmed = line.trim();
                 if (trimmed === '#ENDMETA') break;
                 const values = trimmed.split(';').map(v => v.trim());
                 if (values[0] === '#WORKER') {
-                    workers.push({
-                        id: values[1],
-                        name: values[2],
-                        speed: values[3]
-                    });
+                    workers.push({ id: values[1], name: values[2], speed: values[3] });
+                }
+                if (values[0] === '#SHUNTLOCO') {
+                    shuntLocos.push({ id: values[1], name: values[2], speed: values[3] });
                 }
             }
         }
@@ -279,9 +294,23 @@
                 const div = document.createElement('div');
                 div.className = 'worker-icon';
                 div.innerHTML = `
-                            <img src="worker_icon.png" alt="${worker.name}" title="${worker.name} (${worker.id})">
-                            <span>${worker.name}</span>
-                        `;
+                        <img src="worker_icon.png" alt="${worker.name}" title="${worker.name} (${worker.id})">
+                        <span>${worker.name}</span>
+                    `;
+                grid.appendChild(div);
+            }
+        }
+
+        function renderShuntLocoGrid() {
+            const grid = document.getElementById('shuntloco-grid');
+            grid.innerHTML = '';
+            for (const loco of shuntLocos) {
+                const div = document.createElement('div');
+                div.className = 'worker-icon';
+                div.innerHTML = `
+                        <img src="shunting_loco.png" alt="${loco.name}" title="${loco.name} (${loco.id})">
+                        <span>${loco.name}</span>
+                    `;
                 grid.appendChild(div);
             }
         }
@@ -290,7 +319,7 @@
             const lines = content.trim().split('\n');
             events = [];
 
-            // Skip meta lines
+            // Find where meta ends
             let dataStart = 0;
             for (let i = 0; i < lines.length; i++) {
                 if (lines[i].trim() === '#ENDMETA') {
@@ -299,7 +328,7 @@
                 }
             }
 
-            // Skip header row after meta
+            // Skip the header row after meta
             for (let i = dataStart + 1; i < lines.length; i++) {
                 const values = lines[i].split(';').map(v => v.trim());
                 if (values.length < 3) continue;
