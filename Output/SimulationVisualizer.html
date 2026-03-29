@@ -142,6 +142,7 @@
             display: none;
             width: 100%;
             height: calc(100vh - 8px - 70px);
+            position: relative;
             background-image: url('vis_background_v1.png');
             background-size: cover;
             background-position: center;
@@ -150,6 +151,43 @@
 
             #main-content.visible {
                 display: block;
+            }
+
+        /* Worker Icons Overlay */
+        #worker-grid {
+            position: absolute;
+            top: 60px;
+            left: 1010px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            max-width: 400px;
+        }
+
+        .worker-icon {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+            .worker-icon img {
+                width: 40px;
+                height: 40px;
+                object-fit: contain;
+                filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
+            }
+
+            .worker-icon span {
+                font-size: 9px;
+                color: white;
+                text-shadow: 1px 1px 2px black;
+                font-weight: 600;
+                text-align: center;
+                max-width: 50px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
     </style>
 </head>
@@ -177,8 +215,10 @@
         <div id="sim-time">09:00:00</div>
     </div>
 
-    <!-- Main Content: background image shown after CSV is loaded -->
-    <div id="main-content"></div>
+    <!-- Main Content: background image + worker icons overlay -->
+    <div id="main-content">
+        <div id="worker-grid"></div>
+    </div>
 
     <script>
         let events = [];
@@ -190,6 +230,7 @@
         let pausedSimTime = 0;
         let simStartTime = null;
         let simEndTime = null;
+        let workers = []; // { id, name, speed }
 
         function loadCSV(event) {
             const file = event.target.files[0];
@@ -198,11 +239,14 @@
             const reader = new FileReader();
             reader.onload = function (e) {
                 const content = e.target.result;
+                parseMeta(content);
                 parseCSV(content);
 
                 document.getElementById('file-upload').classList.add('loaded');
                 document.getElementById('file-label').textContent = `✅ Loaded: ${file.name} (${events.length} events)`;
                 document.getElementById('main-content').classList.add('visible');
+
+                renderWorkerGrid();
 
                 if (events.length > 0) {
                     document.getElementById('sim-time').textContent = formatTimeOnly(simStartTime);
@@ -211,11 +255,52 @@
             reader.readAsText(file);
         }
 
+        function parseMeta(content) {
+            workers = [];
+            const lines = content.trim().split('\n');
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed === '#ENDMETA') break;
+                const values = trimmed.split(';').map(v => v.trim());
+                if (values[0] === '#WORKER') {
+                    workers.push({
+                        id: values[1],
+                        name: values[2],
+                        speed: values[3]
+                    });
+                }
+            }
+        }
+
+        function renderWorkerGrid() {
+            const grid = document.getElementById('worker-grid');
+            grid.innerHTML = '';
+            for (const worker of workers) {
+                const div = document.createElement('div');
+                div.className = 'worker-icon';
+                div.innerHTML = `
+                            <img src="worker_icon.png" alt="${worker.name}" title="${worker.name} (${worker.id})">
+                            <span>${worker.name}</span>
+                        `;
+                grid.appendChild(div);
+            }
+        }
+
         function parseCSV(content) {
             const lines = content.trim().split('\n');
             events = [];
 
-            for (let i = 1; i < lines.length; i++) {
+            // Skip meta lines
+            let dataStart = 0;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].trim() === '#ENDMETA') {
+                    dataStart = i + 1;
+                    break;
+                }
+            }
+
+            // Skip header row after meta
+            for (let i = dataStart + 1; i < lines.length; i++) {
                 const values = lines[i].split(';').map(v => v.trim());
                 if (values.length < 3) continue;
 

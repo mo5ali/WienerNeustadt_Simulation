@@ -72,6 +72,13 @@ namespace WienerNeustadtSimulation
 
                 Console.WriteLine($"✓ Loaded {resourcePool.Workers?.Count ?? 0} workers");
                 Console.WriteLine($"✓ Loaded {resourcePool.ShuntingLocomotives?.Count ?? 0} shunting locomotives\n");
+                // NEW: write static resource metadata into the CSV (for the visualizer)
+                SimulationLogger.Instance.WriteResourceMetadata(
+                    resourcePool,
+                    trainLocoCount: 100,
+                    exitGateCount: 1,
+                    shuntingLocoSpeedMetersPerMinute: 25.0
+                );
 
                 // Create simulation engine
                 var engine = new SimulationEngine();
