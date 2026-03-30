@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wiener Neustadt Simulation Visualizer</title>
+    <title>Simulation Visualizer</title>
     <style>
         * {
             margin: 0;
@@ -13,58 +13,40 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: white;
-            color: #333;
+            background: #f5f5f5;
         }
 
-        /* Progress Bar */
-        #progress-bar {
+        #progress-container {
             width: 100%;
             height: 8px;
             background: #e0e0e0;
             position: relative;
-            overflow: hidden;
         }
 
         #progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #4CAF50, #45a049);
+            background: linear-gradient(90deg, #4caf50, #8bc34a);
             width: 0%;
             transition: width 0.1s linear;
         }
 
-        /* Control Panel */
-        #control-panel {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 30px;
-            background: #f5f5f5;
-            border-bottom: 1px solid #ddd;
-        }
-
-        #sim-time {
-            font-size: 24px;
-            font-weight: bold;
-            color: #2196F3;
-            font-family: 'Courier New', monospace;
-        }
-
         #controls {
             display: flex;
-            gap: 20px;
             align-items: center;
+            gap: 15px;
+            padding: 15px 30px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         button {
-            padding: 10px 20px;
-            font-size: 14px;
+            padding: 8px 16px;
             border: none;
-            border-radius: 5px;
-            cursor: pointer;
+            border-radius: 4px;
             background: #2196F3;
             color: white;
-            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
             transition: background 0.3s;
         }
 
@@ -72,17 +54,9 @@
                 background: #1976D2;
             }
 
-            button:active {
-                transform: scale(0.98);
-            }
-
             button.pause {
-                background: #FF9800;
+                background: #ff9800;
             }
-
-                button.pause:hover {
-                    background: #F57C00;
-                }
 
         #speed-control {
             display: flex;
@@ -92,17 +66,20 @@
 
         #speed-slider {
             width: 150px;
-            cursor: pointer;
         }
 
-        #speed-label {
-            font-size: 14px;
-            font-weight: 600;
-            min-width: 60px;
+        #sim-time {
+            margin-left: auto;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            font-family: 'Courier New', monospace;
+            padding: 8px 16px;
+            background: #f0f0f0;
+            border-radius: 4px;
             text-align: right;
         }
 
-        /* File Upload - inline in control panel */
         #file-upload {
             padding: 6px 12px;
             border: 2px dashed #ccc;
@@ -115,7 +92,7 @@
 
             #file-upload:hover {
                 border-color: #2196F3;
-                background: #f0f8ff;
+                background: #e3f2fd;
             }
 
             #file-upload.loaded {
@@ -137,23 +114,22 @@
             font-weight: 600;
         }
 
-        /* Main Content */
         #main-content {
             display: none;
             width: 100%;
             height: calc(100vh - 8px - 70px);
-            position: relative;
             background-image: url('vis_background_v1.png');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
+            position: relative;
         }
 
             #main-content.visible {
                 display: block;
             }
 
-        /* Worker Icons Overlay */
+        /* Worker Icons Overlay (restored) */
         #worker-grid {
             position: absolute;
             top: 40px;
@@ -164,7 +140,7 @@
             max-width: 400px;
         }
 
-        /* Shunting Loco Icons Overlay */
+        /* Shunting Loco Icons Overlay (restored) */
         #shuntloco-grid {
             position: absolute;
             top: 40px;
@@ -175,7 +151,7 @@
             max-width: 400px;
         }
 
-        /* Shared icon style */
+        /* Shared icon style (restored) */
         .worker-icon {
             display: flex;
             flex-direction: column;
@@ -202,95 +178,120 @@
                 white-space: nowrap;
             }
 
-        /* Train canvas overlay */
-        #train-canvas {
+        .train {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
+            display: flex;
+            border: 2px solid #333;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
 
-        /* Legend */
-        #legend {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(0,0,0,0.6);
-            border-radius: 8px;
-            padding: 10px 14px;
-            display: none;
-            flex-direction: column;
-            gap: 6px;
-            min-width: 120px;
+        .wagon-group {
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-right: 1px solid rgba(0,0,0,0.2);
+            font-size: 10px;
+            color: white;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
         }
 
-            #legend.visible {
-                display: flex;
+            .wagon-group:last-child {
+                border-right: none;
             }
 
-        #legend-title {
-            font-size: 11px;
-            font-weight: 700;
+        .locomotive {
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-left: 1px solid rgba(0,0,0,0.2);
+            border-right: none;
+            border-radius: 0 2px 2px 0;
             color: white;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 2px;
+            font-size: 10px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        #legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
 
         .legend-item {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            margin: 5px 0;
         }
 
-        .legend-swatch {
-            width: 18px;
-            height: 12px;
-            border-radius: 2px;
-            flex-shrink: 0;
-            border: 1px solid rgba(255,255,255,0.3);
-        }
-
-        .legend-label {
-            font-size: 11px;
-            color: white;
-            white-space: nowrap;
+        .legend-color {
+            width: 30px;
+            height: 20px;
+            border-radius: 3px;
+            border: 1px solid #333;
         }
     </style>
 </head>
 <body>
-    <!-- Progress Bar -->
-    <div id="progress-bar">
+    <div id="progress-container">
         <div id="progress-fill"></div>
     </div>
 
-    <!-- Control Panel -->
-    <div id="control-panel">
-        <div id="controls">
-            <button id="play-pause-btn" onclick="togglePlayPause()">Play</button>
-            <div id="speed-control">
-                <label for="speed-slider">Speed:</label>
-                <input type="range" id="speed-slider" min="1" max="200" value="10" oninput="updateSpeed()">
-                <span id="speed-label">10x</span>
-            </div>
-            <button onclick="reset()">Reset</button>
-            <div id="file-upload" onclick="document.getElementById('file-input').click()">
-                <input type="file" id="file-input" accept=".csv" onchange="loadCSV(event)">
-                <p id="file-label">📂 Load CSV</p>
-            </div>
+    <div id="controls">
+        <button id="play-pause-btn" onclick="togglePlayPause()">Play</button>
+        <div id="speed-control">
+            <label for="speed-slider">Speed:</label>
+            <input type="range" id="speed-slider" min="1" max="200" value="10" oninput="updateSpeed()">
+            <span id="speed-label">10x</span>
+        </div>
+        <button onclick="reset()">Reset</button>
+        <div id="file-upload" onclick="document.getElementById('file-input').click()">
+            <input type="file" id="file-input" accept=".csv" onchange="loadCSV(event)">
+            <p id="file-label">📂 Load CSV</p>
         </div>
         <div id="sim-time">09:00:00</div>
     </div>
 
-    <!-- Main Content: background image + overlays -->
     <div id="main-content">
-        <canvas id="train-canvas"></canvas>
+        <!-- Restored icon grids -->
         <div id="worker-grid"></div>
         <div id="shuntloco-grid"></div>
+
         <div id="legend">
-            <div id="legend-title">Destinations</div>
+            <h4 style="margin-bottom: 10px;">Destinations</h4>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ff9800;"></div>
+                <span>Graz</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #2196f3;"></div>
+                <span>Vienna</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #4caf50;"></div>
+                <span>Salzburg</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #9c27b0;"></div>
+                <span>Ljubljana</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #f44336;"></div>
+                <span>Budapest</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #9e9e9e;"></div>
+                <span>Unknown</span>
+            </div>
         </div>
     </div>
 
@@ -304,124 +305,21 @@
         let pausedSimTime = 0;
         let simStartTime = null;
         let simEndTime = null;
+
         let workers = [];
-        let shuntLocos = [];
+        let shuntingLocos = [];
+        let trainLocoCount = 0;
+        let exitGateCount = 0;
+        let trains = {};
 
-        // Train state: trainId -> { wagonGroups: [{id, length, destination}], track, status }
-        let trainState = {};
-
-        // Destination -> color mapping (auto-assigned)
-        const DEST_COLORS = [
-            '#E53935', '#8E24AA', '#1E88E5', '#00897B',
-            '#F4511E', '#FFB300', '#43A047', '#00ACC1',
-            '#3949AB', '#D81B60', '#6D4C41', '#039BE5'
-        ];
-        let destColorMap = {};
-        let destColorIndex = 0;
-
-        function getDestColor(dest) {
-            if (!destColorMap[dest]) {
-                destColorMap[dest] = DEST_COLORS[destColorIndex % DEST_COLORS.length];
-                destColorIndex++;
-                updateLegend();
-            }
-            return destColorMap[dest];
-        }
-
-        function updateLegend() {
-            const legend = document.getElementById('legend');
-            // Remove old items (keep title)
-            const title = document.getElementById('legend-title');
-            legend.innerHTML = '';
-            legend.appendChild(title);
-            for (const [dest, color] of Object.entries(destColorMap)) {
-                const item = document.createElement('div');
-                item.className = 'legend-item';
-                item.innerHTML = `
-                            <div class="legend-swatch" style="background:${color}"></div>
-                            <span class="legend-label">${dest}</span>
-                        `;
-                legend.appendChild(item);
-            }
-            legend.classList.add('visible');
-        }
-
-        // ── Canvas drawing ──────────────────────────────────────────────
-        // Each train is drawn as a horizontal bar of wagon-group rectangles.
-        // We stack trains vertically for now (simple layout).
-        // Constants (tweak to match your background image layout):
-        const TRAIN_BAR_HEIGHT = 18;   // px height of each wagon group rect
-        const TRAIN_BAR_MARGIN = 8;    // px vertical gap between trains
-        const TRAIN_START_X = 40;      // px from left where trains start
-        const TRAIN_START_Y = 40;      // px from top where first train is drawn
-        const PIXELS_PER_UNIT = 2;     // px per length unit
-
-        function resizeCanvas() {
-            const canvas = document.getElementById('train-canvas');
-            const mc = document.getElementById('main-content');
-            canvas.width = mc.clientWidth;
-            canvas.height = mc.clientHeight;
-        }
-
-        function drawTrains() {
-            const canvas = document.getElementById('train-canvas');
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            const activeTrains = Object.values(trainState).filter(t => t.visible);
-            let y = TRAIN_START_Y;
-
-            for (const train of activeTrains) {
-                let x = TRAIN_START_X;
-
-                // Draw train ID label
-                ctx.fillStyle = 'white';
-                ctx.font = 'bold 10px Segoe UI';
-                ctx.textBaseline = 'middle';
-                ctx.shadowColor = 'black';
-                ctx.shadowBlur = 3;
-                ctx.fillText(`T${train.id}`, x - 35, y + TRAIN_BAR_HEIGHT / 2);
-                ctx.shadowBlur = 0;
-
-                // Draw each wagon group
-                for (const wg of train.wagonGroups) {
-                    const w = wg.length * PIXELS_PER_UNIT;
-                    const color = getDestColor(wg.destination);
-
-                    // Filled rect
-                    ctx.fillStyle = color;
-                    ctx.fillRect(x, y, w, TRAIN_BAR_HEIGHT);
-
-                    // Border
-                    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-                    ctx.lineWidth = 1;
-                    ctx.strokeRect(x, y, w, TRAIN_BAR_HEIGHT);
-
-                    // Label inside rect if wide enough
-                    if (w > 30) {
-                        ctx.fillStyle = 'white';
-                        ctx.font = '9px Segoe UI';
-                        ctx.textBaseline = 'middle';
-                        ctx.shadowColor = 'black';
-                        ctx.shadowBlur = 2;
-                        ctx.fillText(wg.destination, x + 4, y + TRAIN_BAR_HEIGHT / 2);
-                        ctx.shadowBlur = 0;
-                    }
-
-                    x += w;
-                }
-
-                // Track label after the train bar
-                ctx.fillStyle = 'rgba(255,255,255,0.85)';
-                ctx.font = '10px Segoe UI';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(train.track ? `▶ Track ${train.track}` : '', x + 6, y + TRAIN_BAR_HEIGHT / 2);
-
-                y += TRAIN_BAR_HEIGHT + TRAIN_BAR_MARGIN;
-            }
-        }
-
-        // ── CSV / Meta parsing ──────────────────────────────────────────
+        const destColors = {
+            "Graz": "#ff9800",
+            "Vienna": "#2196f3",
+            "Salzburg": "#4caf50",
+            "Ljubljana": "#9c27b0",
+            "Budapest": "#f44336",
+            "Unknown": "#9e9e9e"
+        };
 
         function loadCSV(event) {
             const file = event.target.files[0];
@@ -429,17 +327,16 @@
 
             const reader = new FileReader();
             reader.onload = function (e) {
-                const content = e.target.result;
-                parseMeta(content);
-                parseCSV(content);
+                const text = e.target.result;
+                parseCSV(text);
 
                 document.getElementById('file-upload').classList.add('loaded');
                 document.getElementById('file-label').textContent = `✅ Loaded: ${file.name} (${events.length} events)`;
                 document.getElementById('main-content').classList.add('visible');
 
+                // Restored: render icon overlays after parsing metadata
                 renderWorkerGrid();
                 renderShuntLocoGrid();
-                resizeCanvas();
 
                 if (events.length > 0) {
                     document.getElementById('sim-time').textContent = formatTimeOnly(simStartTime);
@@ -447,7 +344,6 @@
             };
             reader.readAsText(file);
         }
-
         function parseMeta(content) {
             workers = [];
             shuntLocos = [];
@@ -456,6 +352,8 @@
                 const trimmed = line.trim();
                 if (trimmed === '#ENDMETA') break;
                 const values = trimmed.split(';').map(v => v.trim());
+
+                // You need these two blocks!
                 if (values[0] === '#WORKER') {
                     workers.push({ id: values[1], name: values[2], speed: values[3] });
                 }
@@ -464,110 +362,87 @@
                 }
             }
         }
-
-        function parseCSV(content) {
-            const lines = content.trim().split('\n');
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
             events = [];
+            workers = [];    // Reset as Array
+            shuntLocos = []; // Reset as Array
+            trains = {};
 
-            // Find where meta ends
-            let dataStart = 0;
+            let minTime = null;
+            let maxTime = null;
+
             for (let i = 0; i < lines.length; i++) {
-                if (lines[i].trim() === '#ENDMETA') {
-                    dataStart = i + 1;
-                    break;
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                // Skip headers
+                if (line.startsWith('EventType') || line.startsWith('#META') || line.startsWith('#ENDMETA')) continue;
+
+                // PARSE WORKERS
+                if (line.startsWith('#WORKER')) {
+                    const parts = line.split(/[;\t]/);
+                    workers.push({
+                        id: parts[1],
+                        name: parts[2],
+                        speed: parseFloat(parts[3])
+                    });
+                    continue;
                 }
-            }
 
-            // Skip header row after meta
-            for (let i = dataStart + 1; i < lines.length; i++) {
-                const raw = lines[i];
-                if (!raw.trim()) continue;
-                const values = raw.split(';').map(v => v.trim());
-                if (values.length < 3) continue;
+                // PARSE SHUNTING LOCOS
+                if (line.startsWith('#SHUNTLOCO')) {
+                    const parts = line.split(/[;\t]/);
+                    shuntLocos.push({
+                        id: parts[1],
+                        name: parts[2],
+                        speed: parseFloat(parts[3])
+                    });
+                    continue;
+                }
 
-                events.push({
-                    eventType: values[0],
-                    entityId: values[1],
-                    event: values[2],
-                    timestamp: values[3],
-                    details: values[4] || ''
-                });
-            }
+                // PARSE REGULAR EVENTS
+                if (line.startsWith('#')) continue;
 
-            if (events.length > 0) {
-                simStartTime = new Date(events[0].timestamp);
-                simEndTime = new Date(events[events.length - 1].timestamp);
-                console.log(`✅ Loaded ${events.length} events`);
-                console.log(`⏰ Duration: ${formatTimeOnly(simStartTime)} → ${formatTimeOnly(simEndTime)}`);
-            }
-        }
+                const parts = line.split(/[;\t]/);
+                if (parts.length < 4) continue;
 
-        // Parse the Details field of a TrainEvent;Entry row
-        // e.g. trainId=11001|length=144|wgIds=...|wgs=1100101:64:Graz  1100102:48:Vienna
-        function parseEntryDetails(details) {
-            const parts = {};
-            for (const segment of details.split('|')) {
-                const eq = segment.indexOf('=');
-                if (eq === -1) continue;
-                parts[segment.slice(0, eq).trim()] = segment.slice(eq + 1).trim();
-            }
+                const simTimeStr = parts[0];
+                const eventType = parts[1];
+                const eventAction = parts[2];
+                const entityId = parts[3];
+                const details = parts.length > 4 ? parts[4] : '';
 
-            const wagonGroups = [];
-            if (parts['wgs']) {
-                // Tab-separated wagon groups: id:length:destination
-                const wgTokens = parts['wgs'].split('\t').map(s => s.trim()).filter(Boolean);
-                for (const token of wgTokens) {
-                    const [id, length, destination] = token.split(':');
-                    if (id && length && destination) {
-                        wagonGroups.push({
-                            id: id.trim(),
-                            length: parseInt(length.trim()),
-                            destination: destination.trim()
-                        });
+                const timestamp = new Date(simTimeStr);
+                if (isNaN(timestamp.getTime())) continue;
+
+                if (!minTime || timestamp < minTime) minTime = timestamp;
+                if (!maxTime || timestamp > maxTime) maxTime = timestamp;
+
+                const eventObj = {
+                    eventType,
+                    entityId,
+                    event: eventAction,
+                    timestamp,
+                    details
+                };
+
+                if (eventType === 'TrainEvent' && eventAction === 'Entry') {
+                    const trainData = parseTrainDetails(details);
+                    if (trainData) {
+                        trains[entityId] = trainData;
+                        eventObj.trainData = trainData;
                     }
                 }
+                events.push(eventObj);
             }
 
-            return {
-                trainId: parts['trainId'] || '',
-                totalLength: parseInt(parts['length'] || '0'),
-                wagonGroups
-            };
+            simStartTime = minTime;
+            simEndTime = maxTime;
+
+            console.log("Parsed Workers:", workers);
+            console.log("Parsed Locos:", shuntLocos);
         }
-
-        // ── Event processing ────────────────────────────────────────────
-
-        function processEvent(ev) {
-            if (ev.eventType !== 'TrainEvent') return;
-
-            const trainId = ev.entityId;
-
-            if (ev.event === 'Entry') {
-                const parsed = parseEntryDetails(ev.details);
-                trainState[trainId] = {
-                    id: trainId,
-                    wagonGroups: parsed.wagonGroups,
-                    track: null,
-                    visible: true
-                };
-            }
-
-            if (ev.event === 'AssignedArrivalTrack') {
-                if (trainState[trainId]) {
-                    trainState[trainId].track = ev.details.trim();
-                }
-            }
-
-            // Hide train when it departs / exits
-            if (ev.event === 'Exit' || ev.event === 'Departed') {
-                if (trainState[trainId]) {
-                    trainState[trainId].visible = false;
-                }
-            }
-        }
-
-        // ── Rendering helpers ───────────────────────────────────────────
-
         function renderWorkerGrid() {
             const grid = document.getElementById('worker-grid');
             grid.innerHTML = '';
@@ -575,9 +450,9 @@
                 const div = document.createElement('div');
                 div.className = 'worker-icon';
                 div.innerHTML = `
-                            <img src="worker_icon.png" alt="${worker.name}" title="${worker.name} (${worker.id})">
-                            <span>${worker.name}</span>
-                        `;
+                                <img src="worker_icon.png" alt="${worker.name}" title="${worker.name} (${worker.id})">
+                                <span>${worker.name}</span>
+                            `;
                 grid.appendChild(div);
             }
         }
@@ -589,32 +464,60 @@
                 const div = document.createElement('div');
                 div.className = 'worker-icon';
                 div.innerHTML = `
-                            <img src="shunting_loco.png" alt="${loco.name}" title="${loco.name} (${loco.id})">
-                            <span>${loco.name}</span>
-                        `;
+                                <img src="shunting_loco.png" alt="${loco.name}" title="${loco.name} (${loco.id})">
+                                <span>${loco.name}</span>
+                            `;
                 grid.appendChild(div);
             }
         }
 
-        // ── Playback ────────────────────────────────────────────────────
+        function parseTrainDetails(details) {
+            const parts = details.split('|');
+            const data = {};
+
+            for (const part of parts) {
+                const [key, value] = part.split('=');
+                if (!key || !value) continue;
+
+                if (key === 'trainId') {
+                    data.trainId = value;
+                } else if (key === 'length') {
+                    data.length = parseFloat(value);
+                } else if (key === 'wgIds') {
+                    data.wgIds = value.split(',');
+                } else if (key === 'wgs') {
+                    data.wagonGroups = [];
+                    const wgParts = value.split(',');
+                    for (const wgPart of wgParts) {
+                        const [wgId, wgLen, dest] = wgPart.split(':');
+                        data.wagonGroups.push({
+                            id: wgId,
+                            length: parseFloat(wgLen),
+                            destination: dest
+                        });
+                    }
+                }
+            }
+
+            return data.wagonGroups ? data : null;
+        }
 
         function formatTimeOnly(date) {
-            const hour = String(date.getHours()).padStart(2, '0');
-            const minute = String(date.getMinutes()).padStart(2, '0');
-            const second = String(date.getSeconds()).padStart(2, '0');
-            return `${hour}:${minute}:${second}`;
+            if (!date) return '--:--:--';
+            return date.toTimeString().split(' ')[0];
         }
 
         function togglePlayPause() {
-            isPlaying = !isPlaying;
             const btn = document.getElementById('play-pause-btn');
 
-            if (isPlaying) {
+            if (!isPlaying) {
+                isPlaying = true;
                 btn.textContent = 'Pause';
                 btn.classList.add('pause');
                 startRealTime = Date.now();
                 animate();
             } else {
+                isPlaying = false;
                 btn.textContent = 'Play';
                 btn.classList.remove('pause');
 
@@ -623,6 +526,7 @@
 
                 if (animationFrameId) {
                     cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
                 }
             }
         }
@@ -653,21 +557,14 @@
             const progressPercent = Math.min((currentProgress / totalDuration) * 100, 100);
             document.getElementById('progress-fill').style.width = `${progressPercent}%`;
 
-            let stateChanged = false;
             while (currentEventIndex < events.length) {
-                const ev = events[currentEventIndex];
-                const eventTime = new Date(ev.timestamp);
+                const eventTime = new Date(events[currentEventIndex].timestamp);
                 if (eventTime <= currentSimTime) {
-                    processEvent(ev);
+                    processEvent(events[currentEventIndex]);
                     currentEventIndex++;
-                    stateChanged = true;
                 } else {
                     break;
                 }
-            }
-
-            if (stateChanged) {
-                drawTrains();
             }
 
             if (currentEventIndex >= events.length || currentSimTime >= simEndTime) {
@@ -680,37 +577,65 @@
             animationFrameId = requestAnimationFrame(animate);
         }
 
+        function processEvent(event) {
+            if (event.eventType === 'TrainEvent' && event.event === 'Entry' && event.trainData) {
+                drawTrain(event.entityId, event.trainData);
+            }
+        }
+
+        function drawTrain(trainId, trainData) {
+            const existing = document.getElementById(`train-${trainId}`);
+            if (existing) existing.remove();
+
+            const trainDiv = document.createElement('div');
+            trainDiv.id = `train-${trainId}`;
+            trainDiv.className = 'train';
+            trainDiv.style.left = '50px';
+            trainDiv.style.top = `${50 + (Object.keys(document.querySelectorAll('.train')).length) * 35}px`;
+
+
+
+            const pixelsPerMeter = 2;
+            for (const wg of [...trainData.wagonGroups].reverse()) {
+                const wgDiv = document.createElement('div');
+                wgDiv.className = 'wagon-group';
+                wgDiv.style.width = `${wg.length * pixelsPerMeter}px`;
+                wgDiv.style.background = destColors[wg.destination] || destColors['Unknown'];
+                wgDiv.textContent = wg.id;
+                wgDiv.title = `${wg.id}: ${wg.length}m → ${wg.destination}`;
+                trainDiv.appendChild(wgDiv);
+            }
+
+            // Locomotive box: must be on the RIGHT end (before the *first* WG in real order)
+            const locoDiv = document.createElement('div');
+            locoDiv.className = 'locomotive';
+            locoDiv.style.width = '24px';
+            locoDiv.style.background = '#222';
+            locoDiv.title = `Locomotive for train ${trainId}`;
+            locoDiv.textContent = 'L'; // optional
+            trainDiv.appendChild(locoDiv)
+
+            document.getElementById('main-content').appendChild(trainDiv);
+        }
+
         function reset() {
             currentEventIndex = 0;
             isPlaying = false;
             startRealTime = null;
             pausedSimTime = 0;
-            trainState = {};
-            destColorMap = {};
-            destColorIndex = 0;
-
             document.getElementById('progress-fill').style.width = '0%';
-            document.getElementById('legend').classList.remove('visible');
-            document.getElementById('legend').innerHTML = '<div id="legend-title">Destinations</div>';
-
-            const canvas = document.getElementById('train-canvas');
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
             if (events.length > 0) {
                 document.getElementById('sim-time').textContent = formatTimeOnly(simStartTime);
             }
-            document.getElementById('play-pause-btn').textContent = 'Play';
-            document.getElementById('play-pause-btn').classList.remove('pause');
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
-        }
 
-        window.addEventListener('resize', () => {
-            resizeCanvas();
-            drawTrains();
-        });
+            const mainContent = document.getElementById('main-content');
+            const trainDivs = mainContent.querySelectorAll('.train');
+            trainDivs.forEach(div => div.remove());
+
+            const btn = document.getElementById('play-pause-btn');
+            btn.textContent = 'Play';
+            btn.classList.remove('pause');
+        }
     </script>
 </body>
 </html>
