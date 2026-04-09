@@ -103,6 +103,7 @@ namespace WienerNeustadtSimulation.Models
                 "LeavingPreparation" => "LVP",
                 "OutboundTrainPreparation" => "OBTP",  // NEW
                 "DepartureDrive" => "DEPD",             // NEW
+                "ArrivalDrive" => "ARRD",             // NEW
                 "Departure" => "DEP",
                 _ => "ACT"
             };

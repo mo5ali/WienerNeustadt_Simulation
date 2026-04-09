@@ -50,7 +50,7 @@ namespace WienerNeustadtSimulation.Control
 
             _trainWagonGroupMaps = new Dictionary<string, Dictionary<string, Track>>();
         }
-       
+
         public void HandleTrainArrival(TrainDto trainDto, DateTime simTimeUtc)
         {
             var train = CreateTrainEntity(trainDto);
@@ -112,8 +112,9 @@ namespace WienerNeustadtSimulation.Control
                 requestedAt: _engine.Now
             );
 
-            var driveTime = driveActivity.CalculateFixedDuration(); // or just TimeSpan.FromMinutes(3) if hard-coded
+            var driveTime = driveActivity.CalculateFixedDuration();
 
+            // Log activity submission
             SimulationLogger.Instance.LogActivityEvent(
                 driveActivity.ActivityId,
                 "ArrivalDrive",
@@ -122,13 +123,15 @@ namespace WienerNeustadtSimulation.Control
                 details: $"Train {train.ID} driving to arrival track {assignedTrack.RealLifeID} (ETA: {driveTime.TotalMinutes} minutes)"
             );
 
+            // Wire up commencement: log Started, schedule Completed
             driveActivity.OnReadyToCommence = _ =>
             {
                 driveActivity.CommencedAt = _engine.Now;
                 SimulationLogger.Instance.LogActivityEvent(driveActivity.ActivityId, "ArrivalDrive", _engine.Now, status: "Started");
                 _engine.Schedule(
                     _engine.Now.Add(driveTime),
-                    () => {
+                    () =>
+                    {
                         driveActivity.CompletedAt = _engine.Now;
                         assignedTrack.CurrentOccupancies.Add(train.ID);
                         SimulationLogger.Instance.LogTrainEvent(train.ID, "ArrivedArrivalTrack", _engine.Now, assignedTrack.RealLifeID);
@@ -141,39 +144,9 @@ namespace WienerNeustadtSimulation.Control
                 );
             };
 
-            // Since no resources are needed, activity is ready immediately
-            driveActivity.OnReadyToCommence?.Invoke(null); // or your event arg type if needed
+            // No resources needed — commence immediately
+            driveActivity.OnReadyToCommence?.Invoke(null);
 
-            // Optionally: Event/log for activity creation
-            SimulationLogger.Instance.LogActivityEvent(
-                driveActivity.ActivityId,
-                "ArrivalDriving",
-                _engine.Now,
-                status: "Submitted",
-                details: $"Train {train.ID} driving to arrival track {assignedTrack.RealLifeID} (ETA: {driveTime.TotalMinutes} minutes)"
-            );
-
-            driveActivity.OnReadyToCommence = _ =>
-            {
-                driveActivity.CommencedAt = _engine.Now;
-                SimulationLogger.Instance.LogActivityEvent(driveActivity.ActivityId, "ArrivalDriving", _engine.Now, status: "Started");
-                _engine.Schedule(
-                    _engine.Now.Add(driveTime),
-                    () => {
-                        driveActivity.CompletedAt = _engine.Now;
-                        assignedTrack.CurrentOccupancies.Add(train.ID);
-                        SimulationLogger.Instance.LogTrainEvent(train.ID, "ArrivedArrivalTrack", _engine.Now, assignedTrack.RealLifeID);
-                        SimulationLogger.Instance.LogActivityEvent(driveActivity.ActivityId, "ArrivalDriving", _engine.Now, status: "Completed");
-                        var wagonGroupToTrackMap = RunSortingMethod(train);
-                        _trainWagonGroupMaps[train.ID] = wagonGroupToTrackMap;
-                        RequestTrainPreparation(train, assignedTrack);
-                    },
-                    $"ArrivalDrivingComplete-{train.ID}"
-                );
-            };
-            // Simulate immediate commencement since no resources needed
-            driveActivity.OnReadyToCommence?.Invoke(null); // or your event arg type if needed
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: train {train.ID} driving to arrival track {assignedTrack.RealLifeID} (ETA: {driveTime.TotalMinutes} minutes)");
             _entryQueue.Dequeue();
         }
         static string BuildTrainDetails(TrainDto t, Dictionary<string, WagonGroupDto> wagonGroupData)
@@ -333,7 +306,7 @@ namespace WienerNeustadtSimulation.Control
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: Commence '{activity.ActivityId}'");
             SimulationLogger.Instance.LogTrainEvent(train.ID, "PreparationStarted", _engine.Now);
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: length={activity.EntityLength:F1}m base={activity.BaseSecondsPerMeter:F1}s/m avgMult={activity.AverageWorkerMultiplier:F2} -> duration={duration.TotalSeconds:F0}s");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: length={activity.EntityLength:F1}m base={activity.BaseSecondsPerMeter:F1}s/m avgMult={activity.AverageWorkerMultiplier:F2} dur={duration.TotalMinutes:F1}min");
 
             _engine.Schedule(
                 _engine.Now.Add(duration),
