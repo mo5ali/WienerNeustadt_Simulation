@@ -186,6 +186,42 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
 
+            /* NEW: queue train container so we can place badge next to it */
+            .train.queue {
+                align-items: center;
+            }
+
+        .train-status {
+            margin-left: 8px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 1;
+            white-space: nowrap;
+            border: 1px solid rgba(0,0,0,0.25);
+            background: #7a0b0b; /* dark red */
+            color: #fff;
+            text-shadow: none;
+        }
+
+            .train-status.waiting {
+                background: #7a0b0b;
+            }
+
+            .train-status.driving {
+                background: #444;
+            }
+
+        /* NEW: greys to alternate by wagon group index */
+        .wagon-group.grey-a {
+            background: #9a9a9a !important;
+        }
+
+        .wagon-group.grey-b {
+            background: #c2c2c2 !important;
+        }
+
         .wagon-group {
             height: 18px;
             display: flex;
@@ -312,6 +348,19 @@
         let exitGateCount = 0;
         let trains = {};
 
+        // NEW: extra UI state per train
+        // trains[trainId] already holds wagonGroups etc. We'll attach UI fields too.
+        const arrivalTrackPositions = {
+            // TODO: adjust these to match your background image coordinates
+            // key is arrival track id (e.g. "703"), value is {x,y}
+            "703": { x: 500, y: 420 },
+            "727": { x: 500, y: 470 },
+            "725": { x: 500, y: 520 },
+            "723": { x: 500, y: 570 },
+            "721": { x: 500, y: 620 },
+            "709": { x: 500, y: 670 }
+        };
+
         const destColors = {
             "Graz": "#ff9800",
             "Vienna": "#2196f3",
@@ -427,13 +476,28 @@
                     details
                 };
 
+                // ActivityEvent parsing
+                if (eventType === 'ActivityEvent') {
+                    const [status, rest] = (details || '').split('|');
+                    eventObj.activityStatus = (status || '').trim();   // Submitted / Started / Completed
+                    eventObj.activityDetails = (rest || '').trim();
+                }
+
+                // Train entry parsing (this was in your old file — you still need it!)
                 if (eventType === 'TrainEvent' && eventAction === 'Entry') {
                     const trainData = parseTrainDetails(details);
                     if (trainData) {
-                        trains[entityId] = trainData;
+                        trains[entityId] = { ...trainData, ...(trains[entityId] || {}) };
                         eventObj.trainData = trainData;
                     }
                 }
+
+                // Store assigned arrival track
+                if (eventType === 'TrainEvent' && eventAction === 'AssignedArrivalTrack') {
+                    if (!trains[entityId]) trains[entityId] = {};
+                    trains[entityId].assignedArrivalTrack = details; // e.g. "703"
+                }
+
                 events.push(eventObj);
             }
 
@@ -578,22 +642,201 @@
         }
 
         function processEvent(event) {
+            // Train enters system: create in queue with waiting badge
             if (event.eventType === 'TrainEvent' && event.event === 'Entry' && event.trainData) {
-                drawTrain(event.entityId, event.trainData);
+                // ensure we keep the same object reference in trains
+                trains[event.entityId] = { ...event.trainData, ...(trains[event.entityId] || {}) };
+
+                // queue state defaults
+                trains[event.entityId].queueState = 'waiting';
+                trains[event.entityId].driveStart = null;
+                trains[event.entityId].driveEnd = null;
+
+                drawTrainInQueue(event.entityId);
+                return;
+            }
+
+            // Train gets arrival track assignment (still waiting)
+            if (event.eventType === 'TrainEvent' && event.event === 'AssignedArrivalTrack') {
+                if (!trains[event.entityId]) trains[event.entityId] = {};
+                trains[event.entityId].assignedArrivalTrack = event.details;
+                // update badge text if already drawn
+                updateTrainBadge(event.entityId);
+                return;
+            }
+
+            // ArrivalDrive activity lifecycle
+            if (event.eventType === 'ActivityEvent' && event.event === 'ArrivalDrive') {
+                // We need trainId; in your ActivityId pattern: Act_ARRD_11001_090000
+                const trainId = extractTrainIdFromActivityId(event.entityId);
+                if (!trainId) return;
+
+                if (!trains[trainId]) trains[trainId] = {};
+
+                if (event.activityStatus === 'Started') {
+                    trains[trainId].queueState = 'driving';
+                    trains[trainId].driveStart = event.timestamp;
+                    // end time unknown until Completed OR we can compute from Submitted ETA; simplest is wait for Completed.
+                    // But we can show "ETA --:--:--" until then.
+                    redrawTrainGreyed(trainId);
+                    updateTrainBadge(trainId);
+                    return;
+                }
+
+                if (event.activityStatus === 'Completed') {
+                    trains[trainId].driveEnd = event.timestamp;
+
+                    // remove from queue
+                    removeTrainFromQueue(trainId);
+
+                    // place on arrival track with original colors
+                    drawTrainOnArrivalTrack(trainId);
+                    return;
+                }
             }
         }
 
-        function drawTrain(trainId, trainData) {
+        function extractTrainIdFromActivityId(activityId) {
+            // examples: "Act_ARRD_11001_090000"
+            // Split by "_" and find a 5-digit token.
+            const parts = String(activityId || '').split('_');
+            for (const p of parts) {
+                if (/^\d{5}$/.test(p)) return p;
+            }
+            return null;
+        }
+        function getQueueIndex(trainId) {
+            // stable order by existing elements in DOM
+            const queueTrains = Array.from(document.querySelectorAll('.train.queue'));
+            const ids = queueTrains.map(el => el.dataset.trainId).filter(Boolean);
+
+            // if already present, keep its index
+            const existingIndex = ids.indexOf(trainId);
+            if (existingIndex >= 0) return existingIndex;
+
+            return ids.length; // append to bottom
+        }
+        function redrawTrainGreyed(trainId) {
+            const el = document.getElementById(`train-${trainId}`);
+            if (!el) return;
+
+            const wgEls = el.querySelectorAll('.wagon-group');
+            wgEls.forEach((wgEl, idx) => {
+                // idx corresponds to reversed order currently, but alternating still looks fine
+                wgEl.classList.remove('grey-a', 'grey-b');
+                wgEl.classList.add(idx % 2 === 0 ? 'grey-a' : 'grey-b');
+            });
+        }
+
+        function updateTrainBadge(trainId) {
+            const trainData = trains[trainId] || {};
+            const badge = document.getElementById(`train-badge-${trainId}`);
+            if (!badge) return;
+
+            const track = trainData.assignedArrivalTrack || '---';
+
+            if (trainData.queueState === 'driving') {
+                badge.classList.remove('waiting');
+                badge.classList.add('driving');
+
+                // Prefer showing end time if known; else show placeholder
+                if (trainData.driveEnd && trainData.driveStart) {
+                    badge.textContent = `Driving to track ${track}, ETA ${formatTimeOnly(trainData.driveEnd)}`;
+                } else {
+                    badge.textContent = `Driving to track ${track}, ETA --:--:--`;
+                }
+                return;
+            }
+
+            // default waiting
+            badge.classList.remove('driving');
+            badge.classList.add('waiting');
+            badge.textContent = 'waiting';
+        }
+        function removeTrainFromQueue(trainId) {
+            const el = document.getElementById(`train-${trainId}`);
+            if (el) el.remove();
+            relayoutQueue();
+        }
+
+        function relayoutQueue() {
+            const queueTrains = Array.from(document.querySelectorAll('.train.queue'));
+            queueTrains.forEach((el, idx) => {
+                el.style.top = `${80 + idx * 35}px`;
+            });
+        }
+        function drawTrainInQueue(trainId) {
+            const trainData = trains[trainId];
+            if (!trainData || !trainData.wagonGroups) return;
+
+            // remove any existing element first
+            const existing = document.getElementById(`train-${trainId}`);
+            if (existing) existing.remove();
+
+            const trainDiv = document.createElement('div');
+            trainDiv.id = `train-${trainId}`;
+            trainDiv.className = 'train queue';
+            trainDiv.dataset.trainId = trainId;
+
+            // queue placement
+            trainDiv.style.left = '50px';
+            const queueIndex = getQueueIndex(trainId);
+            trainDiv.style.top = `${80 + queueIndex * 35}px`;
+
+            // wagons (normal colors for waiting; grey will be applied in redrawTrainGreyed)
+            const pixelsPerMeter = 2;
+            for (const wg of [...trainData.wagonGroups].reverse()) {
+                const wgDiv = document.createElement('div');
+                wgDiv.className = 'wagon-group';
+                wgDiv.style.width = `${wg.length * pixelsPerMeter}px`;
+                wgDiv.style.background = destColors[wg.destination] || destColors['Unknown'];
+                wgDiv.textContent = wg.id;
+                wgDiv.title = `${wg.id}: ${wg.length}m → ${wg.destination}`;
+                trainDiv.appendChild(wgDiv);
+            }
+
+            const locoDiv = document.createElement('div');
+            locoDiv.className = 'locomotive';
+            locoDiv.style.width = '24px';
+            locoDiv.style.background = '#222';
+            locoDiv.title = `Locomotive for train ${trainId}`;
+            locoDiv.textContent = 'L';
+            trainDiv.appendChild(locoDiv);
+
+            // NEW: status badge
+            const badge = document.createElement('div');
+            badge.className = 'train-status waiting';
+            badge.id = `train-badge-${trainId}`;
+            badge.textContent = 'waiting';
+            trainDiv.appendChild(badge);
+
+            document.getElementById('main-content').appendChild(trainDiv);
+
+            // if train already driving, apply grey state
+            if (trainData.queueState === 'driving') {
+                redrawTrainGreyed(trainId);
+                updateTrainBadge(trainId);
+            }
+        }
+
+        function drawTrainOnArrivalTrack(trainId) {
+            const trainData = trains[trainId];
+            if (!trainData || !trainData.wagonGroups) return;
+
+            // remove queue version if any
             const existing = document.getElementById(`train-${trainId}`);
             if (existing) existing.remove();
 
             const trainDiv = document.createElement('div');
             trainDiv.id = `train-${trainId}`;
             trainDiv.className = 'train';
-            trainDiv.style.left = '50px';
-            trainDiv.style.top = `${50 + (Object.keys(document.querySelectorAll('.train')).length) * 35}px`;
+            trainDiv.dataset.trainId = trainId;
 
+            const track = String(trainData.assignedArrivalTrack || '');
+            const pos = arrivalTrackPositions[track] || { x: 500, y: 420 };
 
+            trainDiv.style.left = `${pos.x}px`;
+            trainDiv.style.top = `${pos.y}px`;
 
             const pixelsPerMeter = 2;
             for (const wg of [...trainData.wagonGroups].reverse()) {
@@ -606,14 +849,13 @@
                 trainDiv.appendChild(wgDiv);
             }
 
-            // Locomotive box: must be on the RIGHT end (before the *first* WG in real order)
             const locoDiv = document.createElement('div');
             locoDiv.className = 'locomotive';
             locoDiv.style.width = '24px';
             locoDiv.style.background = '#222';
             locoDiv.title = `Locomotive for train ${trainId}`;
-            locoDiv.textContent = 'L'; // optional
-            trainDiv.appendChild(locoDiv)
+            locoDiv.textContent = 'L';
+            trainDiv.appendChild(locoDiv);
 
             document.getElementById('main-content').appendChild(trainDiv);
         }
