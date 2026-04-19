@@ -61,7 +61,7 @@ namespace WienerNeustadtSimulation.Models
             ControlUnit = controlUnit;
             RequestedAt = requestedAt;
 
-            ActivityId = GenerateActivityId(activityType, requestedAt, controlUnit, entityId);
+            ActivityId = GenerateActivityId(activityType, requestedAt, controlUnit, entityId, location);
 
             // Don't print "initialized" for sub-activities or activities that already have a preview message
             if (activityType != "PushOffDrive" &&
@@ -80,11 +80,13 @@ namespace WienerNeustadtSimulation.Models
             ActivityRegistry.Instance.Register(this);
         }
 
-        private string GenerateActivityId(string activityType, DateTime timestamp, string cu, string entityId)
+        private string GenerateActivityId(string activityType, DateTime timestamp, string cu, string entityId, string location)
         {
             string abbreviation = GetActivityAbbreviation(activityType);
             string timestampStr = timestamp.ToString("HHmmss");
-            return $"Act_{abbreviation}_{entityId}_{timestampStr}";
+            // Keep the location token IDSafe — strip anything that might break downstream splits on '_'.
+            string locToken = string.IsNullOrEmpty(location) ? "NA" : location.Replace('_', '-').Replace(' ', '-');
+            return $"Act_{abbreviation}_{entityId}_{timestampStr}_{locToken}";
         }
 
         protected virtual string GetActivityAbbreviation(string activityType)

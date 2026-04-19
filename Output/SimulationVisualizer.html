@@ -118,7 +118,7 @@
             display: none;
             width: 100%;
             height: calc(100vh - 8px - 70px);
-            background-image: url('vis_background_v1.png');
+            background-image: url('vis_background_v2.png');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
@@ -156,27 +156,49 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 4px;
+            gap: 2px;
+            width: 70px;
         }
 
+            /* Worker graphic shrunk 35% (40px -> 26px) */
             .worker-icon img {
-                width: 40px;
-                height: 40px;
+                width: 26px;
+                height: 26px;
                 object-fit: contain;
                 filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
             }
 
-            .worker-icon span {
-                font-size: 9px;
-                color: white;
-                text-shadow: 1px 1px 2px black;
+            /* First-name label placed ABOVE the graphic, black */
+            .worker-icon .worker-name {
+                font-size: 10px;
+                color: #000;
                 font-weight: 600;
                 text-align: center;
-                max-width: 50px;
+                max-width: 70px;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
+
+            /* Status marker placed BELOW the graphic */
+            .worker-icon .worker-status {
+                font-size: 8px;
+                font-weight: 700;
+                text-align: center;
+                padding: 1px 5px;
+                border-radius: 8px;
+                white-space: nowrap;
+                line-height: 1.3;
+                letter-spacing: 0.2px;
+                color: white;
+                background: #9e9e9e; /* default: Idle */
+                min-width: 50px;
+            }
+
+            .worker-icon .worker-status.status-Idle          { background: #9e9e9e; }
+            .worker-icon .worker-status.status-MovingToWork  { background: #2196F3; }
+            .worker-icon .worker-status.status-Working       { background: #4CAF50; }
+            .worker-icon .worker-status.status-MovingToRest  { background: #FF9800; }
 
         .train {
             position: absolute;
@@ -353,12 +375,15 @@
         const arrivalTrackPositions = {
             // TODO: adjust these to match your background image coordinates
             // key is arrival track id (e.g. "703"), value is {x,y}
-            "703": { x: 500, y: 420 },
-            "727": { x: 500, y: 470 },
-            "725": { x: 500, y: 520 },
-            "723": { x: 500, y: 570 },
-            "721": { x: 500, y: 620 },
-            "709": { x: 500, y: 670 }
+            "703": { x: 600, y: 815 },
+            "705": { x: 500, y: 775 },
+            "707": { x: 500, y: 735 },
+            "709": { x: 750, y: 690 },
+            "703": { x: 650, y: 815 },
+            "727": { x: 625, y: 325 },
+            "725": { x: 750, y: 365 },
+            "723": { x: 780, y: 405 },
+            "721": { x: 810, y: 445 }
         };
 
         const destColors = {
@@ -458,8 +483,23 @@
 
                 const simTimeStr = parts[0];
                 const eventType = parts[1];
-                const eventAction = parts[2];
-                const entityId = parts[3];
+
+                // Column order differs by event type:
+                //   TrainEvent:       SimTime ; EventType ; ActionName ; EntityId   ; Details
+                //   ActivityEvent:    SimTime ; EventType ; ActivityId ; ActionName ; Status|Details
+                //   WorkerEvent:      SimTime ; EventType ; EntityId   ; ActionName ; Details
+                //   WagonGroupEvent:  SimTime ; EventType ; EntityId   ; ActionName ; Details
+                let eventAction, entityId;
+                if (eventType === 'ActivityEvent' ||
+                    eventType === 'WorkerEvent' ||
+                    eventType === 'WagonGroupEvent') {
+                    entityId    = parts[2];
+                    eventAction = parts[3];
+                } else {
+                    // TrainEvent (and any other legacy rows that follow this layout)
+                    eventAction = parts[2];
+                    entityId    = parts[3];
+                }
                 const details = parts.length > 4 ? parts[4] : '';
 
                 const timestamp = new Date(simTimeStr);
@@ -511,11 +551,14 @@
             const grid = document.getElementById('worker-grid');
             grid.innerHTML = '';
             for (const worker of workers) {
+                const firstName = (worker.name || '').split(/\s+/)[0] || worker.id;
                 const div = document.createElement('div');
                 div.className = 'worker-icon';
+                div.id = `worker-${worker.id}`;
                 div.innerHTML = `
+                                <span class="worker-name">${firstName}</span>
                                 <img src="worker_icon.png" alt="${worker.name}" title="${worker.name} (${worker.id})">
-                                <span>${worker.name}</span>
+                                <span class="worker-status status-Idle">Idle</span>
                             `;
                 grid.appendChild(div);
             }
@@ -525,14 +568,23 @@
             const grid = document.getElementById('shuntloco-grid');
             grid.innerHTML = '';
             for (const loco of shuntLocos) {
+                const label = loco.name || loco.id;
                 const div = document.createElement('div');
                 div.className = 'worker-icon';
+                div.id = `shuntloco-${loco.id}`;
                 div.innerHTML = `
-                                <img src="shunting_loco.png" alt="${loco.name}" title="${loco.name} (${loco.id})">
-                                <span>${loco.name}</span>
+                                <span class="worker-name">${label}</span>
+                                <img src="shunting_loco.png" alt="${label}" title="${label} (${loco.id})">
                             `;
                 grid.appendChild(div);
             }
+        }
+
+        function updateWorkerStatus(workerId, status) {
+            const el = document.querySelector(`#worker-${workerId} .worker-status`);
+            if (!el) return; // not a worker we render (e.g. a loco / train-loco id)
+            el.textContent = status;
+            el.className = `worker-status status-${status}`;
         }
 
         function parseTrainDetails(details) {
@@ -642,6 +694,20 @@
         }
 
         function processEvent(event) {
+            // Worker status marker (Idle / MovingToWork / Working / MovingToRest)
+            if (event.eventType === 'WorkerEvent') {
+                let newStatus = null;
+                switch (event.event) {
+                    case 'TravelStarted': newStatus = 'MovingToWork'; break;
+                    case 'Arrived':       newStatus = 'Working';      break;
+                    case 'ReturnStarted': newStatus = 'MovingToRest'; break; // emitted later once the sim logs return-travel start
+                    case 'Returned':      newStatus = 'Idle';         break;
+                    // 'Allocated' intentionally ignored — TravelStarted is the state-changing event
+                }
+                if (newStatus) updateWorkerStatus(event.entityId, newStatus);
+                return;
+            }
+
             // Train enters system: create in queue with waiting badge
             if (event.eventType === 'TrainEvent' && event.event === 'Entry' && event.trainData) {
                 // ensure we keep the same object reference in trains
@@ -873,6 +939,12 @@
             const mainContent = document.getElementById('main-content');
             const trainDivs = mainContent.querySelectorAll('.train');
             trainDivs.forEach(div => div.remove());
+
+            // Reset every worker's status marker back to Idle
+            document.querySelectorAll('.worker-icon .worker-status').forEach(el => {
+                el.textContent = 'Idle';
+                el.className = 'worker-status status-Idle';
+            });
 
             const btn = document.getElementById('play-pause-btn');
             btn.textContent = 'Play';

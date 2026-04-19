@@ -111,7 +111,7 @@ namespace WienerNeustadtSimulation.Control
 
             if (isTrackEmpty)
             {
-                var activityIdPreview = $"Act_SEC_{wagonGroup.Id}_{time:HHmmss}";
+                var activityIdPreview = $"Act_SEC_{wagonGroup.Id}_{time:HHmmss}_{trackId}";
                 Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} is EMPTY → initialize {activityIdPreview}");
                 SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "SecuringRequested", time);
 
@@ -129,7 +129,7 @@ namespace WienerNeustadtSimulation.Control
                 var existingTrain = _trainsByTrack.ContainsKey(trackId) ? _trainsByTrack[trackId] : null;
                 string couplingToId = existingTrain?.Id ?? "existing-wgs";
 
-                var activityIdPreview = $"Act_COP_{wagonGroup.Id}_{time:HHmmss}";
+                var activityIdPreview = $"Act_COP_{wagonGroup.Id}_{time:HHmmss}_{trackId}";
                 Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} has WGs → initialize {activityIdPreview}");
                 SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "CouplingRequested", time);
 
@@ -246,7 +246,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void RequestOutboundTrainPreparation(OutboundTrain train, DateTime time)
         {
-            var activityIdPreview = $"Act_OBTP_{train.Id}_{time:HHmmss}";
+            var activityIdPreview = $"Act_OBTP_{train.Id}_{time:HHmmss}_{train.CurrentTrackId}";
             Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: initialized '{activityIdPreview}'");
             SimulationLogger.Instance.LogTrainEvent(train.Id, "OBTPRequested", time);
 
@@ -312,7 +312,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void RequestDepartureDrive(OutboundTrain train, DateTime time)
         {
-            var activityIdPreview = $"Act_DEPD_{train.Id}_{time:HHmmss}";
+            var activityIdPreview = $"Act_DEPD_{train.Id}_{time:HHmmss}_{train.CurrentTrackId}";
             Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: initialized '{activityIdPreview}'");
             SimulationLogger.Instance.LogTrainEvent(train.Id, "DEPDRequested", time);
 

@@ -166,6 +166,14 @@ namespace WienerNeustadtSimulation.Control
             if (allResources.Count > 0)
                 Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {string.Join(" ", allResources)} traveling to track {activity.Location} for '{activity.ActivityId}'");
 
+            // Log travel-start events so the visualizer can flip status markers to "MovingToWork"
+            foreach (var wId in allocatedWorkers)
+                SimulationLogger.Instance.LogWorkerEvent(wId, "TravelStarted", _engine.Now, activity.ActivityId);
+            foreach (var lId in allocatedLocos)
+                SimulationLogger.Instance.LogWorkerEvent(lId, "TravelStarted", _engine.Now, activity.ActivityId);
+            foreach (var tlId in allocatedTrainLocos)
+                SimulationLogger.Instance.LogWorkerEvent(tlId, "TravelStarted", _engine.Now, activity.ActivityId);
+
             // Schedule travel for workers
             foreach (var workerId in allocatedWorkers)
             {
