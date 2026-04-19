@@ -289,7 +289,7 @@ namespace WienerNeustadtSimulation.Control
 
             if (workerIds.Count > 0)
             {
-                ReturnWorkersBatch(workerIds);
+                ReturnWorkersBatch(workerIds, activity.ActivityId);
             }
 
             // Locomotives (shunting or train)
@@ -305,25 +305,40 @@ namespace WienerNeustadtSimulation.Control
                     var shuntingLocos = locoIds.Except(trainLocos).ToList();
 
                     if (trainLocos.Any())
-                        ReturnTrainLocosBatch(trainLocos);
+                        ReturnTrainLocosBatch(trainLocos, activity.ActivityId);
 
                     if (shuntingLocos.Any())
-                        ReturnLocosBatch(shuntingLocos);
+                        ReturnLocosBatch(shuntingLocos, activity.ActivityId);
                 }
             }
         }
 
-        private void ReturnTrainLocosBatch(List<string> trainLocoIds)
+        private void ReturnTrainLocosBatch(List<string> trainLocoIds, string activityId)
         {
+            // Train locos leave the work site now (ReturnStarted) and become available
+            // again in the train-loco waiting area after the train-loco travel time.
+            var locoList = string.Join(", ", trainLocoIds);
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {locoList} leaving '{activityId}' to return to train waiting area");
+
             foreach (var tlId in trainLocoIds)
             {
-                _availableTrainLocoIds.Add(tlId);
-                SimulationLogger.Instance.LogWorkerEvent(tlId, "Returned", _engine.Now);
+                SimulationLogger.Instance.LogWorkerEvent(tlId, "ReturnStarted", _engine.Now, activityId);
+
+                var travelTime = CalculateTrainLocoTravelTime();
+                var idCaptured = tlId;
+                _engine.Schedule(
+                    _engine.Now.Add(travelTime),
+                    () => CompleteTrainLocoReturn(idCaptured),
+                    $"TrainLocoReturns-{idCaptured}-{activityId}"
+                );
             }
+        }
 
-            var locoList = string.Join(", ", trainLocoIds);
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {locoList} returned to train waiting area");
-
+        private void CompleteTrainLocoReturn(string trainLocoId)
+        {
+            _availableTrainLocoIds.Add(trainLocoId);
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {trainLocoId} arrived at train waiting area (available)");
+            SimulationLogger.Instance.LogWorkerEvent(trainLocoId, "Returned", _engine.Now);
             ProcessQueue();
         }
 
@@ -341,35 +356,72 @@ namespace WienerNeustadtSimulation.Control
             ProcessQueue();
         }
 
-        private void ReturnWorkersBatch(List<string> workerIds)
+        private void ReturnWorkersBatch(List<string> workerIds, string activityId)
         {
-            foreach (var workerId in workerIds)
-            {
-                _availableWorkerIds.Add(workerId);
-                SimulationLogger.Instance.LogWorkerEvent(workerId, "Returned", _engine.Now);
-            }
-
+            // Activity just ended — workers leave the work site now (ReturnStarted),
+            // travel for their own worker-specific time, then hit the pool and emit Returned.
             var names = workerIds.Select(wId =>
             {
                 var w = _workers.FirstOrDefault(w => w.Id == wId);
                 return w?.Name?.Split(' ')[0] ?? wId;
             });
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {string.Join(", ", names)} available, returning to waiting area");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {string.Join(", ", names)} leaving '{activityId}' to return to waiting area");
+
+            foreach (var workerId in workerIds)
+            {
+                SimulationLogger.Instance.LogWorkerEvent(workerId, "ReturnStarted", _engine.Now, activityId);
+
+                var travelTime = CalculateWorkerTravelTime(workerId);
+                var wIdCaptured = workerId;
+                _engine.Schedule(
+                    _engine.Now.Add(travelTime),
+                    () => CompleteWorkerReturn(wIdCaptured),
+                    $"WorkerReturns-{wIdCaptured}-{activityId}"
+                );
+            }
+        }
+
+        // Delayed pool-return callback. Runs after the worker has actually travelled back
+        // to the waiting area. This is the moment the worker becomes available again and
+        // the visualizer teleports them back into the grid.
+        private void CompleteWorkerReturn(string workerId)
+        {
+            _availableWorkerIds.Add(workerId);
+
+            var worker = _workers.FirstOrDefault(w => w.Id == workerId);
+            string firstName = worker?.Name?.Split(' ')[0] ?? workerId;
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {firstName} arrived at waiting area (available)");
+            SimulationLogger.Instance.LogWorkerEvent(workerId, "Returned", _engine.Now);
 
             ProcessQueue();
         }
 
-        private void ReturnLocosBatch(List<string> locoIds)
+        private void ReturnLocosBatch(List<string> locoIds, string activityId)
         {
+            // Shunting locos leave the work site now (ReturnStarted), travel back to the
+            // pool for a fixed loco travel time, then emit Returned and become available.
+            var locoList = string.Join(", ", locoIds);
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {locoList} leaving '{activityId}' to return to pool");
+
             foreach (var locoId in locoIds)
             {
-                _availableLocoIds.Add(locoId);
-                SimulationLogger.Instance.LogWorkerEvent(locoId, "Returned", _engine.Now);
+                SimulationLogger.Instance.LogWorkerEvent(locoId, "ReturnStarted", _engine.Now, activityId);
+
+                var travelTime = CalculateLocoTravelTime();
+                var idCaptured = locoId;
+                _engine.Schedule(
+                    _engine.Now.Add(travelTime),
+                    () => CompleteShuntLocoReturn(idCaptured),
+                    $"ShuntLocoReturns-{idCaptured}-{activityId}"
+                );
             }
+        }
 
-            var locoList = string.Join(", ", locoIds);
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {locoList} returned to pool");
-
+        private void CompleteShuntLocoReturn(string locoId)
+        {
+            _availableLocoIds.Add(locoId);
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: {locoId} arrived at pool (available)");
+            SimulationLogger.Instance.LogWorkerEvent(locoId, "Returned", _engine.Now);
             ProcessQueue();
         }
 

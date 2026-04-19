@@ -168,6 +168,12 @@
                 filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
             }
 
+            /* Shunting loco graphic — keep at original 40px (don't inherit the worker shrink) */
+            #shuntloco-grid .worker-icon img {
+                width: 40px;
+                height: 40px;
+            }
+
             /* First-name label placed ABOVE the graphic, black */
             .worker-icon .worker-name {
                 font-size: 10px;
@@ -197,8 +203,15 @@
 
             .worker-icon .worker-status.status-Idle          { background: #9e9e9e; }
             .worker-icon .worker-status.status-MovingToWork  { background: #2196F3; }
+            .worker-icon .worker-status.status-WaitOtherR    { background: #FFC107; color: #222; }
             .worker-icon .worker-status.status-Working       { background: #4CAF50; }
             .worker-icon .worker-status.status-MovingToRest  { background: #FF9800; }
+
+            /* Grey the graphic while the worker is in transit (either direction) */
+            .worker-icon[data-state="MovingToWork"] img,
+            .worker-icon[data-state="MovingToRest"] img {
+                filter: grayscale(1) brightness(0.9) opacity(0.55);
+            }
 
         .train {
             position: absolute;
@@ -211,13 +224,15 @@
             /* NEW: queue train container so we can place badge next to it */
             .train.queue {
                 align-items: center;
+                border: none;
+                box-shadow: none;
             }
 
         .train-status {
-            margin-left: 8px;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 10px;
+            margin-left: 5px;
+            padding: 1px 5px;
+            border-radius: 6px;
+            font-size: 7px;
             font-weight: 700;
             line-height: 1;
             white-space: nowrap;
@@ -235,6 +250,10 @@
                 background: #444;
             }
 
+            .train-status.activity {
+                background: #0b5a7a; /* teal/blue for ongoing activity */
+            }
+
         /* NEW: greys to alternate by wagon group index */
         .wagon-group.grey-a {
             background: #9a9a9a !important;
@@ -245,12 +264,13 @@
         }
 
         .wagon-group {
-            height: 18px;
+            /* Thickness scaled to ~60% of original (18 → 11) for better track-scale match */
+            height: 11px;
             display: flex;
             align-items: center;
             justify-content: center;
             border-right: 1px solid rgba(0,0,0,0.2);
-            font-size: 10px;
+            font-size: 7px;
             color: white;
             font-weight: bold;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
@@ -261,7 +281,8 @@
             }
 
         .locomotive {
-            height: 18px;
+            /* Thickness scaled to ~60% of original (18 → 11) to match wagon group */
+            height: 11px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -269,7 +290,7 @@
             border-right: none;
             border-radius: 0 2px 2px 0;
             color: white;
-            font-size: 10px;
+            font-size: 7px;
             font-weight: bold;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
         }
@@ -385,6 +406,30 @@
             "723": { x: 780, y: 405 },
             "721": { x: 810, y: 445 }
         };
+
+        // Classification track positions — fill in as needed so workers doing SEC / COP / OBTP / DEPD
+        // on these tracks teleport to the correct spot. Unknown tracks fall back to a sensible default.
+        const classificationTrackPositions = {
+            // "317": { x: 820, y: 540 },
+            // "319": { x: 820, y: 575 },
+        };
+
+        // Unified track -> {x,y} lookup used by worker teleports.
+        function getTrackPosition(trackId) {
+            if (!trackId) return null;
+            if (arrivalTrackPositions[trackId]) return arrivalTrackPositions[trackId];
+            if (classificationTrackPositions[trackId]) return classificationTrackPositions[trackId];
+            return null; // unknown — caller will skip the teleport
+        }
+
+        // Activity IDs now look like: Act_ITP_11001_090500_725  →  last token is the location
+        function extractLocationFromActivityId(activityId) {
+            const s = String(activityId || '');
+            if (!s) return null;
+            const parts = s.split('_');
+            if (parts.length < 2) return null;
+            return parts[parts.length - 1];
+        }
 
         const destColors = {
             "Graz": "#ff9800",
@@ -581,10 +626,87 @@
         }
 
         function updateWorkerStatus(workerId, status) {
-            const el = document.querySelector(`#worker-${workerId} .worker-status`);
-            if (!el) return; // not a worker we render (e.g. a loco / train-loco id)
+            const root = document.getElementById(`worker-${workerId}`);
+            if (!root) return; // not a worker we render (e.g. a loco / train-loco id)
+            const el = root.querySelector('.worker-status');
+            if (!el) return;
             el.textContent = status;
             el.className = `worker-status status-${status}`;
+            root.dataset.state = status;
+        }
+
+        // Horizontal spacing between workers standing on the same track (center-to-center).
+        const WORKER_TRACK_SLOT_PX = 30;
+        // Lift workers a little above the track line for clarity.
+        const WORKER_TRACK_Y_OFFSET_PX = -20;
+
+        // Teleport a worker onto the track they're working at.
+        // Leaves a hidden placeholder in the grid so the grid layout stays stable.
+        // Multiple workers on the same track sit side-by-side using a first-free-slot scheme.
+        function teleportWorkerToTrack(workerId, trackId) {
+            const worker = document.getElementById(`worker-${workerId}`);
+            if (!worker) return;
+            const basePos = getTrackPosition(trackId);
+            if (!basePos) return; // unknown track — leave the worker in the grid
+
+            // If this worker is already at this exact track, keep them where they are.
+            if (worker.dataset.teleported === '1' && worker.dataset.atTrack === trackId) {
+                return;
+            }
+
+            // Pick the first free slot at this track (stable — existing workers don't reshuffle).
+            const peers = Array.from(
+                document.querySelectorAll(`.worker-icon[data-at-track="${trackId}"]`)
+            ).filter(w => w.id !== worker.id);
+            const used = new Set(
+                peers.map(w => parseInt(w.dataset.slot, 10)).filter(n => !isNaN(n))
+            );
+            let slot = 0;
+            while (used.has(slot)) slot++;
+
+            // First time out of the grid? Drop a same-size invisible placeholder so nothing reflows,
+            // then reparent the worker into the main map area.
+            if (worker.dataset.teleported !== '1') {
+                const rect = worker.getBoundingClientRect();
+                const ph = document.createElement('div');
+                ph.className = 'worker-icon-placeholder';
+                ph.id = `worker-placeholder-${workerId}`;
+                ph.style.cssText = `width:${rect.width}px;height:${rect.height}px;visibility:hidden;`;
+                worker.parentNode.insertBefore(ph, worker);
+
+                const main = document.getElementById('main-content');
+                if (main) main.appendChild(worker);
+            }
+
+            worker.style.position = 'absolute';
+            worker.style.left = `${basePos.x + slot * WORKER_TRACK_SLOT_PX}px`;
+            worker.style.top  = `${basePos.y + WORKER_TRACK_Y_OFFSET_PX}px`;
+            worker.style.width = 'auto'; // let the icon shrink to content so names don't collide
+            worker.style.zIndex = '5';
+            worker.dataset.teleported = '1';
+            worker.dataset.atTrack = trackId;
+            worker.dataset.slot = String(slot);
+        }
+
+        // Put a previously-teleported worker back into their grid slot.
+        function teleportWorkerBackToGrid(workerId) {
+            const worker = document.getElementById(`worker-${workerId}`);
+            if (!worker) return;
+            if (worker.dataset.teleported !== '1') return;
+
+            const ph = document.getElementById(`worker-placeholder-${workerId}`);
+            if (ph && ph.parentNode) {
+                ph.parentNode.insertBefore(worker, ph);
+                ph.remove();
+            }
+            worker.style.position = '';
+            worker.style.left = '';
+            worker.style.top = '';
+            worker.style.width = '';
+            worker.style.zIndex = '';
+            delete worker.dataset.teleported;
+            delete worker.dataset.atTrack;
+            delete worker.dataset.slot;
         }
 
         function parseTrainDetails(details) {
@@ -695,16 +817,36 @@
 
         function processEvent(event) {
             // Worker status marker (Idle / MovingToWork / Working / MovingToRest)
+            // + physical teleport between the worker grid and the track they're working at.
             if (event.eventType === 'WorkerEvent') {
+                const workerId = event.entityId;
+                // For TravelStarted / Arrived the `details` field carries the activity ID,
+                // whose last token is the track the activity runs on.
+                const trackId = extractLocationFromActivityId(event.details);
+
                 let newStatus = null;
                 switch (event.event) {
-                    case 'TravelStarted': newStatus = 'MovingToWork'; break;
-                    case 'Arrived':       newStatus = 'Working';      break;
-                    case 'ReturnStarted': newStatus = 'MovingToRest'; break; // emitted later once the sim logs return-travel start
-                    case 'Returned':      newStatus = 'Idle';         break;
+                    case 'TravelStarted':
+                        // Worker leaves the grid: still drawn there as MovingToWork, but hasn't arrived yet.
+                        newStatus = 'MovingToWork';
+                        break;
+                    case 'Arrived':
+                        // Worker is on site — teleport to the track, flip marker to Working.
+                        newStatus = 'Working';
+                        if (trackId) teleportWorkerToTrack(workerId, trackId);
+                        break;
+                    case 'ReturnStarted':
+                        // Emitted later once the sim logs return-travel start.
+                        newStatus = 'MovingToRest';
+                        break;
+                    case 'Returned':
+                        // Worker is back in the pool — put them back in the grid.
+                        newStatus = 'Idle';
+                        teleportWorkerBackToGrid(workerId);
+                        break;
                     // 'Allocated' intentionally ignored — TravelStarted is the state-changing event
                 }
-                if (newStatus) updateWorkerStatus(event.entityId, newStatus);
+                if (newStatus) updateWorkerStatus(workerId, newStatus);
                 return;
             }
 
@@ -751,6 +893,7 @@
 
                 if (event.activityStatus === 'Completed') {
                     trains[trainId].driveEnd = event.timestamp;
+                    trains[trainId].queueState = 'onTrack';
 
                     // remove from queue
                     removeTrainFromQueue(trainId);
@@ -760,6 +903,55 @@
                     return;
                 }
             }
+
+            // Generic ActivityEvent lifecycle (all activity types except ArrivalDrive,
+            // which has custom handling above). Shows the running activity name on the
+            // train's status badge while it's in progress, then reverts to "Waiting".
+            if (event.eventType === 'ActivityEvent' && event.event !== 'ArrivalDrive') {
+                const trainId = findTrainForActivity(event.entityId);
+                if (!trainId) return;
+
+                if (!trains[trainId]) trains[trainId] = {};
+                if (!trains[trainId].activeActivities) trains[trainId].activeActivities = [];
+
+                if (event.activityStatus === 'Started') {
+                    trains[trainId].activeActivities.push(event.event);
+                    updateTrainBadge(trainId);
+                    return;
+                }
+
+                if (event.activityStatus === 'Completed') {
+                    const arr = trains[trainId].activeActivities;
+                    // Remove most recent matching entry (handles overlapping activities of same type)
+                    const idx = arr.lastIndexOf(event.event);
+                    if (idx >= 0) arr.splice(idx, 1);
+                    updateTrainBadge(trainId);
+                    return;
+                }
+            }
+        }
+
+        // Map an ActivityId to the trainId it affects.
+        // ActivityId format: Act_<ABBR>_<EntityId>_<HHMMSS>_<Location>
+        //   - EntityId is the train ID for train-level activities (ITP, DEP, OBTP, DEPD, ARRD),
+        //   - or a wagon-group ID for wagon-group activities (SEC, COP, PO, ...).
+        function findTrainForActivity(activityId) {
+            const parts = String(activityId || '').split('_');
+            if (parts.length < 3) return null;
+            const entityId = parts[2];
+
+            // Fast path: entity is a known train.
+            if (trains[entityId]) return entityId;
+
+            // Fall back to scanning wagon groups for a match.
+            for (const tId in trains) {
+                const t = trains[tId];
+                if (!t || !t.wagonGroups) continue;
+                for (const wg of t.wagonGroups) {
+                    if (wg.id === entityId) return tId;
+                }
+            }
+            return null;
         }
 
         function extractTrainIdFromActivityId(activityId) {
@@ -802,22 +994,25 @@
             const track = trainData.assignedArrivalTrack || '---';
 
             if (trainData.queueState === 'driving') {
-                badge.classList.remove('waiting');
+                badge.classList.remove('waiting', 'activity');
                 badge.classList.add('driving');
+                badge.textContent = `Driving to track ${track}`;
+                return;
+            }
 
-                // Prefer showing end time if known; else show placeholder
-                if (trainData.driveEnd && trainData.driveStart) {
-                    badge.textContent = `Driving to track ${track}, ETA ${formatTimeOnly(trainData.driveEnd)}`;
-                } else {
-                    badge.textContent = `Driving to track ${track}, ETA --:--:--`;
-                }
+            // If any activity is currently running on this train, show its type.
+            const active = trainData.activeActivities;
+            if (active && active.length > 0) {
+                badge.classList.remove('waiting', 'driving');
+                badge.classList.add('activity');
+                badge.textContent = active[active.length - 1]; // most recent activity
                 return;
             }
 
             // default waiting
-            badge.classList.remove('driving');
+            badge.classList.remove('driving', 'activity');
             badge.classList.add('waiting');
-            badge.textContent = 'waiting';
+            badge.textContent = 'Waiting';
         }
         function removeTrainFromQueue(trainId) {
             const el = document.getElementById(`train-${trainId}`);
@@ -850,7 +1045,7 @@
             trainDiv.style.top = `${80 + queueIndex * 35}px`;
 
             // wagons (normal colors for waiting; grey will be applied in redrawTrainGreyed)
-            const pixelsPerMeter = 2;
+            const pixelsPerMeter = 1.2;  // scaled to ~60% to better match the background track lines
             for (const wg of [...trainData.wagonGroups].reverse()) {
                 const wgDiv = document.createElement('div');
                 wgDiv.className = 'wagon-group';
@@ -901,10 +1096,21 @@
             const track = String(trainData.assignedArrivalTrack || '');
             const pos = arrivalTrackPositions[track] || { x: 500, y: 420 };
 
-            trainDiv.style.left = `${pos.x}px`;
+            const pixelsPerMeter = 1.2;  // scaled to ~60% to better match the background track lines
+            const locoWidthPx = 24;
+
+            // Compute total train-body width (wagons + locomotive) so we can
+            // anchor the train by its RIGHT edge (the right side of the locomotive)
+            // at the track's reference point. The status badge is not counted —
+            // it floats further right of that anchor.
+            let trainBodyWidthPx = locoWidthPx;
+            for (const wg of trainData.wagonGroups) {
+                trainBodyWidthPx += wg.length * pixelsPerMeter;
+            }
+
+            trainDiv.style.left = `${pos.x - trainBodyWidthPx}px`;
             trainDiv.style.top = `${pos.y}px`;
 
-            const pixelsPerMeter = 2;
             for (const wg of [...trainData.wagonGroups].reverse()) {
                 const wgDiv = document.createElement('div');
                 wgDiv.className = 'wagon-group';
@@ -917,13 +1123,24 @@
 
             const locoDiv = document.createElement('div');
             locoDiv.className = 'locomotive';
-            locoDiv.style.width = '24px';
+            locoDiv.style.width = `${locoWidthPx}px`;
             locoDiv.style.background = '#222';
             locoDiv.title = `Locomotive for train ${trainId}`;
             locoDiv.textContent = 'L';
             trainDiv.appendChild(locoDiv);
 
+            // Keep the status badge visible on-track: shows "Waiting" when idle,
+            // or the current activity type while one is running.
+            const badge = document.createElement('div');
+            badge.className = 'train-status waiting';
+            badge.id = `train-badge-${trainId}`;
+            badge.textContent = 'Waiting';
+            trainDiv.appendChild(badge);
+
             document.getElementById('main-content').appendChild(trainDiv);
+
+            // Sync badge to whatever state the train is in (Waiting / activity name).
+            updateTrainBadge(trainId);
         }
 
         function reset() {
@@ -939,6 +1156,19 @@
             const mainContent = document.getElementById('main-content');
             const trainDivs = mainContent.querySelectorAll('.train');
             trainDivs.forEach(div => div.remove());
+
+            // Clear per-train replay state so a fresh run starts from scratch.
+            for (const tId in trains) {
+                trains[tId].queueState = 'waiting';
+                trains[tId].driveStart = null;
+                trains[tId].driveEnd = null;
+                trains[tId].activeActivities = [];
+            }
+
+            // Return any workers that were teleported onto a track back into the grid.
+            document.querySelectorAll('.worker-icon[data-teleported="1"]').forEach(w => {
+                teleportWorkerBackToGrid(w.id.replace(/^worker-/, ''));
+            });
 
             // Reset every worker's status marker back to Idle
             document.querySelectorAll('.worker-icon .worker-status').forEach(el => {
