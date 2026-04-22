@@ -206,9 +206,14 @@
             .worker-icon .worker-status.status-WaitOtherR    { background: #FFC107; color: #222; }
             .worker-icon .worker-status.status-Working       { background: #4CAF50; }
             .worker-icon .worker-status.status-MovingToRest  { background: #FF9800; }
+            /* Locomotive-specific statuses (mirror the worker state names semantically) */
+            .worker-icon .worker-status.status-MovingToTask  { background: #2196F3; }
+            .worker-icon .worker-status.status-OnTask        { background: #2E7D32; }
 
-            /* Grey the graphic while the worker is in transit (either direction) */
+            /* Grey the graphic while the entity is in transit (either direction,
+               workers or locos). */
             .worker-icon[data-state="MovingToWork"] img,
+            .worker-icon[data-state="MovingToTask"] img,
             .worker-icon[data-state="MovingToRest"] img {
                 filter: grayscale(1) brightness(0.9) opacity(0.55);
             }
@@ -390,6 +395,11 @@
         let trainLocoCount = 0;
         let exitGateCount = 0;
         let trains = {};
+
+        // Worker ↔ activity bookkeeping so the ActivityEvent "Started" event
+        // can flip the right workers from WaitOtherR → Working in one pass.
+        let activityWorkers   = {};          // activityId → [workerId, ...]
+        let activeActivityIds = new Set();   // activityIds currently in the "Started..Completed" window
 
         // NEW: extra UI state per train
         // trains[trainId] already holds wagonGroups etc. We'll attach UI fields too.
@@ -600,6 +610,7 @@
                 const div = document.createElement('div');
                 div.className = 'worker-icon';
                 div.id = `worker-${worker.id}`;
+                div.dataset.kind = 'worker';
                 div.innerHTML = `
                                 <span class="worker-name">${firstName}</span>
                                 <img src="worker_icon.png" alt="${worker.name}" title="${worker.name} (${worker.id})">
@@ -617,17 +628,31 @@
                 const div = document.createElement('div');
                 div.className = 'worker-icon';
                 div.id = `shuntloco-${loco.id}`;
+                div.dataset.kind = 'shuntloco';
                 div.innerHTML = `
                                 <span class="worker-name">${label}</span>
                                 <img src="shunting_loco.png" alt="${label}" title="${label} (${loco.id})">
+                                <span class="worker-status status-Idle">Idle</span>
                             `;
                 grid.appendChild(div);
             }
         }
 
-        function updateWorkerStatus(workerId, status) {
-            const root = document.getElementById(`worker-${workerId}`);
-            if (!root) return; // not a worker we render (e.g. a loco / train-loco id)
+        // Resolve any entity ID (worker or shunt-loco) to its DOM root.
+        function findEntityRoot(id) {
+            return document.getElementById(`worker-${id}`)
+                || document.getElementById(`shuntloco-${id}`);
+        }
+
+        // Is this entity ID a shunt loco? (Used to pick the right state vocabulary.)
+        function isShuntLocoId(id) {
+            return !!document.getElementById(`shuntloco-${id}`);
+        }
+
+        // Works for both worker and shunt-loco icons; train-loco IDs (if any) are silently ignored.
+        function updateWorkerStatus(entityId, status) {
+            const root = findEntityRoot(entityId);
+            if (!root) return;
             const el = root.querySelector('.worker-status');
             if (!el) return;
             el.textContent = status;
@@ -635,78 +660,88 @@
             root.dataset.state = status;
         }
 
-        // Horizontal spacing between workers standing on the same track (center-to-center).
+        // Horizontal spacing between entities standing on the same track (center-to-center).
         const WORKER_TRACK_SLOT_PX = 30;
-        // Lift workers a little above the track line for clarity.
+        const LOCO_TRACK_SLOT_PX   = 50;   // bigger step for the chunkier loco icons
+        // Lift the icon a little above the track line for clarity.
         const WORKER_TRACK_Y_OFFSET_PX = -20;
+        const LOCO_TRACK_Y_OFFSET_PX   = -28;  // locos are taller than workers, lift a touch more
 
-        // Teleport a worker onto the track they're working at.
-        // Leaves a hidden placeholder in the grid so the grid layout stays stable.
-        // Multiple workers on the same track sit side-by-side using a first-free-slot scheme.
-        function teleportWorkerToTrack(workerId, trackId) {
-            const worker = document.getElementById(`worker-${workerId}`);
-            if (!worker) return;
+        // Teleport a worker or shunt loco onto the track it's assigned to.
+        // Leaves a hidden placeholder in its grid so the grid layout stays stable.
+        // Peers on the same track sit side-by-side via a first-free-slot scheme.
+        function teleportWorkerToTrack(entityId, trackId) {
+            const el = findEntityRoot(entityId);
+            if (!el) return;
             const basePos = getTrackPosition(trackId);
-            if (!basePos) return; // unknown track — leave the worker in the grid
+            if (!basePos) return; // unknown track — leave it in its grid
 
-            // If this worker is already at this exact track, keep them where they are.
-            if (worker.dataset.teleported === '1' && worker.dataset.atTrack === trackId) {
+            if (el.dataset.teleported === '1' && el.dataset.atTrack === trackId) {
                 return;
             }
 
-            // Pick the first free slot at this track (stable — existing workers don't reshuffle).
-            const peers = Array.from(
-                document.querySelectorAll(`.worker-icon[data-at-track="${trackId}"]`)
-            ).filter(w => w.id !== worker.id);
+            const isLoco = el.dataset.kind === 'shuntloco';
+            const slotPx = isLoco ? LOCO_TRACK_SLOT_PX : WORKER_TRACK_SLOT_PX;
+            const yOff   = isLoco ? LOCO_TRACK_Y_OFFSET_PX : WORKER_TRACK_Y_OFFSET_PX;
+
+            // Share the slot pool with peers of the SAME kind on this track so
+            // workers and locos don't stack into each other's columns.
+            const peerSelector = isLoco
+                ? `.worker-icon[data-at-track="${trackId}"][data-kind="shuntloco"]`
+                : `.worker-icon[data-at-track="${trackId}"]:not([data-kind="shuntloco"])`;
+            const peers = Array.from(document.querySelectorAll(peerSelector))
+                                .filter(p => p.id !== el.id);
             const used = new Set(
-                peers.map(w => parseInt(w.dataset.slot, 10)).filter(n => !isNaN(n))
+                peers.map(p => parseInt(p.dataset.slot, 10)).filter(n => !isNaN(n))
             );
             let slot = 0;
             while (used.has(slot)) slot++;
 
             // First time out of the grid? Drop a same-size invisible placeholder so nothing reflows,
-            // then reparent the worker into the main map area.
-            if (worker.dataset.teleported !== '1') {
-                const rect = worker.getBoundingClientRect();
+            // then reparent the icon into the main map area.
+            if (el.dataset.teleported !== '1') {
+                const rect = el.getBoundingClientRect();
                 const ph = document.createElement('div');
                 ph.className = 'worker-icon-placeholder';
-                ph.id = `worker-placeholder-${workerId}`;
+                ph.id = `placeholder-${el.id}`;
                 ph.style.cssText = `width:${rect.width}px;height:${rect.height}px;visibility:hidden;`;
-                worker.parentNode.insertBefore(ph, worker);
+                el.parentNode.insertBefore(ph, el);
 
                 const main = document.getElementById('main-content');
-                if (main) main.appendChild(worker);
+                if (main) main.appendChild(el);
             }
 
-            worker.style.position = 'absolute';
-            worker.style.left = `${basePos.x + slot * WORKER_TRACK_SLOT_PX}px`;
-            worker.style.top  = `${basePos.y + WORKER_TRACK_Y_OFFSET_PX}px`;
-            worker.style.width = 'auto'; // let the icon shrink to content so names don't collide
-            worker.style.zIndex = '5';
-            worker.dataset.teleported = '1';
-            worker.dataset.atTrack = trackId;
-            worker.dataset.slot = String(slot);
+            el.style.position = 'absolute';
+            // Both kinds stack rightward from the track anchor, but with their own
+            // slot pool (see peerSelector above) so they never claim the same column.
+            el.style.left = `${basePos.x + slot * slotPx}px`;
+            el.style.top  = `${basePos.y + yOff}px`;
+            el.style.width = 'auto';
+            el.style.zIndex = '5';
+            el.dataset.teleported = '1';
+            el.dataset.atTrack = trackId;
+            el.dataset.slot = String(slot);
         }
 
-        // Put a previously-teleported worker back into their grid slot.
-        function teleportWorkerBackToGrid(workerId) {
-            const worker = document.getElementById(`worker-${workerId}`);
-            if (!worker) return;
-            if (worker.dataset.teleported !== '1') return;
+        // Put a previously-teleported entity (worker or shunt loco) back into its grid slot.
+        function teleportWorkerBackToGrid(entityId) {
+            const el = findEntityRoot(entityId);
+            if (!el) return;
+            if (el.dataset.teleported !== '1') return;
 
-            const ph = document.getElementById(`worker-placeholder-${workerId}`);
+            const ph = document.getElementById(`placeholder-${el.id}`);
             if (ph && ph.parentNode) {
-                ph.parentNode.insertBefore(worker, ph);
+                ph.parentNode.insertBefore(el, ph);
                 ph.remove();
             }
-            worker.style.position = '';
-            worker.style.left = '';
-            worker.style.top = '';
-            worker.style.width = '';
-            worker.style.zIndex = '';
-            delete worker.dataset.teleported;
-            delete worker.dataset.atTrack;
-            delete worker.dataset.slot;
+            el.style.position = '';
+            el.style.left = '';
+            el.style.top = '';
+            el.style.width = '';
+            el.style.zIndex = '';
+            delete el.dataset.teleported;
+            delete el.dataset.atTrack;
+            delete el.dataset.slot;
         }
 
         function parseTrainDetails(details) {
@@ -819,34 +854,63 @@
             // Worker status marker (Idle / MovingToWork / Working / MovingToRest)
             // + physical teleport between the worker grid and the track they're working at.
             if (event.eventType === 'WorkerEvent') {
-                const workerId = event.entityId;
-                // For TravelStarted / Arrived the `details` field carries the activity ID,
-                // whose last token is the track the activity runs on.
-                const trackId = extractLocationFromActivityId(event.details);
+                const entityId   = event.entityId;
+                const activityId = event.details;                                // ActivityId for Travel/Arrived/Return*
+                const trackId    = extractLocationFromActivityId(activityId);    // last token of ActivityId
 
+                // Shunt locos share the WorkerEvent channel but have their own state vocabulary.
+                // Critically, a loco goes Arrived → OnTask directly (no WaitOtherR): once it's
+                // allocated to an entity it's "busy" whether or not an activity is currently running
+                // on that entity (e.g. coupled to a train between Coupling and PushOff).
+                if (isShuntLocoId(entityId)) {
+                    let newStatus = null;
+                    switch (event.event) {
+                        case 'TravelStarted':
+                            newStatus = 'MovingToTask';
+                            break;
+                        case 'Arrived':
+                            newStatus = 'OnTask';
+                            if (trackId) teleportWorkerToTrack(entityId, trackId);
+                            break;
+                        case 'ReturnStarted':
+                            newStatus = 'MovingToRest';
+                            break;
+                        case 'Returned':
+                            newStatus = 'Idle';
+                            teleportWorkerBackToGrid(entityId);
+                            break;
+                    }
+                    if (newStatus) updateWorkerStatus(entityId, newStatus);
+                    return;
+                }
+
+                // Worker state machine (unchanged):
+                //   MovingToWork → WaitOtherR → Working → MovingToRest → Idle
                 let newStatus = null;
                 switch (event.event) {
                     case 'TravelStarted':
-                        // Worker leaves the grid: still drawn there as MovingToWork, but hasn't arrived yet.
                         newStatus = 'MovingToWork';
+                        if (activityId) {
+                            if (!activityWorkers[activityId]) activityWorkers[activityId] = [];
+                            if (!activityWorkers[activityId].includes(entityId)) {
+                                activityWorkers[activityId].push(entityId);
+                            }
+                        }
                         break;
                     case 'Arrived':
-                        // Worker is on site — teleport to the track, flip marker to Working.
-                        newStatus = 'Working';
-                        if (trackId) teleportWorkerToTrack(workerId, trackId);
+                        newStatus = activeActivityIds.has(activityId) ? 'Working' : 'WaitOtherR';
+                        if (trackId) teleportWorkerToTrack(entityId, trackId);
                         break;
                     case 'ReturnStarted':
-                        // Emitted later once the sim logs return-travel start.
                         newStatus = 'MovingToRest';
                         break;
                     case 'Returned':
-                        // Worker is back in the pool — put them back in the grid.
                         newStatus = 'Idle';
-                        teleportWorkerBackToGrid(workerId);
+                        teleportWorkerBackToGrid(entityId);
                         break;
                     // 'Allocated' intentionally ignored — TravelStarted is the state-changing event
                 }
-                if (newStatus) updateWorkerStatus(workerId, newStatus);
+                if (newStatus) updateWorkerStatus(entityId, newStatus);
                 return;
             }
 
@@ -907,25 +971,38 @@
             // Generic ActivityEvent lifecycle (all activity types except ArrivalDrive,
             // which has custom handling above). Shows the running activity name on the
             // train's status badge while it's in progress, then reverts to "Waiting".
+            // Also drives the per-worker WaitOtherR → Working → (MovingToRest) transitions.
             if (event.eventType === 'ActivityEvent' && event.event !== 'ArrivalDrive') {
-                const trainId = findTrainForActivity(event.entityId);
-                if (!trainId) return;
-
-                if (!trains[trainId]) trains[trainId] = {};
-                if (!trains[trainId].activeActivities) trains[trainId].activeActivities = [];
+                const activityId = event.entityId;
+                const trainId    = findTrainForActivity(activityId);
 
                 if (event.activityStatus === 'Started') {
-                    trains[trainId].activeActivities.push(event.event);
-                    updateTrainBadge(trainId);
+                    activeActivityIds.add(activityId);
+                    // Flip every worker registered to this activity from WaitOtherR → Working.
+                    const wIds = activityWorkers[activityId] || [];
+                    for (const wId of wIds) updateWorkerStatus(wId, 'Working');
+
+                    if (trainId) {
+                        if (!trains[trainId]) trains[trainId] = {};
+                        if (!trains[trainId].activeActivities) trains[trainId].activeActivities = [];
+                        trains[trainId].activeActivities.push(event.event);
+                        updateTrainBadge(trainId);
+                    }
                     return;
                 }
 
                 if (event.activityStatus === 'Completed') {
-                    const arr = trains[trainId].activeActivities;
-                    // Remove most recent matching entry (handles overlapping activities of same type)
-                    const idx = arr.lastIndexOf(event.event);
-                    if (idx >= 0) arr.splice(idx, 1);
-                    updateTrainBadge(trainId);
+                    activeActivityIds.delete(activityId);
+                    // Workers will transition on their own ReturnStarted events; we just
+                    // clean up our activity→worker map so it doesn't leak across a long run.
+                    delete activityWorkers[activityId];
+
+                    if (trainId && trains[trainId] && trains[trainId].activeActivities) {
+                        const arr = trains[trainId].activeActivities;
+                        const idx = arr.lastIndexOf(event.event);
+                        if (idx >= 0) arr.splice(idx, 1);
+                        updateTrainBadge(trainId);
+                    }
                     return;
                 }
             }
@@ -1165,15 +1242,23 @@
                 trains[tId].activeActivities = [];
             }
 
-            // Return any workers that were teleported onto a track back into the grid.
-            document.querySelectorAll('.worker-icon[data-teleported="1"]').forEach(w => {
-                teleportWorkerBackToGrid(w.id.replace(/^worker-/, ''));
+            // Wipe the worker↔activity bookkeeping too.
+            activityWorkers   = {};
+            activeActivityIds = new Set();
+
+            // Return any workers / shunt locos that were teleported onto a track back into their grid.
+            document.querySelectorAll('.worker-icon[data-teleported="1"]').forEach(el => {
+                const id = el.id.replace(/^worker-/, '').replace(/^shuntloco-/, '');
+                teleportWorkerBackToGrid(id);
             });
 
-            // Reset every worker's status marker back to Idle
+            // Reset every worker / loco status marker back to Idle
             document.querySelectorAll('.worker-icon .worker-status').forEach(el => {
                 el.textContent = 'Idle';
                 el.className = 'worker-status status-Idle';
+            });
+            document.querySelectorAll('.worker-icon').forEach(el => {
+                delete el.dataset.state;
             });
 
             const btn = document.getElementById('play-pause-btn');
