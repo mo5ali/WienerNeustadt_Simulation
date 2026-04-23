@@ -285,6 +285,15 @@
                 border-right: none;
             }
 
+            /* Wagon group that has been separated from its parent train and
+               parked on a classification track — needs full border + shadow
+               since it's no longer nested inside a .train flex container. */
+            .wagon-group.wg-standalone {
+                border: 1px solid #333;
+                border-radius: 2px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            }
+
         .locomotive {
             /* Thickness scaled to ~60% of original (18 → 11) to match wagon group */
             height: 11px;
@@ -400,6 +409,12 @@
         // can flip the right workers from WaitOtherR → Working in one pass.
         let activityWorkers   = {};          // activityId → [workerId, ...]
         let activeActivityIds = new Set();   // activityIds currently in the "Started..Completed" window
+
+        // Standalone wagon-group tracking for classification tracks. After PushOff,
+        // each WG becomes its own entity on the map: these maps record where they
+        // landed so new arrivals can stack behind them and reset() can tear them down.
+        let classificationTrackFill = {};    // trackId → total px already occupied on that track
+        let placedWagonGroups       = {};    // wgId → DOM element (standalone)
 
         // NEW: extra UI state per train
         // trains[trainId] already holds wagonGroups etc. We'll attach UI fields too.
@@ -953,6 +968,22 @@
                 return;
             }
 
+            // Train dismantled — PushOff finished, individual WGs are now on their
+            // classification tracks (drawn via the WagonGroupEvent branch below).
+            // Tear down the train-level graphic since the entity no longer exists.
+            if (event.eventType === 'TrainEvent' && event.event === 'PushOffComplete') {
+                removeTrainFromTrack(event.entityId);
+                return;
+            }
+
+            // A wagon group has been pushed onto a classification track and is now
+            // an independent entity. Draw it at its destination so the user can see
+            // the train has been broken apart into its constituent groups.
+            if (event.eventType === 'WagonGroupEvent' && event.event === 'EntityCreated') {
+                drawWagonGroupOnClassificationTrack(event.entityId, event.details);
+                return;
+            }
+
             // Train gets arrival track assignment (still waiting)
             if (event.eventType === 'TrainEvent' && event.event === 'AssignedArrivalTrack') {
                 if (!trains[event.entityId]) trains[event.entityId] = {};
@@ -1252,6 +1283,82 @@
             updateTrainBadge(trainId);
         }
 
+        // Look up a wagon-group's metadata (length, destination, id) by scanning
+        // all known trains. WGs become standalone entities after PushOff, so we
+        // need to remember what train they came from to preserve size/color.
+        function findWagonGroupMeta(wgId) {
+            for (const tId in trains) {
+                const t = trains[tId];
+                if (!t || !t.wagonGroups) continue;
+                for (const wg of t.wagonGroups) {
+                    if (wg.id === wgId) return wg;
+                }
+            }
+            return null;
+        }
+
+        // Draw a wagon-group as its own standalone entity on a classification track.
+        // Called on WagonGroupEvent "EntityCreated" — the signal from PushOffActivity
+        // that this WG has been pushed onto its destination track and is now
+        // independent of its parent train.
+        //
+        // Layout: WGs stack RIGHT-to-LEFT from the classification track's anchor
+        // point, mimicking the shunt-yard behavior where each pushed group gets
+        // "parked" behind the previously-pushed groups (deeper into the track).
+        function drawWagonGroupOnClassificationTrack(wgId, trackId) {
+            if (placedWagonGroups[wgId]) return;  // already drawn — ignore duplicates
+
+            const meta = findWagonGroupMeta(wgId);
+            if (!meta) {
+                console.warn(`WG ${wgId} has no metadata — can't draw`);
+                return;
+            }
+
+            const pos = classificationTrackPositions[trackId] || getTrackPosition(trackId);
+            if (!pos) {
+                console.warn(`WG ${wgId}: classification track ${trackId} has no position — add it to classificationTrackPositions`);
+                return;
+            }
+
+            const pixelsPerMeter = 1.2;
+            const widthPx = (meta.length || 0) * pixelsPerMeter;
+            const alreadyFilled = classificationTrackFill[trackId] || 0;
+
+            const wgDiv = document.createElement('div');
+            wgDiv.className = 'wagon-group wg-standalone';
+            wgDiv.id = `wg-${wgId}`;
+            wgDiv.dataset.wagonGroupId = wgId;
+            wgDiv.dataset.atTrack = trackId;
+            wgDiv.style.position = 'absolute';
+            wgDiv.style.width = `${widthPx}px`;
+            wgDiv.style.background = destColors[meta.destination] || destColors['Unknown'];
+            wgDiv.textContent = wgId;
+            wgDiv.title = `${wgId}: ${meta.length}m → ${meta.destination} (on ${trackId})`;
+
+            // Right-anchor at pos.x, growing leftward so each new arrival pushes
+            // deeper into the track behind the already-parked groups.
+            wgDiv.style.left = `${pos.x - alreadyFilled - widthPx}px`;
+            wgDiv.style.top  = `${pos.y}px`;
+            wgDiv.style.zIndex = '4';
+
+            document.getElementById('main-content').appendChild(wgDiv);
+
+            classificationTrackFill[trackId] = alreadyFilled + widthPx;
+            placedWagonGroups[wgId] = wgDiv;
+        }
+
+        // Remove the whole train graphic after PushOff completes. The wagons have
+        // already been re-drawn as standalone entities on their classification
+        // tracks; only the (now empty) arrival-track train div needs to go.
+        function removeTrainFromTrack(trainId) {
+            const el = document.getElementById(`train-${trainId}`);
+            if (el) el.remove();
+            if (trains[trainId]) {
+                trains[trainId].queueState = 'dismantled';
+                trains[trainId].activeActivities = [];
+            }
+        }
+
         function reset() {
             currentEventIndex = 0;
             isPlaying = false;
@@ -1265,6 +1372,11 @@
             const mainContent = document.getElementById('main-content');
             const trainDivs = mainContent.querySelectorAll('.train');
             trainDivs.forEach(div => div.remove());
+
+            // Tear down any standalone wagon-group entities from a previous run.
+            mainContent.querySelectorAll('.wg-standalone').forEach(div => div.remove());
+            classificationTrackFill = {};
+            placedWagonGroups       = {};
 
             // Clear per-train replay state so a fresh run starts from scratch.
             for (const tId in trains) {
