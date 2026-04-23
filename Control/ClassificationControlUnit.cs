@@ -169,6 +169,10 @@ namespace WienerNeustadtSimulation.Control
 
             var duration = activity.CalculateDuration(workerMultipliers);
 
+            // Sets CommencedAt and emits the canonical ActivityEvent Started row.
+            // (Previously CommencedAt was never being set on Coupling / Securing.)
+            activity.MarkCommenced(_engine.Now);
+
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: Commence '{activity.ActivityId}' [length={activity.EntityLength:F0}m base={activity.BaseSecondsPerMeter:F0}s/m avgMult={activity.AverageWorkerMultiplier:F0} -> duration={duration.TotalSeconds:F0}s]");
             SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, activity.ActivityType + "Started", _engine.Now);
 
@@ -181,7 +185,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void CompleteActivity(WagonGroup wagonGroup, string trackId, Activity activity)
         {
-            activity.CompletedAt = _engine.Now;
+            activity.MarkCompleted(_engine.Now);
 
             if (activity is SecuringActivity)
             {
@@ -284,6 +288,8 @@ namespace WienerNeustadtSimulation.Control
 
             var duration = activity.CalculateDuration(workerMultipliers);
 
+            activity.MarkCommenced(_engine.Now);
+
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: Commence '{activity.ActivityId}' [length={activity.EntityLength:F1}m base={activity.BaseSecondsPerMeter:F1}s/m avgMult={activity.AverageWorkerMultiplier:F2} -> duration={duration.TotalSeconds:F0}s]");
             SimulationLogger.Instance.LogTrainEvent(train.Id, "OBTPStarted", _engine.Now);
 
@@ -296,7 +302,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void CompleteOutboundTrainPreparation(OutboundTrain train, OutboundTrainPreparationActivity activity)
         {
-            activity.CompletedAt = _engine.Now;
+            activity.MarkCompleted(_engine.Now);
 
             train.LocomotiveId = activity.AllocatedLocoIds.FirstOrDefault();
             SimulationLogger.Instance.LogTrainEvent(train.Id, "OBTPComplete", _engine.Now, train.LocomotiveId ?? "");
@@ -341,6 +347,8 @@ namespace WienerNeustadtSimulation.Control
         {
             var duration = activity.CalculateFixedDuration();
 
+            activity.MarkCommenced(_engine.Now);
+
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: Commence '{activity.ActivityId}' [duration={duration.TotalSeconds:F0}s]");
             SimulationLogger.Instance.LogTrainEvent(train.Id, "DEPDStarted", _engine.Now);
 
@@ -353,7 +361,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void CompleteDepartureDrive(OutboundTrain train, DepartureDriveActivity activity)
         {
-            activity.CompletedAt = _engine.Now;
+            activity.MarkCompleted(_engine.Now);
             SimulationLogger.Instance.LogTrainEvent(train.Id, "Departed", _engine.Now, $"{train.TotalLength:F1}m to {train.Destination}");
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: DONE '{activity.ActivityId}', '{train.Id}' removed from system");

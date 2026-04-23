@@ -53,7 +53,7 @@ namespace WienerNeustadtSimulation.Models
 
         public void CommencePushOff()
         {
-            CommencedAt = _engine.Now;
+            MarkCommenced(_engine.Now);
 
             // "initialized" is already printed by the base Activity constructor.
             // Only print "Commence" here.
@@ -95,7 +95,7 @@ namespace WienerNeustadtSimulation.Models
             double distanceMeters = 100.0;
             var pushDuration = driveActivity.CalculateDrivingDuration(distanceMeters);
 
-            driveActivity.CommencedAt = _engine.Now;
+            driveActivity.MarkCommenced(_engine.Now);
             driveActivity.ScheduledCompletionAt = _engine.Now.Add(pushDuration);
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | PushOff drive: {distanceMeters:F0}m {pushDuration.TotalSeconds:F0}s, {EntityId} to track {group.DestinationTrack.RealLifeID}");
@@ -110,7 +110,7 @@ namespace WienerNeustadtSimulation.Models
 
         private void OnPushCompleted(WagonGroupPush group, DrivingActivity driveActivity)
         {
-            driveActivity.CompletedAt = _engine.Now;
+            driveActivity.MarkCompleted(_engine.Now);
 
             foreach (var wgId in group.WagonGroupIds)
             {
@@ -146,7 +146,7 @@ namespace WienerNeustadtSimulation.Models
 
         private void CompletePushOff()
         {
-            CompletedAt = _engine.Now;
+            MarkCompleted(_engine.Now);
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | PushOff: DONE '{ActivityId}' - train {EntityId} dismantled");
             SimulationLogger.Instance.LogTrainEvent(EntityId, "PushOffComplete", _engine.Now);

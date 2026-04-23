@@ -114,28 +114,20 @@ namespace WienerNeustadtSimulation.Control
 
             var driveTime = driveActivity.CalculateFixedDuration();
 
-            // Log activity submission
-            SimulationLogger.Instance.LogActivityEvent(
-                driveActivity.ActivityId,
-                "ArrivalDrive",
-                _engine.Now,
-                status: "Submitted",
-                details: $"Train {train.ID} driving to arrival track {assignedTrack.RealLifeID} (ETA: {driveTime.TotalMinutes} minutes)"
-            );
-
-            // Wire up commencement: log Started, schedule Completed
+            // Submitted is now emitted automatically by the Activity constructor.
+            // Commencement + completion go through the base-class helpers so the
+            // canonical Started / Completed rows are logged identically to every
+            // other activity type.
             driveActivity.OnReadyToCommence = _ =>
             {
-                driveActivity.CommencedAt = _engine.Now;
-                SimulationLogger.Instance.LogActivityEvent(driveActivity.ActivityId, "ArrivalDrive", _engine.Now, status: "Started");
+                driveActivity.MarkCommenced(_engine.Now);
                 _engine.Schedule(
                     _engine.Now.Add(driveTime),
                     () =>
                     {
-                        driveActivity.CompletedAt = _engine.Now;
+                        driveActivity.MarkCompleted(_engine.Now);
                         assignedTrack.CurrentOccupancies.Add(train.ID);
                         SimulationLogger.Instance.LogTrainEvent(train.ID, "ArrivedArrivalTrack", _engine.Now, assignedTrack.RealLifeID);
-                        SimulationLogger.Instance.LogActivityEvent(driveActivity.ActivityId, "ArrivalDrive", _engine.Now, status: "Completed");
                         var wagonGroupToTrackMap = RunSortingMethod(train);
                         _trainWagonGroupMaps[train.ID] = wagonGroupToTrackMap;
                         RequestTrainPreparation(train, assignedTrack);
@@ -295,14 +287,16 @@ namespace WienerNeustadtSimulation.Control
 
         private void CommenceAndScheduleActivity(Train train, Track arrivalTrack, Activity activity)
         {
-            activity.CommencedAt = _engine.Now;
-
             var allocatedWorkers = _resourceControl.GetWorkersByIds(activity.AllocatedWorkerIds);
             var workerMultipliers = new Dictionary<string, double>();
             foreach (var worker in allocatedWorkers)
                 workerMultipliers[worker.Id] = _resourceControl.GetWorkerTimeMultiplierForActivity(worker, activity.ActivityType);
 
+            // Duration must be computed BEFORE MarkCommenced so the Started log carries
+            // the calculated duration / worker multiplier.
             var duration = activity.CalculateDuration(workerMultipliers);
+
+            activity.MarkCommenced(_engine.Now);
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: Commence '{activity.ActivityId}'");
             SimulationLogger.Instance.LogTrainEvent(train.ID, "PreparationStarted", _engine.Now);
@@ -317,7 +311,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void CompleteActivity(Train train, Track arrivalTrack, Activity activity)
         {
-            activity.CompletedAt = _engine.Now;
+            activity.MarkCompleted(_engine.Now);
 
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: DONE '{activity.ActivityId}' for train {train.ID}");
 

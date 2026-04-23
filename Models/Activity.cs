@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using WienerNeustadtSimulation.Output;
 
 namespace WienerNeustadtSimulation.Models
 {
@@ -78,6 +79,69 @@ namespace WienerNeustadtSimulation.Models
 
 
             ActivityRegistry.Instance.Register(this);
+
+            // Canonical activity lifecycle log: every activity emits Submitted at creation,
+            // then Started via MarkCommenced() and Completed via MarkCompleted().
+            // This is the single source of truth for "three timestamps per activity" in the CSV.
+            SimulationLogger.Instance.LogActivityEvent(
+                ActivityId,
+                ActivityType,
+                requestedAt,
+                status: "Submitted",
+                details: $"entity={entityId};length={entityLength:F1};location={location};cu={controlUnit}"
+            );
+        }
+
+        // Mark the activity as having commenced at `now`. Sets CommencedAt and emits
+        // the ActivityEvent Started row. Call sites that used to do
+        //   activity.CommencedAt = _engine.Now;
+        // should now do
+        //   activity.MarkCommenced(_engine.Now);
+        public void MarkCommenced(DateTime now)
+        {
+            if (CommencedAt.HasValue) return; // idempotent guard
+            CommencedAt = now;
+
+            var workers = AllocatedWorkerIds != null && AllocatedWorkerIds.Count > 0
+                ? string.Join(",", AllocatedWorkerIds)
+                : "";
+            var locos = AllocatedLocoIds != null && AllocatedLocoIds.Count > 0
+                ? string.Join(",", AllocatedLocoIds)
+                : "";
+            var durMin = CalculatedDuration.HasValue
+                ? CalculatedDuration.Value.TotalMinutes.ToString("F2")
+                : "";
+            var mult = AverageWorkerMultiplier.HasValue
+                ? AverageWorkerMultiplier.Value.ToString("F2")
+                : "";
+
+            SimulationLogger.Instance.LogActivityEvent(
+                ActivityId,
+                ActivityType,
+                now,
+                status: "Started",
+                details: $"workers={workers};locos={locos};durationMin={durMin};avgMult={mult}"
+            );
+        }
+
+        // Mark the activity as complete. Sets CompletedAt and emits the ActivityEvent
+        // Completed row. Idempotent — calling twice is a no-op on the second call.
+        public void MarkCompleted(DateTime now)
+        {
+            if (CompletedAt.HasValue) return; // idempotent guard
+            CompletedAt = now;
+
+            var actualMin = (CommencedAt.HasValue
+                ? (now - CommencedAt.Value).TotalMinutes
+                : 0.0).ToString("F2");
+
+            SimulationLogger.Instance.LogActivityEvent(
+                ActivityId,
+                ActivityType,
+                now,
+                status: "Completed",
+                details: $"actualDurationMin={actualMin}"
+            );
         }
 
         private string GenerateActivityId(string activityType, DateTime timestamp, string cu, string entityId, string location)
