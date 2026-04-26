@@ -125,6 +125,50 @@
             position: relative;
         }
 
+        /* Passage track (single-resource between arrival and classification groups).
+           Small ~2.5 cm strip horizontally centered on the map at the vertical
+           mid-line. Tweak `top` to slide it up/down, or `width` to resize. */
+        #passage-strip {
+            position: absolute;
+            top: 60%;
+            left: 62%;
+            width: 2.5cm;
+            height: 8px;
+            transform: translate(-50%, -50%);
+            background: #4CAF50; /* default: available (green) */
+            border: 1px solid rgba(0,0,0,0.35);
+            border-radius: 2px;
+            box-shadow: 0 0 6px rgba(0,0,0,0.2);
+            z-index: 2;
+            transition: background 0.15s linear;
+        }
+
+            #passage-strip.used {
+                background: #C62828; /* red while a train owns the passage */
+            }
+
+        #passage-pill {
+            position: absolute;
+            top: calc(60% - 22px);
+            left: 62%;
+            transform: translateX(-50%);
+            padding: 2px 5px;
+            border-radius: 5px;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            background: #2E7D32;
+            border: 1px solid rgba(0,0,0,0.25);
+            white-space: nowrap;
+            z-index: 3;
+            text-shadow: none;
+            letter-spacing: 0.3px;
+        }
+
+            #passage-pill.used {
+                background: #B71C1C;
+            }
+
             #main-content.visible {
                 display: block;
             }
@@ -168,10 +212,19 @@
                 filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
             }
 
-            /* Shunting loco graphic — keep at original 40px (don't inherit the worker shrink) */
-            #shuntloco-grid .worker-icon img {
+            /* Shunting loco graphic — keep at original 40px (don't inherit the worker shrink).
+               Use data-kind so the size also persists when the icon is teleported
+               onto a track and reparented out of #shuntloco-grid. */
+            .worker-icon[data-kind="shuntloco"] img {
                 width: 40px;
                 height: 40px;
+                /* Loco PNG has transparent padding around it; pull the label and
+                   status pill in close so the trio looks compact (almost touching). */
+                margin-top: -14px;
+                margin-bottom: -14px;
+            }
+            .worker-icon[data-kind="shuntloco"] {
+                gap: 0;
             }
 
             /* First-name label placed ABOVE the graphic, black */
@@ -294,6 +347,30 @@
                 box-shadow: 0 1px 3px rgba(0,0,0,0.3);
             }
 
+            /* Status pill that hangs beneath a standalone WG, mirroring the
+               .train-status badge but smaller. Shows "Waiting" by default,
+               or the running activity name (Securing / Coupling / OBTP / DEPD). */
+            .wg-status {
+                position: absolute;
+                top: 14px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 1px 4px;
+                border-radius: 5px;
+                font-size: 6px;
+                font-weight: 700;
+                line-height: 1;
+                white-space: nowrap;
+                border: 1px solid rgba(0,0,0,0.25);
+                color: #fff;
+                text-shadow: none;
+                background: #7a0b0b;  /* default: waiting (dark red) */
+                z-index: 5;
+            }
+
+                .wg-status.waiting   { background: #7a0b0b; }
+                .wg-status.activity  { background: #0b5a7a; }
+
         .locomotive {
             /* Thickness scaled to ~60% of original (18 → 11) to match wagon group */
             height: 11px;
@@ -355,6 +432,10 @@
     </div>
 
     <div id="main-content">
+        <!-- Passage track resource indicator -->
+        <div id="passage-strip"></div>
+        <div id="passage-pill">Available</div>
+
         <!-- Restored icon grids -->
         <div id="worker-grid"></div>
         <div id="shuntloco-grid"></div>
@@ -415,6 +496,16 @@
         // landed so new arrivals can stack behind them and reset() can tear them down.
         let classificationTrackFill = {};    // trackId → total px already occupied on that track
         let placedWagonGroups       = {};    // wgId → DOM element (standalone)
+
+        // Per-WG running activity (Securing / Coupling / OBTP / DEPD) for the
+        // status pill that hangs under each standalone wagon group. Empty / missing
+        // means the WG is in its default "Waiting" state.
+        let wagonGroupActivities    = {};    // wgId → activity name currently in progress
+
+        // Passage-track resource indicator state.
+        // Driven by ActivityEvent rows with status PassageClaimed / PassageReleased
+        // emitted by ResourceControlUnit.
+        let passageState = { available: true, usedByTrainId: null };
 
         // NEW: extra UI state per train
         // trains[trainId] already holds wagonGroups etc. We'll attach UI fields too.
@@ -694,7 +785,7 @@
         const WORKER_TRACK_X_OFFSET_PX = -600;   // negative = left of anchor, positive = right — applies to workers on every track
         // Lift the icon a little above the track line for clarity.
         const WORKER_TRACK_Y_OFFSET_PX = -20;
-        const LOCO_TRACK_Y_OFFSET_PX   = -28;  // locos are taller than workers, lift a touch more
+        const LOCO_TRACK_Y_OFFSET_PX   = -12;  // tuned so the loco image vertically centers on the train's wagon row
 
         // Teleport a worker or shunt loco onto the track it's assigned to.
         // Leaves a hidden placeholder in its grid so the grid layout stays stable.
@@ -990,10 +1081,13 @@
             }
 
             // A wagon group has been pushed onto a classification track and is now
-            // an independent entity. Draw it at its destination so the user can see
-            // the train has been broken apart into its constituent groups.
+            // an independent entity. Draw it at its destination AND pop it out of
+            // its parent train so the train shrinks visibly as each sub-drive
+            // completes — instead of staying intact until PushOffComplete.
             if (event.eventType === 'WagonGroupEvent' && event.event === 'EntityCreated') {
                 drawWagonGroupOnClassificationTrack(event.entityId, event.details);
+                const parentTrainId = findTrainIdForWagonGroup(event.entityId);
+                if (parentTrainId) removeWagonFromTrain(parentTrainId, event.entityId);
                 return;
             }
 
@@ -1037,6 +1131,25 @@
                 }
             }
 
+            // Passage-track resource state — driven by ActivityEvent rows with
+            // status PassageClaimed / PassageReleased emitted by ResourceControlUnit.
+            // The activityId pattern is Act_PO_<trainId>_<HHMMSS>_<loc>, so the
+            // owning train can be recovered via findTrainForActivity.
+            if (event.eventType === 'ActivityEvent' &&
+                (event.activityStatus === 'PassageClaimed' ||
+                 event.activityStatus === 'PassageReleased')) {
+                if (event.activityStatus === 'PassageClaimed') {
+                    const trainId = findTrainForActivity(event.entityId);
+                    passageState.available    = false;
+                    passageState.usedByTrainId = trainId;
+                } else {
+                    passageState.available    = true;
+                    passageState.usedByTrainId = null;
+                }
+                updatePassageUI();
+                return;
+            }
+
             // Generic ActivityEvent lifecycle (all activity types except ArrivalDrive,
             // which has custom handling above). Shows the running activity name on the
             // train's status badge while it's in progress, then reverts to "Waiting".
@@ -1064,6 +1177,15 @@
                             setTrainLocomotiveVisible(trainId, false);
                         }
                     }
+
+                    // WG-level fan-out: SEC / COP target a single WG; OBTP / DEPD
+                    // target every WG on the classification track they're running on.
+                    // PushOffDrive is explicitly excluded — see findWagonGroupsForActivity.
+                    const wgIds = findWagonGroupsForActivity(activityId, event.event);
+                    for (const wgId of wgIds) {
+                        wagonGroupActivities[wgId] = event.event;
+                        updateWagonGroupBadge(wgId);
+                    }
                     return;
                 }
 
@@ -1078,6 +1200,13 @@
                         const idx = arr.lastIndexOf(event.event);
                         if (idx >= 0) arr.splice(idx, 1);
                         updateTrainBadge(trainId);
+                    }
+
+                    // Revert any affected WG badges back to "Waiting".
+                    const wgIds = findWagonGroupsForActivity(activityId, event.event);
+                    for (const wgId of wgIds) {
+                        delete wagonGroupActivities[wgId];
+                        updateWagonGroupBadge(wgId);
                     }
                     return;
                 }
@@ -1263,10 +1392,14 @@
 
             trainDiv.style.left = `${pos.x - trainBodyWidthPx}px`;
             trainDiv.style.top = `${pos.y}px`;
+            // Remember the right-edge anchor so we can re-position the train after
+            // each WG is pushed off, keeping the L-box pinned at pos.x.
+            trainDiv.dataset.anchorX = String(pos.x);
 
             for (const wg of [...trainData.wagonGroups].reverse()) {
                 const wgDiv = document.createElement('div');
                 wgDiv.className = 'wagon-group';
+                wgDiv.dataset.wgId = wg.id;   // for targeted removal at EntityCreated
                 wgDiv.style.width = `${wg.length * pixelsPerMeter}px`;
                 wgDiv.style.background = destColors[wg.destination] || destColors['Unknown'];
                 wgDiv.textContent = wg.id;
@@ -1296,6 +1429,26 @@
             updateTrainBadge(trainId);
         }
 
+        // Push the passageState into the DOM (strip color + pill text/colour).
+        // Safe to call before main-content becomes visible — querySelectors return
+        // null and we just bail out.
+        function updatePassageUI() {
+            const strip = document.getElementById('passage-strip');
+            const pill  = document.getElementById('passage-pill');
+            if (!strip || !pill) return;
+
+            if (passageState.available) {
+                strip.classList.remove('used');
+                pill.classList.remove('used');
+                pill.textContent = 'Available';
+            } else {
+                strip.classList.add('used');
+                pill.classList.add('used');
+                const who = passageState.usedByTrainId || '?';
+                pill.textContent = `Used by ${who}`;
+            }
+        }
+
         // Look up a wagon-group's metadata (length, destination, id) by scanning
         // all known trains. WGs become standalone entities after PushOff, so we
         // need to remember what train they came from to preserve size/color.
@@ -1308,6 +1461,99 @@
                 }
             }
             return null;
+        }
+
+        // Push the wagonGroupActivities state into a WG's badge.
+        function updateWagonGroupBadge(wgId) {
+            const badge = document.getElementById(`wg-badge-${wgId}`);
+            if (!badge) return;
+            const active = wagonGroupActivities[wgId];
+            if (active) {
+                badge.classList.remove('waiting');
+                badge.classList.add('activity');
+                badge.textContent = active;
+            } else {
+                badge.classList.remove('activity');
+                badge.classList.add('waiting');
+                badge.textContent = 'Waiting';
+            }
+        }
+
+        // List standalone WG IDs currently parked on a given classification track.
+        // Used when a TRAIN-level activity (OBTP / DEPD) targets a track and we
+        // need to fan its status out to every WG sitting on it.
+        function findWagonGroupsOnTrack(trackId) {
+            const result = [];
+            for (const wgId in placedWagonGroups) {
+                const el = placedWagonGroups[wgId];
+                if (el && el.dataset.atTrack === trackId) result.push(wgId);
+            }
+            return result;
+        }
+
+        // Resolve an ActivityId to the list of WGs whose badges it should drive.
+        //   - SEC / COP target a single WG (entityId == wgId).
+        //   - OBTP / DEPD target an OutboundTrain (entityId == trainId), but the
+        //     activity's location token IS the classification track, so we light
+        //     up every WG currently sitting on that track.
+        //   - PushOffDrive: explicitly excluded. Its entityId is a "+"-joined
+        //     combo of WGs that aren't on the classification track yet (they're
+        //     mid-push), so falling back to findWagonGroupsOnTrack would
+        //     incorrectly stamp PushOffDrive on EARLIER WGs already parked on
+        //     the same destination track and minding their own business.
+        // Returns [] if no match (e.g. the activity hits the arrival track).
+        function findWagonGroupsForActivity(activityId, activityType) {
+            if (activityType === 'PushOffDrive') return [];
+
+            const parts = String(activityId || '').split('_');
+            if (parts.length < 5) return [];
+            const entityId = parts[2];
+            const location = parts[parts.length - 1];
+
+            if (placedWagonGroups[entityId]) return [entityId];
+            return findWagonGroupsOnTrack(location);
+        }
+
+        // Find which train a wagon group belongs to. Used to remove the WG's
+        // graphic from its parent train when EntityCreated fires.
+        function findTrainIdForWagonGroup(wgId) {
+            for (const tId in trains) {
+                const t = trains[tId];
+                if (!t || !t.wagonGroups) continue;
+                for (const wg of t.wagonGroups) {
+                    if (wg.id === wgId) return tId;
+                }
+            }
+            return null;
+        }
+
+        // Pop one wagon-group rectangle out of its parent train graphic. Called
+        // when EntityCreated fires (the WG has been pushed onto its classification
+        // track and is now standalone). After removal, re-anchor the train so the
+        // L-box stays pinned at the original right-edge anchor — this matches the
+        // physical reality of the loco pulling the remaining train back to its
+        // original position between sub-drives.
+        function removeWagonFromTrain(trainId, wgId) {
+            const trainDiv = document.getElementById(`train-${trainId}`);
+            if (!trainDiv) return;
+
+            const wgDiv = trainDiv.querySelector(`.wagon-group[data-wg-id="${wgId}"]`);
+            if (!wgDiv) return;
+
+            wgDiv.remove();
+
+            // Re-compute the train's body width from what's left and re-anchor.
+            const anchorX = parseFloat(trainDiv.dataset.anchorX);
+            if (isNaN(anchorX)) return;
+
+            let remainingPx = 0;
+            trainDiv.querySelectorAll('.wagon-group').forEach(el => {
+                remainingPx += parseFloat(el.style.width) || 0;
+            });
+            const locoEl = trainDiv.querySelector('.locomotive');
+            if (locoEl) remainingPx += parseFloat(locoEl.style.width) || 0;
+
+            trainDiv.style.left = `${anchorX - remainingPx}px`;
         }
 
         // Draw a wagon-group as its own standalone entity on a classification track.
@@ -1354,6 +1600,14 @@
             wgDiv.style.top  = `${pos.y}px`;
             wgDiv.style.zIndex = '4';
 
+            // Status pill (child of the WG so it tracks position automatically and
+            // is removed in lockstep with the WG itself).
+            const badge = document.createElement('div');
+            badge.className = 'wg-status waiting';
+            badge.id = `wg-badge-${wgId}`;
+            badge.textContent = 'Waiting';
+            wgDiv.appendChild(badge);
+
             document.getElementById('main-content').appendChild(wgDiv);
 
             classificationTrackFill[trackId] = alreadyFilled + widthPx;
@@ -1387,9 +1641,15 @@
             trainDivs.forEach(div => div.remove());
 
             // Tear down any standalone wagon-group entities from a previous run.
+            // Their badges are children, so they go away with them.
             mainContent.querySelectorAll('.wg-standalone').forEach(div => div.remove());
             classificationTrackFill = {};
             placedWagonGroups       = {};
+            wagonGroupActivities    = {};
+
+            // Restore the passage track to "available" / green.
+            passageState = { available: true, usedByTrainId: null };
+            updatePassageUI();
 
             // Clear per-train replay state so a fresh run starts from scratch.
             for (const tId in trains) {

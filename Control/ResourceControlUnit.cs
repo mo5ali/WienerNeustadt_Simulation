@@ -20,6 +20,13 @@ namespace WienerNeustadtSimulation.Control
         private readonly HashSet<string> _availableTrainLocoIds = new();  // NEW: Train locomotives (infinite)
         private bool _exitGateAvailable = true;  // NEW: Exit gate (one resource)
 
+        // The single passage track that connects the arrival and classification track
+        // groups. In a flat shunting yard there is exactly ONE such track, so at most
+        // one PushOff activity can use it at a time. Held for the entire PushOff (the
+        // loco needs it both for the push and the pull-back between sub-drives), and
+        // released when PushOff completes via Release().
+        private bool _passageTrackAvailable = true;
+
         private const double FixedTravelDistanceMeters = 100.0;
         private const double DefaultWorkerSpeedMetersPerMinute = 80.0;
         private const double LocoSpeedMetersPerMinute = 25.0;
@@ -60,6 +67,12 @@ namespace WienerNeustadtSimulation.Control
             if (request.Activity is DepartureDriveActivity)
                 resourceDesc = "exit gate";
 
+            // PushOff additionally needs the single passage track between arrival
+            // and classification; surface it in the request log so the console makes
+            // the new dependency obvious.
+            if (request.Activity is PushOffActivity)
+                resourceDesc += " + passage track";
+
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: request 'Req_{request.Activity.ActivityId}' received ({resourceDesc})");
             SimulationLogger.Instance.LogActivityEvent(request.RequestId, "ResourceRequest", _engine.Now, "Submitted", resourceDesc);
 
@@ -93,6 +106,11 @@ namespace WienerNeustadtSimulation.Control
             // Handle train locomotive for OBTP
             bool needsTrainLoco = activity is OutboundTrainPreparationActivity;
 
+            // PushOff needs the single passage track between arrival and classification.
+            // Check up-front so we don't allocate (and travel) workers when the
+            // passage is busy — we wait for the whole bundle to be available.
+            bool needsPassageTrack = activity is PushOffActivity;
+
             bool needsWorkers = request.RequiredWorkers > 0;
             bool needsLoco = request.RequiresLocomotive;
 
@@ -103,6 +121,9 @@ namespace WienerNeustadtSimulation.Control
                 return false;
 
             if (needsTrainLoco && _availableTrainLocoIds.Count == 0)
+                return false;
+
+            if (needsPassageTrack && !_passageTrackAvailable)
                 return false;
 
             // Allocate workers
@@ -133,6 +154,16 @@ namespace WienerNeustadtSimulation.Control
                 _availableTrainLocoIds.Remove(trainLocoId);
                 activity.AllocatedLocoIds.Add(trainLocoId);
                 allocatedTrainLocos.Add(trainLocoId);
+            }
+
+            // Claim the passage track for PushOff. Released in Release() when the
+            // PushOff activity completes — i.e. holds for the full multi-sub-drive
+            // sequence including each pull-back to the arrival track.
+            if (needsPassageTrack)
+            {
+                _passageTrackAvailable = false;
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: passage track claimed for '{activity.ActivityId}'");
+                SimulationLogger.Instance.LogActivityEvent(activity.ActivityId, activity.ActivityType, _engine.Now, "PassageClaimed", "");
             }
 
             // Build compact allocation message (workers + train loco)
@@ -281,6 +312,19 @@ namespace WienerNeustadtSimulation.Control
                 Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: Exit gate released");
                 ProcessQueue();
                 return;
+            }
+
+            // Passage track release for PushOff. Falls through to the normal worker /
+            // loco release flow below since PushOff also holds those resources. We
+            // still call ProcessQueue here so a queued PushOff that was blocked
+            // purely on the passage gets a chance to proceed immediately, without
+            // having to wait for the workers to finish their travel back.
+            if (activity is PushOffActivity)
+            {
+                _passageTrackAvailable = true;
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: passage track released by '{activity.ActivityId}'");
+                SimulationLogger.Instance.LogActivityEvent(activity.ActivityId, activity.ActivityType, _engine.Now, "PassageReleased", "");
+                ProcessQueue();
             }
 
             // Workers
@@ -439,19 +483,39 @@ namespace WienerNeustadtSimulation.Control
 
         // ─── Queue ─────────────────────────────────────────────────────────────
 
+        // FIFO-with-bypass dispatch. We walk the entire pending queue in order
+        // and grant every request whose resources are currently available; any
+        // that still can't be allocated are returned to the queue in their
+        // original relative order. This models a real yardmaster who matches
+        // free resources to whichever feasible job is up next, instead of
+        // letting one stuck request (e.g. an ITP waiting on a busy shunt loco)
+        // block all the requests behind it that could otherwise proceed.
+        //
+        // Note: strictly speaking this is no longer pure FIFO — request B can
+        // run before A if A is infeasible at the moment. In practice this is
+        // exactly what a human dispatcher would do, and it eliminates the
+        // pseudo-deadlocks that arise from peek-only queue processing.
         private void ProcessQueue()
         {
             if (_requestQueue.Count == 0)
                 return;
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: processing queue ({_requestQueue.Count} waiting)");
+            var pending = _requestQueue.ToList();
+            _requestQueue.Clear();
 
-            var next = _requestQueue.Peek();
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: processing queue ({pending.Count} waiting)");
 
-            if (TryAllocateAndDispatchResources(next))
+            foreach (var req in pending)
             {
-                _requestQueue.Dequeue();
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: dequeued '{next.RequestId}'");
+                if (TryAllocateAndDispatchResources(req))
+                {
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: dequeued '{req.RequestId}'");
+                }
+                else
+                {
+                    // Still infeasible — keep it queued in its original relative slot.
+                    _requestQueue.Enqueue(req);
+                }
             }
         }
 
