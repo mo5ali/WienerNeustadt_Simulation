@@ -118,11 +118,12 @@
             display: none;
             width: 100%;
             height: calc(100vh - 8px - 70px);
-            background-image: url('vis_background_v2.png');
-            background-size: cover;
-            background-position: center;
+            background-image: url('vis_background_v3.png');
+            background-size: 1920px 1080px;
+            background-position: bottom left; /* ← bottom edge locked to container bottom */
             background-repeat: no-repeat;
             position: relative;
+            overflow: hidden;
         }
 
         /* Passage track (single-resource between arrival and classification groups).
@@ -512,15 +513,21 @@
         const arrivalTrackPositions = {
             // TODO: adjust these to match your background image coordinates
             // key is arrival track id (e.g. "703"), value is {x,y}
-            "703": { x: 800, y: 815 },
-            "705": { x: 700, y: 775 },
+            "731": { x: 825, y: 325 },
+            "729": { x: 825, y: 375 },
+            "727": { x: 825, y: 425 },
+            "725": { x: 825, y: 475 },
+            "723": { x: 980, y: 525 },
+            "721": { x: 1010, y: 445 },
+            "719": { x: 950, y: 365 },
+            "717": { x: 950, y: 365 },
+            "715": { x: 950, y: 365 },
+            "713": { x: 700, y: 735 },
+            "711": { x: 700, y: 775 },
+            "709": { x: 800, y: 815 },
             "707": { x: 700, y: 735 },
-            "709": { x: 950, y: 690 },
-            "703": { x: 850, y: 815 },
-            "727": { x: 825, y: 325 },
-            "725": { x: 950, y: 365 },
-            "723": { x: 980, y: 405 },
-            "721": { x: 1010, y: 445 }
+            "705": { x: 700, y: 775 },
+            "703": { x: 800, y: 815 }
         };
 
         // Classification track positions — fill in as needed so workers doing SEC / COP / OBTP / DEPD
