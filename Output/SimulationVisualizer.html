@@ -170,47 +170,57 @@
                 background: #B71C1C;
             }
 
-            #main-content.visible {
-                display: block;
-            }
+        #main-content.visible {
+            display: block;
+        }
 
-        /* Worker Icons Overlay (restored) */
+        /* Worker Icons Overlay — child .worker-icon elements are positioned
+           absolutely using slot coordinates from workerSlotPositions. */
         #worker-grid {
             position: absolute;
-            top: 40px;
-            left: 700px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            max-width: 400px;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
         }
 
-        /* Shunting Loco Icons Overlay (restored) */
+        /* Shunting Loco Icons Overlay — same positioning model. */
         #shuntloco-grid {
             position: absolute;
-            top: 40px;
-            left: 1150px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            max-width: 400px;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
         }
+
+            /* Re-enable interaction on the icons themselves (parents are
+           pointer-events:none so they don't block clicks on the background). */
+            #worker-grid .worker-icon,
+            #shuntloco-grid .worker-icon {
+                pointer-events: auto;
+            }
 
         /* Shared icon style (restored) */
         .worker-icon {
+            position: absolute;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 2px;
+            gap: 0;
             width: 70px;
         }
 
-            /* Worker graphic shrunk 35% (40px -> 26px) */
+            /* Worker graphic shrunk 35% (40px -> 26px). Negative vertical margins
+               pull the name label and status pill in closer to the image. */
             .worker-icon img {
                 width: 26px;
                 height: 26px;
                 object-fit: contain;
                 filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
+                margin-top: -3px;
+                margin-bottom: -3px;
             }
 
             /* Shunting loco graphic — keep at original 40px (don't inherit the worker shrink).
@@ -224,6 +234,7 @@
                 margin-top: -14px;
                 margin-bottom: -14px;
             }
+
             .worker-icon[data-kind="shuntloco"] {
                 gap: 0;
             }
@@ -255,14 +266,34 @@
                 min-width: 50px;
             }
 
-            .worker-icon .worker-status.status-Idle          { background: #9e9e9e; }
-            .worker-icon .worker-status.status-MovingToWork  { background: #2196F3; }
-            .worker-icon .worker-status.status-WaitOtherR    { background: #FFC107; color: #222; }
-            .worker-icon .worker-status.status-Working       { background: #4CAF50; }
-            .worker-icon .worker-status.status-MovingToRest  { background: #FF9800; }
-            /* Locomotive-specific statuses (mirror the worker state names semantically) */
-            .worker-icon .worker-status.status-MovingToTask  { background: #2196F3; }
-            .worker-icon .worker-status.status-OnTask        { background: #2E7D32; }
+                .worker-icon .worker-status.status-Idle {
+                    background: #9e9e9e;
+                }
+
+                .worker-icon .worker-status.status-MovingToWork {
+                    background: #2196F3;
+                }
+
+                .worker-icon .worker-status.status-WaitOtherR {
+                    background: #FFC107;
+                    color: #222;
+                }
+
+                .worker-icon .worker-status.status-Working {
+                    background: #4CAF50;
+                }
+
+                .worker-icon .worker-status.status-MovingToRest {
+                    background: #FF9800;
+                }
+                /* Locomotive-specific statuses (mirror the worker state names semantically) */
+                .worker-icon .worker-status.status-MovingToTask {
+                    background: #2196F3;
+                }
+
+                .worker-icon .worker-status.status-OnTask {
+                    background: #2E7D32;
+                }
 
             /* Grey the graphic while the entity is in transit (either direction,
                workers or locos). */
@@ -348,29 +379,34 @@
                 box-shadow: 0 1px 3px rgba(0,0,0,0.3);
             }
 
-            /* Status pill that hangs beneath a standalone WG, mirroring the
+        /* Status pill that hangs beneath a standalone WG, mirroring the
                .train-status badge but smaller. Shows "Waiting" by default,
                or the running activity name (Securing / Coupling / OBTP / DEPD). */
-            .wg-status {
-                position: absolute;
-                top: 14px;
-                left: 50%;
-                transform: translateX(-50%);
-                padding: 1px 4px;
-                border-radius: 5px;
-                font-size: 6px;
-                font-weight: 700;
-                line-height: 1;
-                white-space: nowrap;
-                border: 1px solid rgba(0,0,0,0.25);
-                color: #fff;
-                text-shadow: none;
-                background: #7a0b0b;  /* default: waiting (dark red) */
-                z-index: 5;
+        .wg-status {
+            position: absolute;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 1px 4px;
+            border-radius: 5px;
+            font-size: 6px;
+            font-weight: 700;
+            line-height: 1;
+            white-space: nowrap;
+            border: 1px solid rgba(0,0,0,0.25);
+            color: #fff;
+            text-shadow: none;
+            background: #7a0b0b; /* default: waiting (dark red) */
+            z-index: 5;
+        }
+
+            .wg-status.waiting {
+                background: #7a0b0b;
             }
 
-                .wg-status.waiting   { background: #7a0b0b; }
-                .wg-status.activity  { background: #0b5a7a; }
+            .wg-status.activity {
+                background: #0b5a7a;
+            }
 
         .locomotive {
             /* Thickness scaled to ~60% of original (18 → 11) to match wagon group */
@@ -489,19 +525,19 @@
 
         // Worker ↔ activity bookkeeping so the ActivityEvent "Started" event
         // can flip the right workers from WaitOtherR → Working in one pass.
-        let activityWorkers   = {};          // activityId → [workerId, ...]
+        let activityWorkers = {};          // activityId → [workerId, ...]
         let activeActivityIds = new Set();   // activityIds currently in the "Started..Completed" window
 
         // Standalone wagon-group tracking for classification tracks. After PushOff,
         // each WG becomes its own entity on the map: these maps record where they
         // landed so new arrivals can stack behind them and reset() can tear them down.
         let classificationTrackFill = {};    // trackId → total px already occupied on that track
-        let placedWagonGroups       = {};    // wgId → DOM element (standalone)
+        let placedWagonGroups = {};    // wgId → DOM element (standalone)
 
         // Per-WG running activity (Securing / Coupling / OBTP / DEPD) for the
         // status pill that hangs under each standalone wagon group. Empty / missing
         // means the WG is in its default "Waiting" state.
-        let wagonGroupActivities    = {};    // wgId → activity name currently in progress
+        let wagonGroupActivities = {};    // wgId → activity name currently in progress
 
         // Passage-track resource indicator state.
         // Driven by ActivityEvent rows with status PassageClaimed / PassageReleased
@@ -550,13 +586,47 @@
 
         };
 
+        // Worker grid slots — 2 rows × 18 columns. Slot id format "RC..":
+        // first digit = row (1 or 2), remaining digits = column number.
+        // Coordinates are in 1920×1080 image space (y measured from image top).
+        // The image is anchored to the bottom of #main-content, so getSlotPosition()
+        // applies the same yOffset used by getTrackPosition().
+        const workerSlotPositions = {};
+        (function buildWorkerSlots() {
+            const xStart = 375, xStep = 50;
+            const yRow1 = 225, yRow2 = 275;
+            const cols = 18;
+            for (let c = 1; c <= cols; c++) {
+                workerSlotPositions[`1${String(c).padStart(2, '0')}`] = { x: xStart + (c - 1) * xStep, y: yRow1 };
+                workerSlotPositions[`2${String(c).padStart(2, '0')}`] = { x: xStart + (c - 1) * xStep, y: yRow2 };
+            }
+        })();
+
+        // Shunting loco grid slots — 2 rows × 13 columns. Same id scheme.
+        const locoSlotPositions = {};
+        (function buildLocoSlots() {
+            const xStart = 1275, xStep = 50;
+            const yRow1 = 225, yRow2 = 275;
+            const cols = 13;
+            for (let c = 1; c <= cols; c++) {
+                locoSlotPositions[`1${String(c).padStart(2, '0')}`] = { x: xStart + (c - 1) * xStep, y: yRow1 };
+                locoSlotPositions[`2${String(c).padStart(2, '0')}`] = { x: xStart + (c - 1) * xStep, y: yRow2 };
+            }
+        })();
+
+        // Convert a slot's image-space coordinate to a container-space coordinate
+        // (applies the same bottom-anchor offset used for track positions).
+        function applyImageYOffset(pos) {
+            if (!pos) return null;
+            const container = document.getElementById('main-content');
+            const yOffset = container ? (container.clientHeight - 1080) : 0;
+            return { x: pos.x, y: pos.y + yOffset };
+        }
+
         // Unified track -> {x,y} lookup used by worker teleports.
         function getTrackPosition(trackId) {
             const pos = arrivalTrackPositions[trackId] || classificationTrackPositions[trackId];
-            if (!pos) return null;
-            const container = document.getElementById('main-content');
-            const yOffset = container.clientHeight - 1080;
-            return { x: pos.x, y: pos.y + yOffset };
+            return applyImageYOffset(pos);
         }
 
         // Activity IDs now look like: Act_ITP_11001_090500_725  →  last token is the location
@@ -675,12 +745,12 @@
                 if (eventType === 'ActivityEvent' ||
                     eventType === 'WorkerEvent' ||
                     eventType === 'WagonGroupEvent') {
-                    entityId    = parts[2];
+                    entityId = parts[2];
                     eventAction = parts[3];
                 } else {
                     // TrainEvent (and any other legacy rows that follow this layout)
                     eventAction = parts[2];
-                    entityId    = parts[3];
+                    entityId = parts[3];
                 }
                 const details = parts.length > 4 ? parts[4] : '';
 
@@ -729,9 +799,53 @@
             console.log("Parsed Workers:", workers);
             console.log("Parsed Locos:", shuntLocos);
         }
+        // Build slot id "RCC" from row and column (1-indexed).
+        function makeSlotId(row, col) {
+            return `${row}${String(col).padStart(2, '0')}`;
+        }
+
+        // Dynamic slot pool: a worker/loco "owns" whatever slot is free when they
+        // need one. Leaving the grid releases the slot; coming back picks the
+        // first free one. This way slot 101 isn't permanently Fernando's — it's
+        // just the first slot, taken by whoever returns first.
+        function createSlotPool(slotTable, rows, cols) {
+            // Ordered list of slot IDs in (row 1 left→right, row 2 left→right) order.
+            const order = [];
+            for (let r = 1; r <= rows; r++) {
+                for (let c = 1; c <= cols; c++) order.push(makeSlotId(r, c));
+            }
+            return {
+                table: slotTable,
+                order,
+                occupied: new Set(),  // slot IDs currently in use
+                claim() {
+                    for (const id of this.order) {
+                        if (!this.occupied.has(id)) {
+                            this.occupied.add(id);
+                            return id;
+                        }
+                    }
+                    return null; // pool exhausted
+                },
+                release(slotId) {
+                    if (slotId) this.occupied.delete(slotId);
+                }
+            };
+        }
+
+        let workerSlotPool = null;
+        let locoSlotPool = null;
+
+        // Pick the right pool for an icon element based on its kind.
+        function poolFor(el) {
+            if (!el) return null;
+            return el.dataset.kind === 'shuntloco' ? locoSlotPool : workerSlotPool;
+        }
+
         function renderWorkerGrid() {
             const grid = document.getElementById('worker-grid');
             grid.innerHTML = '';
+            workerSlotPool = createSlotPool(workerSlotPositions, 2, 18);
             for (const worker of workers) {
                 const firstName = (worker.name || '').split(/\s+/)[0] || worker.id;
                 const div = document.createElement('div');
@@ -739,17 +853,19 @@
                 div.id = `worker-${worker.id}`;
                 div.dataset.kind = 'worker';
                 div.innerHTML = `
-                                <span class="worker-name">${firstName}</span>
-                                <img src="worker_icon.png" alt="${worker.name}" title="${worker.name} (${worker.id})">
-                                <span class="worker-status status-Idle">Idle</span>
-                            `;
+                                    <span class="worker-name">${firstName}</span>
+                                    <img src="worker_icon.png" alt="${worker.name}" title="${worker.name} (${worker.id})">
+                                    <span class="worker-status status-Idle">Idle</span>
+                                `;
                 grid.appendChild(div);
+                claimAndPositionGridSlot(div);
             }
         }
 
         function renderShuntLocoGrid() {
             const grid = document.getElementById('shuntloco-grid');
             grid.innerHTML = '';
+            locoSlotPool = createSlotPool(locoSlotPositions, 2, 13);
             for (const loco of shuntLocos) {
                 const label = loco.name || loco.id;
                 const div = document.createElement('div');
@@ -757,13 +873,52 @@
                 div.id = `shuntloco-${loco.id}`;
                 div.dataset.kind = 'shuntloco';
                 div.innerHTML = `
-                                <span class="worker-name">${label}</span>
-                                <img src="shunting_loco.png" alt="${label}" title="${label} (${loco.id})">
-                                <span class="worker-status status-Idle">Idle</span>
-                            `;
+                                    <span class="worker-name">${label}</span>
+                                    <img src="shunting_loco.png" alt="${label}" title="${label} (${loco.id})">
+                                    <span class="worker-status status-Idle">Idle</span>
+                                `;
                 grid.appendChild(div);
+                claimAndPositionGridSlot(div);
             }
         }
+
+        // Claim the first free slot from the appropriate pool, store it on the
+        // element, and apply its coordinates as inline left/top. Used both at
+        // initial render and whenever an icon returns to the grid.
+        function claimAndPositionGridSlot(el) {
+            const pool = poolFor(el);
+            if (!pool) return;
+            const slotId = pool.claim();
+            if (!slotId) return; // pool exhausted; icon will sit at (0,0) of grid
+            const slot = pool.table[slotId];
+            el.dataset.slotId = slotId;
+            el.dataset.slotX = String(slot.x);
+            el.dataset.slotY = String(slot.y);
+            positionGridIcon(el);
+        }
+
+        // Apply the icon's stored slot coordinates as inline left/top, with the
+        // bottom-anchor yOffset applied. Centers the icon on the slot point via
+        // a translate transform — but only when the icon is in its grid (the
+        // teleport code overwrites these styles when the icon is on a track).
+        function positionGridIcon(el) {
+            if (!el || !el.dataset.slotX) return;
+            const sx = parseFloat(el.dataset.slotX);
+            const sy = parseFloat(el.dataset.slotY);
+            const p = applyImageYOffset({ x: sx, y: sy });
+            el.style.left = `${p.x}px`;
+            el.style.top = `${p.y}px`;
+            el.style.transform = 'translate(-50%, -50%)';
+        }
+
+        // When the window resizes, the bottom-anchor offset changes — reposition
+        // every grid-resident icon so they stay aligned with the painted grid.
+        window.addEventListener('resize', () => {
+            document.querySelectorAll('#worker-grid .worker-icon, #shuntloco-grid .worker-icon')
+                .forEach(el => {
+                    if (el.dataset.teleported !== '1') positionGridIcon(el);
+                });
+        });
 
         // Resolve any entity ID (worker or shunt-loco) to its DOM root.
         function findEntityRoot(id) {
@@ -789,11 +944,11 @@
 
         // Horizontal spacing between entities standing on the same track (center-to-center).
         const WORKER_TRACK_SLOT_PX = 30;
-        const LOCO_TRACK_SLOT_PX   = 50;   // bigger step for the chunkier loco icons
+        const LOCO_TRACK_SLOT_PX = 50;   // bigger step for the chunkier loco icons
         const WORKER_TRACK_X_OFFSET_PX = -600;   // negative = left of anchor, positive = right — applies to workers on every track
         // Lift the icon a little above the track line for clarity.
         const WORKER_TRACK_Y_OFFSET_PX = -20;
-        const LOCO_TRACK_Y_OFFSET_PX   = -12;  // tuned so the loco image vertically centers on the train's wagon row
+        const LOCO_TRACK_Y_OFFSET_PX = -12;  // tuned so the loco image vertically centers on the train's wagon row
 
         // Teleport a worker or shunt loco onto the track it's assigned to.
         // Leaves a hidden placeholder in its grid so the grid layout stays stable.
@@ -810,7 +965,7 @@
 
             const isLoco = el.dataset.kind === 'shuntloco';
             const slotPx = isLoco ? LOCO_TRACK_SLOT_PX : WORKER_TRACK_SLOT_PX;
-            const yOff   = isLoco ? LOCO_TRACK_Y_OFFSET_PX : WORKER_TRACK_Y_OFFSET_PX;
+            const yOff = isLoco ? LOCO_TRACK_Y_OFFSET_PX : WORKER_TRACK_Y_OFFSET_PX;
 
             // Share the slot pool with peers of the SAME kind on this track so
             // workers and locos don't stack into each other's columns.
@@ -818,7 +973,7 @@
                 ? `.worker-icon[data-at-track="${trackId}"][data-kind="shuntloco"]`
                 : `.worker-icon[data-at-track="${trackId}"]:not([data-kind="shuntloco"])`;
             const peers = Array.from(document.querySelectorAll(peerSelector))
-                                .filter(p => p.id !== el.id);
+                .filter(p => p.id !== el.id);
             const used = new Set(
                 peers.map(p => parseInt(p.dataset.slot, 10)).filter(n => !isNaN(n))
             );
@@ -837,6 +992,15 @@
 
                 const main = document.getElementById('main-content');
                 if (main) main.appendChild(el);
+
+                // Release the grid slot so another returning entity can take it.
+                const pool = poolFor(el);
+                if (pool && el.dataset.slotId) {
+                    pool.release(el.dataset.slotId);
+                    delete el.dataset.slotId;
+                    delete el.dataset.slotX;
+                    delete el.dataset.slotY;
+                }
             }
 
             el.style.position = 'absolute';
@@ -846,13 +1010,13 @@
                 // horizontal center is at basePos.x - 12. First loco lands centered
                 // there; additional locos stack LEFTWARD (deeper into the train).
                 el.style.left = `${basePos.x - 12 - slot * slotPx}px`;
-                el.style.top  = `${basePos.y + yOff}px`;
+                el.style.top = `${basePos.y + yOff}px`;
                 el.style.transform = 'translateX(-50%)';
             } else {
                 // Workers stack rightward from the track anchor, shifted by the
                 // per-kind horizontal offset.
                 el.style.left = `${basePos.x + WORKER_TRACK_X_OFFSET_PX + slot * slotPx}px`;
-                el.style.top  = `${basePos.y + yOff}px`;
+                el.style.top = `${basePos.y + yOff}px`;
                 el.style.transform = '';
             }
             el.style.width = 'auto';
@@ -862,7 +1026,9 @@
             el.dataset.slot = String(slot);
         }
 
-        // Put a previously-teleported entity (worker or shunt loco) back into its grid slot.
+        // Put a previously-teleported entity (worker or shunt loco) back into its grid.
+        // The entity claims the FIRST FREE slot from its pool — slots aren't tied
+        // to specific workers/locos, so whoever returns first gets slot 101.
         function teleportWorkerBackToGrid(entityId) {
             const el = findEntityRoot(entityId);
             if (!el) return;
@@ -882,6 +1048,8 @@
             delete el.dataset.teleported;
             delete el.dataset.atTrack;
             delete el.dataset.slot;
+            // Claim whichever grid slot is currently free and place the icon there.
+            claimAndPositionGridSlot(el);
         }
 
         // Show/hide the train's own black "L" locomotive box. Called when
@@ -1006,9 +1174,9 @@
             // Worker status marker (Idle / MovingToWork / Working / MovingToRest)
             // + physical teleport between the worker grid and the track they're working at.
             if (event.eventType === 'WorkerEvent') {
-                const entityId   = event.entityId;
+                const entityId = event.entityId;
                 const activityId = event.details;                                // ActivityId for Travel/Arrived/Return*
-                const trackId    = extractLocationFromActivityId(activityId);    // last token of ActivityId
+                const trackId = extractLocationFromActivityId(activityId);    // last token of ActivityId
 
                 // Shunt locos share the WorkerEvent channel but have their own state vocabulary.
                 // Critically, a loco goes Arrived → OnTask directly (no WaitOtherR): once it's
@@ -1145,13 +1313,13 @@
             // owning train can be recovered via findTrainForActivity.
             if (event.eventType === 'ActivityEvent' &&
                 (event.activityStatus === 'PassageClaimed' ||
-                 event.activityStatus === 'PassageReleased')) {
+                    event.activityStatus === 'PassageReleased')) {
                 if (event.activityStatus === 'PassageClaimed') {
                     const trainId = findTrainForActivity(event.entityId);
-                    passageState.available    = false;
+                    passageState.available = false;
                     passageState.usedByTrainId = trainId;
                 } else {
-                    passageState.available    = true;
+                    passageState.available = true;
                     passageState.usedByTrainId = null;
                 }
                 updatePassageUI();
@@ -1164,7 +1332,7 @@
             // Also drives the per-worker WaitOtherR → Working → (MovingToRest) transitions.
             if (event.eventType === 'ActivityEvent' && event.event !== 'ArrivalDrive') {
                 const activityId = event.entityId;
-                const trainId    = findTrainForActivity(activityId);
+                const trainId = findTrainForActivity(activityId);
 
                 if (event.activityStatus === 'Started') {
                     activeActivityIds.add(activityId);
@@ -1442,7 +1610,7 @@
         // null and we just bail out.
         function updatePassageUI() {
             const strip = document.getElementById('passage-strip');
-            const pill  = document.getElementById('passage-pill');
+            const pill = document.getElementById('passage-pill');
             if (!strip || !pill) return;
 
             if (passageState.available) {
@@ -1605,7 +1773,7 @@
             // Right-anchor at pos.x, growing leftward so each new arrival pushes
             // deeper into the track behind the already-parked groups.
             wgDiv.style.left = `${pos.x - alreadyFilled - widthPx}px`;
-            wgDiv.style.top  = `${pos.y}px`;
+            wgDiv.style.top = `${pos.y}px`;
             wgDiv.style.zIndex = '4';
 
             // Status pill (child of the WG so it tracks position automatically and
@@ -1652,8 +1820,8 @@
             // Their badges are children, so they go away with them.
             mainContent.querySelectorAll('.wg-standalone').forEach(div => div.remove());
             classificationTrackFill = {};
-            placedWagonGroups       = {};
-            wagonGroupActivities    = {};
+            placedWagonGroups = {};
+            wagonGroupActivities = {};
 
             // Restore the passage track to "available" / green.
             passageState = { available: true, usedByTrainId: null };
@@ -1668,7 +1836,7 @@
             }
 
             // Wipe the worker↔activity bookkeeping too.
-            activityWorkers   = {};
+            activityWorkers = {};
             activeActivityIds = new Set();
 
             // Return any workers / shunt locos that were teleported onto a track back into their grid.
