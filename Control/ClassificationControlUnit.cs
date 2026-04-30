@@ -25,6 +25,16 @@ namespace WienerNeustadtSimulation.Control
         private readonly Queue<CompletionCheckRequest> _completionCheckRequests = new();
         private readonly Queue<TrainDepartureRequest> _departureRequests = new();
 
+        // Within-track FIFO gating for SEC / COP. At most one SEC/COP request per
+        // track may be "live" (submitted to ResourceCU but not yet Started) at a
+        // time. While that request is live, later arrivals on the same track are
+        // held in _deferredPrepsByTrack. When the live request fires its Started
+        // event, we release the next deferred WG so its SEC/COP gets submitted —
+        // preserving arrival order regardless of resource availability or worker
+        // travel-time variance.
+        private readonly Dictionary<string, bool> _hasLiveSecCopByTrack = new();
+        private readonly Dictionary<string, Queue<WagonGroupPreparationRequest>> _deferredPrepsByTrack = new();
+
         private const double MIN_TRAIN_LENGTH = 100.0;
 
         public ClassificationControlUnit(
@@ -83,17 +93,35 @@ namespace WienerNeustadtSimulation.Control
 
         public void HandleWagonGroupArrival(WagonGroup wagonGroup, Track classificationTrack, DateTime time)
         {
-            if (!_wagonGroupsByTrack.ContainsKey(classificationTrack.RealLifeID))
-                _wagonGroupsByTrack[classificationTrack.RealLifeID] = new List<WagonGroup>();
+            var trackId = classificationTrack.RealLifeID;
 
-            _wagonGroupsByTrack[classificationTrack.RealLifeID].Add(wagonGroup);
+            if (!_wagonGroupsByTrack.ContainsKey(trackId))
+                _wagonGroupsByTrack[trackId] = new List<WagonGroup>();
+
+            _wagonGroupsByTrack[trackId].Add(wagonGroup);
             _wagonGroupTracks[wagonGroup.Id] = classificationTrack;  // Track the wagon group's track
 
             // ONLY show the newly arrived WG, not all WGs on the track
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: WG {wagonGroup.Id} arrived at track {classificationTrack.RealLifeID}");
-            SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "ArrivedClassificationTrack", time, classificationTrack.RealLifeID);
+            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: WG {wagonGroup.Id} arrived at track {trackId}");
+            SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "ArrivedClassificationTrack", time, trackId);
 
-            _preparationRequests.Enqueue(new WagonGroupPreparationRequest(wagonGroup, classificationTrack, time));
+            var prep = new WagonGroupPreparationRequest(wagonGroup, classificationTrack, time);
+
+            // Within-track FIFO gate: if there's already a SEC/COP submitted for
+            // this track that hasn't started yet, defer this WG until that one
+            // commences. Otherwise mark the track as having a live request and
+            // submit immediately.
+            if (_hasLiveSecCopByTrack.TryGetValue(trackId, out var hasLive) && hasLive)
+            {
+                if (!_deferredPrepsByTrack.ContainsKey(trackId))
+                    _deferredPrepsByTrack[trackId] = new Queue<WagonGroupPreparationRequest>();
+                _deferredPrepsByTrack[trackId].Enqueue(prep);
+                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: WG {wagonGroup.Id} deferred on track {trackId} — waiting for the earlier WG's SEC/COP to start");
+                return;
+            }
+
+            _hasLiveSecCopByTrack[trackId] = true;
+            _preparationRequests.Enqueue(prep);
             ProcessRequests(time);
         }
 
@@ -176,11 +204,36 @@ namespace WienerNeustadtSimulation.Control
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: Commence '{activity.ActivityId}' [length={activity.EntityLength:F0}m base={activity.BaseSecondsPerMeter:F0}s/m avgMult={activity.AverageWorkerMultiplier:F0} -> duration={duration.TotalSeconds:F0}s]");
             SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, activity.ActivityType + "Started", _engine.Now);
 
+            // Within-track FIFO gate release: this SEC/COP has now Started, so
+            // any WG that arrived behind it on the same track can be released
+            // for its own SEC/COP submission. We release one at a time — that
+            // newly-released WG will hold the gate until IT starts, etc.
+            ReleaseNextDeferredPreparation(trackId, _engine.Now);
+
             _engine.Schedule(
                 _engine.Now.Add(duration),
                 () => CompleteActivity(wagonGroup, trackId, activity),
                 $"Complete{activity.ActivityType}-{wagonGroup.Id}"
             );
+        }
+
+        // Pop one deferred prep request off the per-track queue (if any) and
+        // submit it. Called when the previously-live SEC/COP for the track has
+        // commenced. If the deferred queue is empty, the track simply has no
+        // live SEC/COP — the next arrival will go through the normal path.
+        private void ReleaseNextDeferredPreparation(string trackId, DateTime time)
+        {
+            _hasLiveSecCopByTrack[trackId] = false;
+
+            if (!_deferredPrepsByTrack.TryGetValue(trackId, out var queue) || queue.Count == 0)
+                return;
+
+            var nextPrep = queue.Dequeue();
+            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: deferred WG {nextPrep.WagonGroup.Id} on track {trackId} now released for SEC/COP");
+
+            _hasLiveSecCopByTrack[trackId] = true;
+            _preparationRequests.Enqueue(nextPrep);
+            ProcessRequests(time);
         }
 
         private void CompleteActivity(WagonGroup wagonGroup, string trackId, Activity activity)

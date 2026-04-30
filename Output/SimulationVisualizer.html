@@ -319,7 +319,15 @@
             }
 
         .train-status {
-            margin-left: 5px;
+            /* Floats above the train, horizontally centered. The .train parent
+               is position:absolute so the badge anchors to it; bottom:100%
+               sits just above the train rectangles, and translateX(-50%)
+               centers regardless of train length. */
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 3px;
             padding: 1px 5px;
             border-radius: 6px;
             font-size: 7px;
@@ -330,6 +338,7 @@
             background: #7a0b0b; /* dark red */
             color: #fff;
             text-shadow: none;
+            z-index: 6;
         }
 
             .train-status.waiting {
@@ -1560,7 +1569,7 @@
             // Compute total train-body width (wagons + locomotive) so we can
             // anchor the train by its RIGHT edge (the right side of the locomotive)
             // at the track's reference point. The status badge is not counted —
-            // it floats further right of that anchor.
+            // it's absolute-positioned above the train, outside the flex flow.
             let trainBodyWidthPx = locoWidthPx;
             for (const wg of trainData.wagonGroups) {
                 trainBodyWidthPx += wg.length * pixelsPerMeter;
