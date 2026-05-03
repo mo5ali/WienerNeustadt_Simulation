@@ -139,7 +139,16 @@ namespace WienerNeustadtSimulation
                     classificationTracks,
                     wagonGroupData
                 );
-                Console.WriteLine("✓ ArrivalControlUnit initialized\n");
+                Console.WriteLine("✓ ArrivalControlUnit initialized");
+
+                // Wire the back-edge: when an OBT is created on a classification
+                // track, the destination is no longer eligible to be sorted to
+                // that same track, so ArrivalCU drops the mapping. New WGs of
+                // that destination get a fresh track assignment on the next
+                // RunSortingMethod call.
+                classificationControl.DestinationCommittedToOutbound += (destination, _) =>
+                    arrivalControl.ReleaseDestinationMapping(destination);
+                Console.WriteLine("✓ Wired DestinationCommittedToOutbound → ReleaseDestinationMapping\n");
 
 
 
@@ -249,7 +258,12 @@ namespace WienerNeustadtSimulation
                 var track = new Track(segment.TrackId.ToString("D4"), segment.Length)
                 {
                     RealLifeID = segment.GetMapIdAsString(),
-                    Area = segment.RailwayStationArea ?? "",
+                    // Use the canonical short form ("Arrival") rather than the
+                    // RailwayStationArea suffix ("ArrivalArea") from the JSON.
+                    // Activities, workers, and the area filter all compare on
+                    // this short form, so anything that takes its area from a
+                    // Track (ITP, PushOff, ArrivalDrive) lines up correctly.
+                    Area = "Arrival",
                     Designation = "Arrival",
                     SegmentIds = new List<string> { segment.Id.ToString() }
                 };
@@ -271,7 +285,8 @@ namespace WienerNeustadtSimulation
                 var track = new Track(segment.TrackId.ToString("D4"), segment.Length)
                 {
                     RealLifeID = segment.GetMapIdAsString(),
-                    Area = segment.RailwayStationArea ?? "",
+                    // Canonical short form — see CreateArrivalTracks for the why.
+                    Area = "Classification",
                     Designation = "Classification",
                     SegmentIds = new List<string> { segment.Id.ToString() }
                 };

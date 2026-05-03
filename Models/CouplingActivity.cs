@@ -4,7 +4,7 @@ namespace WienerNeustadtSimulation.Models
 {
     public class CouplingActivity : Activity
     {
-        public override int RequiredWorkers => 2;
+        public override int RequiredWorkers => 1;
         public override bool RequiresLocomotive => false;
         public override double BaseSecondsPerMeter => 12.0;
 

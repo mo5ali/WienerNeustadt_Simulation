@@ -35,6 +35,21 @@ namespace WienerNeustadtSimulation.Control
         private readonly Dictionary<string, bool> _hasLiveSecCopByTrack = new();
         private readonly Dictionary<string, Queue<WagonGroupPreparationRequest>> _deferredPrepsByTrack = new();
 
+        // Tracks for which DestinationCommittedToOutbound has already been
+        // fired (early, on threshold-crossing in HandleWagonGroupArrival, or
+        // late, in CreateOutboundTrain). Prevents double-firing the event
+        // for the same track and lets CreateOutboundTrain skip its own emit
+        // when the early signal already fired.
+        private readonly HashSet<string> _committedTracks = new();
+
+        // Fired the moment an OutboundTrain is created on a classification track —
+        // i.e. the destination's WGs have reached the threshold and OBTP is about
+        // to be requested. ArrivalCU listens to this so it can release its
+        // destination→track mapping; subsequent WGs of the same destination then
+        // get sorted to a fresh classification track instead of piling onto a
+        // track already committed to an outbound train.
+        public event Action<string, string>? DestinationCommittedToOutbound;
+
         private const double MIN_TRAIN_LENGTH = 100.0;
 
         public ClassificationControlUnit(
@@ -104,6 +119,26 @@ namespace WienerNeustadtSimulation.Control
             // ONLY show the newly arrived WG, not all WGs on the track
             Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: WG {wagonGroup.Id} arrived at track {trackId}");
             SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "ArrivedClassificationTrack", time, trackId);
+
+            // EARLY commit: the moment this WG's arrival pushes the track over
+            // MIN_TRAIN_LENGTH, fire DestinationCommittedToOutbound so ArrivalCU
+            // releases the destination → track binding NOW. Without this, the
+            // event fires only after SEC/COP completes (in CreateOutboundTrain),
+            // and any PushOff that resolves its destination in that window
+            // would still be routed onto this track. CreateOutboundTrain still
+            // builds the actual OBT later, but it skips the duplicate emit.
+            if (!_committedTracks.Contains(trackId))
+            {
+                double totalLengthOnTrack = _wagonGroupsByTrack[trackId].Sum(wg => wg.Length);
+                if (totalLengthOnTrack >= MIN_TRAIN_LENGTH)
+                {
+                    var destination = wagonGroup.Destination;
+                    _committedTracks.Add(trackId);
+                    Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} crossed train-length threshold ({totalLengthOnTrack:F0}m >= {MIN_TRAIN_LENGTH:F0}m) — committing destination '{destination}' to outbound (early, before SEC/COP completes)");
+                    SimulationLogger.Instance.LogTrainEvent(trackId, "DestinationCommittedEarly", time, $"{destination}|{totalLengthOnTrack:F0}m");
+                    DestinationCommittedToOutbound?.Invoke(destination, trackId);
+                }
+            }
 
             var prep = new WagonGroupPreparationRequest(wagonGroup, classificationTrack, time);
 
@@ -295,6 +330,21 @@ namespace WienerNeustadtSimulation.Control
             // and should NOT be counted again in future completion checks
             _wagonGroupsByTrack.Remove(trackId);  // ← ADD THIS LINE
 
+            // Notify subscribers (ArrivalCU) that this destination's track is
+            // now committed to an outbound train. ArrivalCU clears its
+            // destination→track mapping so the NEXT WG of this destination
+            // gets sorted to a different (still-free) classification track,
+            // instead of piling onto this one mid-OBTP.
+            //
+            // Skipped if HandleWagonGroupArrival already fired the event when
+            // the threshold was first crossed (the common path). Only fires
+            // here for tracks that somehow reach OBT creation without ever
+            // having gone through the threshold-cross signal — defensive.
+            if (_committedTracks.Add(trackId))
+            {
+                DestinationCommittedToOutbound?.Invoke(destination, trackId);
+            }
+
             RequestOutboundTrainPreparation(train, time);
         }
 
@@ -422,8 +472,21 @@ namespace WienerNeustadtSimulation.Control
             _wagonGroupsByTrack.Remove(train.CurrentTrackId);
             _trainsByTrack.Remove(train.CurrentTrackId);
 
+            // Track is free again; clear the early-commit marker so a future
+            // cycle on this same physical track can re-fire DestinationCommittedToOutbound.
+            _committedTracks.Remove(train.CurrentTrackId);
+
             var track = _classificationTracks.FirstOrDefault(t => t.RealLifeID == train.CurrentTrackId);
-            track?.CurrentOccupancies.Clear();
+            if (track != null)
+            {
+                track.CurrentOccupancies.Clear();
+                // Unreserve the track now that the outbound train has departed.
+                // Without this, every track ever used by an OBT stays Reserved
+                // forever, and ArrivalCU eventually runs out of unreserved
+                // tracks for new destination assignments — especially after
+                // DestinationCommittedToOutbound starts cycling tracks.
+                track.Reserved = false;
+            }
 
             _resourceControl.Release(activity);
 

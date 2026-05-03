@@ -33,7 +33,7 @@ namespace WienerNeustadtSimulation.Models
             {
                 "IncomingTrainPreparation" => 3,
                 "Uncoupling" => 2,
-                "Coupling" => 2,
+                "Coupling" => 1,
                 "Securing" => 1,
                 "PushOff" => 3,
                 _ => 2
@@ -53,7 +53,7 @@ namespace WienerNeustadtSimulation.Models
         {
             return type switch
             {
-                "IncomingTrainPreparation" => 15.0,
+                "IncomingTrainPreparation" => 7,
                 "Uncoupling" => 10.0,
                 "Coupling" => 12.0,
                 "Securing" => 8.0,

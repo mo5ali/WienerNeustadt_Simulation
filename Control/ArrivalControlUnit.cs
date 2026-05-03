@@ -192,6 +192,71 @@ namespace WienerNeustadtSimulation.Control
             return train;
         }
 
+        // Called by ClassificationCU (via the DestinationCommittedToOutbound event)
+        // when an OutboundTrain is created on the destination's currently-mapped
+        // classification track. Releases the destination → track binding so the
+        // very next WG of this destination triggers a fresh track assignment in
+        // RunSortingMethod, instead of being routed onto a track that's already
+        // committed to an in-progress OBT.
+        //
+        // The previously-mapped track stays Reserved + occupied by the OBT until
+        // its DEPD completes; ClassificationCU.CompleteDepartureDrive unreserves
+        // it at that point so it can be reused by any destination later.
+        public void ReleaseDestinationMapping(string destination)
+        {
+            if (string.IsNullOrEmpty(destination)) return;
+            if (!_destinationToTrackMap.ContainsKey(destination)) return;
+
+            var releasedTrackId = _destinationToTrackMap[destination].RealLifeID;
+            _destinationToTrackMap.Remove(destination);
+
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: destination '{destination}' released from track {releasedTrackId} (OBT committed) — next {destination} WG will be sorted to a new track");
+        }
+
+        // Resolves the *current* classification track for a destination at the
+        // moment a PushOffActivity sub-drive is about to fire — i.e. late
+        // binding instead of relying on the sort-time wagonGroupToTrackMap
+        // (which can be stale: if an OBT was committed on the previously-mapped
+        // track between sort time and push time, ReleaseDestinationMapping
+        // dropped the binding and the stale map would otherwise keep pushing
+        // new WGs onto the now-OBT-committed track).
+        //
+        // Behaviour:
+        //   - destination still mapped → return the mapped track unchanged.
+        //   - destination not mapped (released by ReleaseDestinationMapping) →
+        //     pick a free + unreserved classification track, reserve it,
+        //     register the mapping, and return it.
+        //   - no free track available → return null. Caller is expected to log
+        //     and skip the affected sub-push.
+        public Track? ResolveTrackForDestination(string destination)
+        {
+            if (string.IsNullOrEmpty(destination)) return null;
+
+            if (_destinationToTrackMap.TryGetValue(destination, out var existing))
+                return existing;
+
+            Track? freshTrack = null;
+            foreach (var track in _classificationTracks)
+            {
+                if (track.CurrentOccupancies.Count == 0 && track.Reserved == false)
+                {
+                    freshTrack = track;
+                    track.Reserved = true;
+                    break;
+                }
+            }
+
+            if (freshTrack == null)
+            {
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: ERROR — no free classification track for destination '{destination}' at PushOff time");
+                return null;
+            }
+
+            _destinationToTrackMap[destination] = freshTrack;
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: destination '{destination}' re-assigned to track {freshTrack.RealLifeID} at PushOff time (previous track committed to OBT)");
+            return freshTrack;
+        }
+
         private Dictionary<string, Track> RunSortingMethod(Train train)
         {
             var wagonGroupToTrackMap = new Dictionary<string, Track>();
@@ -230,10 +295,24 @@ namespace WienerNeustadtSimulation.Control
                         }
                     }
 
+                    // No free classification track exists right now. Don't crash —
+                    // log a clear error to console and CSV, skip the WG, and let
+                    // the rest of the sort continue. The skipped WG won't be
+                    // included in this train's PushOff (it's effectively stuck on
+                    // the arrival track) and will need ops attention. This is
+                    // rare — if you're hitting it often, you've either run out
+                    // of classification tracks for the workload, or the
+                    // classification-side Reserved flags aren't being released
+                    // fast enough by departing OBTs.
                     if (classificationTrack == null)
-                        Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | SORTING: no free classification tracks");
+                    {
+                        Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | SORTING: ERROR — no free classification track for destination '{destination}'; WG {wgId} of train {train.ID} will be skipped");
+                        SimulationLogger.Instance.LogTrainEvent(train.ID, "ClassificationTrackUnavailable", _engine.Now, $"{destination} (wg={wgId})");
+                        sortingOutputs.Add($"[{wgId} → {destination} → UNASSIGNED]");
+                        continue; // skip this WG, don't write a null into the map
+                    }
 
-                    _destinationToTrackMap[destination] = classificationTrack!;
+                    _destinationToTrackMap[destination] = classificationTrack;
                     SimulationLogger.Instance.LogTrainEvent(train.ID, "ClassificationTrackAssigned", _engine.Now, $"{destination} -> {classificationTrack.RealLifeID}");
 
                     isNewAssignment = true;  // Mark as new
@@ -337,17 +416,34 @@ namespace WienerNeustadtSimulation.Control
                 ? _trainWagonGroupMaps[train.ID]
                 : new Dictionary<string, Track>();
 
+            // Defensive filter: if RunSortingMethod skipped any WG due to no
+            // free classification track, that WG won't be in the map and would
+            // KeyNotFoundException inside PushOffActivity. Drop those WGs from
+            // the push-off list so the rest of the train can still be processed.
+            var pushableWagonGroupIds = train.WagonGroupIds
+                .Where(wgId => wagonGroupToTrackMap.ContainsKey(wgId))
+                .ToList();
+            if (pushableWagonGroupIds.Count < train.WagonGroupIds.Count)
+            {
+                var skipped = string.Join(",", train.WagonGroupIds.Where(id => !wagonGroupToTrackMap.ContainsKey(id)));
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: PushOff for train {train.ID} excludes unassigned WGs [{skipped}]");
+            }
+
             var pushOffActivity = new PushOffActivity(
                 trainId: train.ID,
                 trainLength: train.Length,
-                wagonGroupIds: train.WagonGroupIds,
-                wagonGroupDestinations: wagonGroupToTrackMap,
+                wagonGroupIds: pushableWagonGroupIds,
                 fromLocation: arrivalTrack.RealLifeID,
                 area: arrivalTrack.Area,
                 requestedAt: _engine.Now,
                 engine: _engine,
                 wagonGroupData: _wagonGroupData,
-                classificationControl: _classificationControl
+                classificationControl: _classificationControl,
+                // Late-binding resolver: PushOffActivity calls this for each
+                // sub-drive so a destination committed to an OBT mid-PushOff
+                // (or between sort time and push time) reroutes new WGs to a
+                // fresh track instead of piling onto the now-committed one.
+                resolveTrackForDestination: ResolveTrackForDestination
             );
 
             // Hand over the loco that stayed allocated on the ITP activity.

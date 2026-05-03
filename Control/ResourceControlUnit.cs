@@ -114,7 +114,15 @@ namespace WienerNeustadtSimulation.Control
             bool needsWorkers = request.RequiredWorkers > 0;
             bool needsLoco = request.RequiresLocomotive;
 
-            if (needsWorkers && _availableWorkerIds.Count < request.RequiredWorkers)
+            // Worker pool is partitioned by yard area: a worker assigned to
+            // "Arrival" cannot satisfy a Classification activity and vice versa,
+            // matching real-world practice where workers are localized to one
+            // side of the yard. Workers with null/empty Area are wildcards.
+            var availableInArea = _availableWorkerIds
+                .Where(id => WorkerMatchesArea(id, activity.Area))
+                .ToList();
+
+            if (needsWorkers && availableInArea.Count < request.RequiredWorkers)
                 return false;
 
             if (needsLoco && _availableLocoIds.Count == 0)
@@ -126,11 +134,11 @@ namespace WienerNeustadtSimulation.Control
             if (needsPassageTrack && !_passageTrackAvailable)
                 return false;
 
-            // Allocate workers
+            // Allocate workers (from the area-filtered subset)
             List<string> allocatedWorkers = new List<string>();
             if (needsWorkers)
             {
-                allocatedWorkers = _availableWorkerIds.Take(request.RequiredWorkers).ToList();
+                allocatedWorkers = availableInArea.Take(request.RequiredWorkers).ToList();
                 foreach (var id in allocatedWorkers)
                     _availableWorkerIds.Remove(id);
                 activity.AllocatedWorkerIds.AddRange(allocatedWorkers);
@@ -520,6 +528,20 @@ namespace WienerNeustadtSimulation.Control
         }
 
         // ─── Utility ───────────────────────────────────────────────────────────
+
+        // Does this worker match the activity's yard area? Returns true if:
+        //   - the activity has no area requirement (null/empty), OR
+        //   - the worker has no area assignment (null/empty — wildcard), OR
+        //   - the two area strings match case-insensitively.
+        // Used by TryAllocateAndDispatchResources to gate worker allocation.
+        private bool WorkerMatchesArea(string workerId, string activityArea)
+        {
+            if (string.IsNullOrEmpty(activityArea)) return true;
+            var w = _workers.FirstOrDefault(x => x.Id == workerId);
+            if (w == null) return true; // unknown worker — be permissive
+            if (string.IsNullOrEmpty(w.Area)) return true; // wildcard worker
+            return string.Equals(w.Area, activityArea, StringComparison.OrdinalIgnoreCase);
+        }
 
         private TimeSpan CalculateWorkerTravelTime(string workerId)
         {

@@ -60,9 +60,11 @@ namespace WienerNeustadtSimulation.Output
                 var id = w.Id!.Trim();
                 var name = (w.Name ?? "").Replace(";", ",").Trim();
                 var speed = w.MovementSpeedMetersPerMinute ?? 0;
+                var area = (w.Area ?? "").Replace(";", ",").Trim();
 
-                // #WORKER;<Id>;<Name>;<SpeedMetersPerMinute>
-                _writer.WriteLine($"#WORKER;{id};{name};{speed.ToString(CultureInfo.InvariantCulture)}");
+                // #WORKER;<Id>;<Name>;<SpeedMetersPerMinute>;<Area>
+                // Area is optional — empty string means the worker is area-agnostic.
+                _writer.WriteLine($"#WORKER;{id};{name};{speed.ToString(CultureInfo.InvariantCulture)};{area}");
             }
 
             // Shunting locomotives:

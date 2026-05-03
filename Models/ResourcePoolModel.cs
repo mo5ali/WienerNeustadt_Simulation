@@ -26,6 +26,13 @@ namespace WienerNeustadtSimulation.Models
 
         [JsonPropertyName("skills")]
         public List<WorkerSkillDto>? Skills { get; set; }
+
+        // Which yard area this worker is assigned to: "Arrival" or "Classification".
+        // Mirrors real-world practice — walking 800 m between areas mid-shift is
+        // unrealistic, so workers are localized to one side. Null / empty means
+        // the worker is area-agnostic (back-compat with old data files).
+        [JsonPropertyName("area")]
+        public string? Area { get; set; }
     }
 
     public class WorkerSkillDto

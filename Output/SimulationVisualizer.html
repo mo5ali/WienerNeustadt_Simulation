@@ -417,6 +417,60 @@
                 background: #0b5a7a;
             }
 
+        /* Black frame drawn around the wagon-group rectangles that make up
+           an outgoing train. Added once OBTP completes and visible until the
+           next reset. Bordered, transparent fill, and pointer-events disabled
+           so it doesn't intercept hovers on the underlying WGs. */
+        .outbound-train-frame {
+            position: absolute;
+            border: 2px solid #000;
+            border-radius: 3px;
+            background: transparent;
+            pointer-events: none;
+            z-index: 3;
+        }
+
+        /* "L" box marking the locomotive of an outgoing train, parked flush
+           against the right edge of the outbound-train-frame. Mirrors the
+           inbound .locomotive style so the visual reads as the same kind of
+           thing. */
+        .outbound-train-loco {
+            position: absolute;
+            width: 24px;
+            height: 11px;
+            background: #222;
+            color: #fff;
+            font-size: 7px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #000;
+            border-radius: 0 2px 2px 0;
+            z-index: 4;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        /* Small "S" badge that stamps onto a WG once Securing completes for
+           it. Sits just above the WG rectangle (the activity status pill
+           lives below it, so this stays visually distinct). */
+        .wg-secured-badge {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 8px;
+            padding: 1px 3px;
+            border-radius: 4px;
+            background: #1f7a1f;
+            color: #fff;
+            font-size: 7px;
+            font-weight: 700;
+            line-height: 1;
+            border: 1px solid rgba(0,0,0,0.4);
+            z-index: 6;
+        }
+
         .locomotive {
             /* Thickness scaled to ~60% of original (18 → 11) to match wagon group */
             height: 11px;
@@ -432,27 +486,38 @@
             text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
         }
 
+        /* Compact destinations legend, parked under the first column of the
+           shunting-loco grid. top/left are set by positionLegend() in JS so
+           the legend follows the same image-space coordinate system as the
+           grids and tracks (top edge at image y = 300, x ≈ 1255). */
         #legend {
             position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            background: rgba(255, 255, 255, 0.92);
+            padding: 6px 8px;
+            border-radius: 5px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+            font-size: 9px;
+            line-height: 1.1;
         }
+
+            #legend h4 {
+                margin: 0 0 4px 0 !important;
+                font-size: 10px;
+                font-weight: 700;
+            }
 
         .legend-item {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin: 5px 0;
+            gap: 5px;
+            margin: 2px 0;
+            font-size: 9px;
         }
 
         .legend-color {
-            width: 30px;
-            height: 20px;
-            border-radius: 3px;
+            width: 14px;
+            height: 9px;
+            border-radius: 2px;
             border: 1px solid #333;
         }
     </style>
@@ -474,7 +539,7 @@
             <input type="file" id="file-input" accept=".csv" onchange="loadCSV(event)">
             <p id="file-label">📂 Load CSV</p>
         </div>
-        <div id="sim-time">09:00:00</div>
+        <div id="sim-time">--/--/---- --:--:--</div>
     </div>
 
     <div id="main-content">
@@ -542,6 +607,11 @@
         // landed so new arrivals can stack behind them and reset() can tear them down.
         let classificationTrackFill = {};    // trackId → total px already occupied on that track
         let placedWagonGroups = {};    // wgId → DOM element (standalone)
+
+        // outboundTrainId → { frameDiv, locoDiv, trackId, wgIds }
+        // Populated by drawOutboundTrainFrame after OBTP completes; entries
+        // live until the next reset (no auto-removal on departure).
+        let placedOutboundTrains = {};
 
         // Per-WG running activity (Securing / Coupling / OBTP / DEPD) for the
         // status pill that hangs under each standalone wagon group. Empty / missing
@@ -673,8 +743,13 @@
                 renderWorkerGrid();
                 renderShuntLocoGrid();
 
+                // The legend's image-space position depends on main-content's
+                // clientHeight, which is 0 while it's display:none. Re-run the
+                // positioner now that the container has actual dimensions.
+                positionLegend();
+
                 if (events.length > 0) {
-                    document.getElementById('sim-time').textContent = formatTimeOnly(simStartTime);
+                    document.getElementById('sim-time').textContent = formatSimDateTime(simStartTime);
                 }
             };
             reader.readAsText(file);
@@ -690,7 +765,7 @@
 
                 // You need these two blocks!
                 if (values[0] === '#WORKER') {
-                    workers.push({ id: values[1], name: values[2], speed: values[3] });
+                    workers.push({ id: values[1], name: values[2], speed: values[3], area: values[4] || '' });
                 }
                 if (values[0] === '#SHUNTLOCO') {
                     shuntLocos.push({ id: values[1], name: values[2], speed: values[3] });
@@ -720,7 +795,8 @@
                     workers.push({
                         id: parts[1],
                         name: parts[2],
-                        speed: parseFloat(parts[3])
+                        speed: parseFloat(parts[3]),
+                        area: (parts[4] || '').trim()   // "Arrival" / "Classification" / ""
                     });
                     continue;
                 }
@@ -851,6 +927,17 @@
             return el.dataset.kind === 'shuntloco' ? locoSlotPool : workerSlotPool;
         }
 
+        // Pick the worker PNG based on yard area. Different vest colors make
+        // the area split visible at a glance — Arrival workers wear green,
+        // Classification workers wear orange. Wildcard (empty) area falls
+        // back to the original default icon.
+        function workerIconForArea(area) {
+            const a = String(area || '').toLowerCase();
+            if (a === 'classification') return 'worker_icon_classification_orange.png';
+            if (a === 'arrival')        return 'worker_icon_arrival_green.png';
+            return 'worker_icon.png';   // back-compat / wildcard
+        }
+
         function renderWorkerGrid() {
             const grid = document.getElementById('worker-grid');
             grid.innerHTML = '';
@@ -861,9 +948,11 @@
                 div.className = 'worker-icon';
                 div.id = `worker-${worker.id}`;
                 div.dataset.kind = 'worker';
+                div.dataset.area = worker.area || '';
+                const iconSrc = workerIconForArea(worker.area);
                 div.innerHTML = `
                                     <span class="worker-name">${firstName}</span>
-                                    <img src="worker_icon.png" alt="${worker.name}" title="${worker.name} (${worker.id})">
+                                    <img src="${iconSrc}" alt="${worker.name}" title="${worker.name} (${worker.id}) — ${worker.area || 'any area'}">
                                     <span class="worker-status status-Idle">Idle</span>
                                 `;
                 grid.appendChild(div);
@@ -920,6 +1009,18 @@
             el.style.transform = 'translate(-50%, -50%)';
         }
 
+        // Position the destinations legend in image-space so it lands under
+        // the shunt-loco grid's first column with its top edge at image y=300.
+        // Anchored to the image like everything else, so it shifts with the
+        // bottom-anchor offset on resize.
+        function positionLegend() {
+            const el = document.getElementById('legend');
+            if (!el) return;
+            const p = applyImageYOffset({ x: 1255, y: 300 });
+            el.style.left = `${p.x}px`;
+            el.style.top  = `${p.y}px`;
+        }
+
         // When the window resizes, the bottom-anchor offset changes — reposition
         // every grid-resident icon so they stay aligned with the painted grid.
         window.addEventListener('resize', () => {
@@ -927,7 +1028,11 @@
                 .forEach(el => {
                     if (el.dataset.teleported !== '1') positionGridIcon(el);
                 });
+            positionLegend();
         });
+        // Also run once at script load so the legend is positioned before the
+        // user clicks Play (legend is in the DOM from the start).
+        window.addEventListener('DOMContentLoaded', positionLegend);
 
         // Resolve any entity ID (worker or shunt-loco) to its DOM root.
         function findEntityRoot(id) {
@@ -1011,7 +1116,43 @@
                     delete el.dataset.slotY;
                 }
             }
-
+            // Worker horizontal offset from the track reference point.
+            // Each track is a different physical length, so we need per-track tuning
+            // to keep workers visually centered on where the train body ends up.
+            // Positive values push workers right; negative values push left.
+            const arrivalTrackWorkerOffsetX = {
+                "731": -250,
+                "729": -325,
+                "727": -375,
+                "725": -450,
+                "723": -500,
+                "721": -550,
+                "719": -600,
+                "717": -625,
+                "715": -550,
+                "713": -550,
+                "711": -450,
+                "709": -375,
+                "707": -275,
+                "705": -225,
+                "703": -175
+            };
+            const classificationTrackWorkerOffsetX = {
+                "629": -300,
+                "627": -425,
+                "625": -400,
+                "623": -350,
+                "621": -325,
+                "619": -300,
+                "617": -500,
+                "615": -550,
+                "613": -525,
+                "611": -625,
+                "609": -500,
+                "607": -375,
+                "605": -640,
+                "603b": -150
+            };
             el.style.position = 'absolute';
             if (isLoco) {
                 // Shunt locos sit ON the train's black "L" box at the front.
@@ -1022,14 +1163,26 @@
                 el.style.top = `${basePos.y + yOff}px`;
                 el.style.transform = 'translateX(-50%)';
             } else {
-                // Workers stack rightward from the track anchor, shifted by the
-                // per-kind horizontal offset.
-                el.style.left = `${basePos.x + WORKER_TRACK_X_OFFSET_PX + slot * slotPx}px`;
+                // Workers stack rightward from the track anchor, shifted by a
+                // per-track horizontal offset for consistent visual placement
+                // regardless of track length. Separate maps for arrival and
+                // classification tracks.
+                const offsetX =
+                    arrivalTrackWorkerOffsetX[trackId] !== undefined
+                        ? arrivalTrackWorkerOffsetX[trackId]
+                        : classificationTrackWorkerOffsetX[trackId] !== undefined
+                            ? classificationTrackWorkerOffsetX[trackId]
+                            : WORKER_TRACK_X_OFFSET_PX;  // fallback for unknown tracks
+                el.style.left = `${basePos.x + offsetX + slot * slotPx}px`;
                 el.style.top = `${basePos.y + yOff}px`;
                 el.style.transform = '';
             }
-            el.style.width = 'auto';
-            el.style.zIndex = '5';
+
+            // Persist placement state so:
+            //  (a) the early-out check at the top of this function works on
+            //      subsequent events for the same entity/track,
+            //  (b) peers arriving at the same track can see this slot is
+            //      taken and pick the next free one (side-by-side stacking).
             el.dataset.teleported = '1';
             el.dataset.atTrack = trackId;
             el.dataset.slot = String(slot);
@@ -1109,6 +1262,18 @@
             return date.toTimeString().split(' ')[0];
         }
 
+        // Sim clock label that includes the date alongside the wall-clock time.
+        // Format: "DD/MM/YYYY HH:MM:SS" — matches the dd/MM/yyyy used in the
+        // simulation's Console.WriteLine timestamps so they're easy to cross-
+        // reference. Falls back to em-dashes when no date is available.
+        function formatSimDateTime(date) {
+            if (!date) return '--/--/---- --:--:--';
+            const dd = String(date.getDate()).padStart(2, '0');
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const yy = date.getFullYear();
+            return `${dd}/${mm}/${yy} ${formatTimeOnly(date)}`;
+        }
+
         function togglePlayPause() {
             const btn = document.getElementById('play-pause-btn');
 
@@ -1152,7 +1317,7 @@
             const totalSimElapsed = pausedSimTime + (realElapsed * playbackSpeed);
             const currentSimTime = new Date(simStartTime.getTime() + totalSimElapsed);
 
-            document.getElementById('sim-time').textContent = formatTimeOnly(currentSimTime);
+            document.getElementById('sim-time').textContent = formatSimDateTime(currentSimTime);
 
             const totalDuration = simEndTime - simStartTime;
             const currentProgress = currentSimTime - simStartTime;
@@ -1393,31 +1558,48 @@
                         delete wagonGroupActivities[wgId];
                         updateWagonGroupBadge(wgId);
                     }
+
+                    // OBTP done → draw the black frame + L box around every
+                    // WG sitting on the activity's classification track.
+                    // The activityId pattern is Act_OBTP_<obtId>_<HHMMSS>_<loc>,
+                    // so parts[2] is the outbound train id and the last token
+                    // is the classification track.
+                    if (event.event === 'OutboundTrainPreparation') {
+                        const parts = String(activityId || '').split('_');
+                        const outboundTrainId = parts.length >= 3 ? parts[2] : null;
+                        const location = parts.length >= 5 ? parts[parts.length - 1] : null;
+                        if (outboundTrainId && location) {
+                            drawOutboundTrainFrame(outboundTrainId, location);
+                        }
+                    }
+
+                    // Securing done → mark each affected WG as Secured and
+                    // stamp the S badge. SEC targets a single WG (entityId
+                    // == wgId), so wgIds normally has a single entry.
+                    if (event.event === 'Securing') {
+                        for (const wgId of wgIds) {
+                            addSecuredBadge(wgId);
+                        }
+                    }
                     return;
                 }
             }
         }
 
-        // Map an ActivityId to the trainId it affects.
-        // ActivityId format: Act_<ABBR>_<EntityId>_<HHMMSS>_<Location>
-        //   - EntityId is the train ID for train-level activities (ITP, DEP, OBTP, DEPD, ARRD),
-        //   - or a wagon-group ID for wagon-group activities (SEC, COP, PO, ...).
+        // Map an ActivityId to the trainId whose status badge it should drive.
+        // Only TRAIN-LEVEL activities (entityId == known arrival trainId) bubble
+        // up here; WG-level activities (SEC/COP/PushOffDrive — entityId is a
+        // wagon-group id) and OBT-level activities (entityId is an OutboundTrain
+        // id, not in trains{}) deliberately return null. This keeps the train
+        // pill showing "PushOff" for the entire push-off lifecycle, instead of
+        // being temporarily overwritten by a WG's "Securing" / "Coupling" /
+        // "PushOffDrive" while sub-drives complete on classification tracks.
         function findTrainForActivity(activityId) {
             const parts = String(activityId || '').split('_');
             if (parts.length < 3) return null;
             const entityId = parts[2];
 
-            // Fast path: entity is a known train.
             if (trains[entityId]) return entityId;
-
-            // Fall back to scanning wagon groups for a match.
-            for (const tId in trains) {
-                const t = trains[tId];
-                if (!t || !t.wagonGroups) continue;
-                for (const wg of t.wagonGroups) {
-                    if (wg.id === entityId) return tId;
-                }
-            }
             return null;
         }
 
@@ -1797,6 +1979,94 @@
 
             classificationTrackFill[trackId] = alreadyFilled + widthPx;
             placedWagonGroups[wgId] = wgDiv;
+
+            // If this WG was already secured before being (re)drawn — e.g. an
+            // event replay — restore the S badge so the visual matches state.
+            if (meta.status === 'Secured') {
+                addSecuredBadge(wgId);
+            }
+        }
+
+        // Draw the black frame + L box around all WGs sitting on the given
+        // classification track. Called once OutboundTrainPreparation completes
+        // for an outgoing train. The frame spans the union of WG bounding
+        // rectangles; the L box is placed flush against its right edge.
+        function drawOutboundTrainFrame(outboundTrainId, trackId) {
+            if (placedOutboundTrains[outboundTrainId]) return;  // idempotent
+
+            const wgIds = findWagonGroupsOnTrack(trackId);
+            if (wgIds.length === 0) return;
+
+            let minLeft = Infinity;
+            let maxRight = -Infinity;
+            let topY = 0;
+            let height = 11;
+            for (const wgId of wgIds) {
+                const el = placedWagonGroups[wgId];
+                if (!el) continue;
+                const left = parseFloat(el.style.left);
+                const width = parseFloat(el.style.width);
+                const elTop = parseFloat(el.style.top);
+                if (isNaN(left) || isNaN(width) || isNaN(elTop)) continue;
+                if (left < minLeft) minLeft = left;
+                if (left + width > maxRight) maxRight = left + width;
+                topY = elTop;
+                height = el.offsetHeight || 11;
+            }
+            if (!isFinite(minLeft)) return;
+
+            const padding = 2;
+            const main = document.getElementById('main-content');
+
+            const frameDiv = document.createElement('div');
+            frameDiv.className = 'outbound-train-frame';
+            frameDiv.dataset.outboundTrainId = outboundTrainId;
+            frameDiv.style.left = `${minLeft - padding}px`;
+            frameDiv.style.top = `${topY - padding}px`;
+            frameDiv.style.width = `${(maxRight - minLeft) + padding * 2}px`;
+            frameDiv.style.height = `${height + padding * 2}px`;
+            frameDiv.title = `Outgoing train ${outboundTrainId}`;
+            main.appendChild(frameDiv);
+
+            const locoDiv = document.createElement('div');
+            locoDiv.className = 'outbound-train-loco';
+            locoDiv.dataset.outboundTrainId = outboundTrainId;
+            locoDiv.textContent = 'L';
+            locoDiv.title = `Locomotive for outgoing train ${outboundTrainId}`;
+            locoDiv.style.left = `${maxRight + padding}px`;
+            locoDiv.style.top = `${topY}px`;
+            main.appendChild(locoDiv);
+
+            placedOutboundTrains[outboundTrainId] = { frameDiv, locoDiv, trackId, wgIds };
+        }
+
+        // Tear down a previously-drawn outbound train frame + L box. Currently
+        // only used by reset(), but kept as a separate helper so a future
+        // departure-removal path can call it.
+        function removeOutboundTrainFrame(outboundTrainId) {
+            const entry = placedOutboundTrains[outboundTrainId];
+            if (!entry) return;
+            if (entry.frameDiv) entry.frameDiv.remove();
+            if (entry.locoDiv) entry.locoDiv.remove();
+            delete placedOutboundTrains[outboundTrainId];
+        }
+
+        // Stamp the small green "S" badge onto a WG and flip its `status`
+        // metadata field so the secured state persists across re-draws.
+        // Idempotent: a second call on an already-badged WG is a no-op.
+        function addSecuredBadge(wgId) {
+            const wgEl = placedWagonGroups[wgId];
+            if (!wgEl) return;
+            if (wgEl.querySelector('.wg-secured-badge')) return;
+
+            const meta = findWagonGroupMeta(wgId);
+            if (meta) meta.status = 'Secured';
+
+            const badge = document.createElement('div');
+            badge.className = 'wg-secured-badge';
+            badge.textContent = 'S';
+            badge.title = `${wgId} is secured`;
+            wgEl.appendChild(badge);
         }
 
         // Remove the whole train graphic after PushOff completes. The wagons have
@@ -1818,7 +2088,7 @@
             pausedSimTime = 0;
             document.getElementById('progress-fill').style.width = '0%';
             if (events.length > 0) {
-                document.getElementById('sim-time').textContent = formatTimeOnly(simStartTime);
+                document.getElementById('sim-time').textContent = formatSimDateTime(simStartTime);
             }
 
             const mainContent = document.getElementById('main-content');
@@ -1831,6 +2101,19 @@
             classificationTrackFill = {};
             placedWagonGroups = {};
             wagonGroupActivities = {};
+
+            // Tear down outbound-train frames + L boxes from the previous run
+            // and clear the registry so re-replay starts clean.
+            mainContent.querySelectorAll('.outbound-train-frame, .outbound-train-loco').forEach(div => div.remove());
+            placedOutboundTrains = {};
+
+            // Clear the per-WG `status` field (currently only "Secured") so
+            // a replay doesn't carry secured-state across runs.
+            for (const tId in trains) {
+                const t = trains[tId];
+                if (!t || !t.wagonGroups) continue;
+                for (const wg of t.wagonGroups) delete wg.status;
+            }
 
             // Restore the passage track to "available" / green.
             passageState = { available: true, usedByTrainId: null };

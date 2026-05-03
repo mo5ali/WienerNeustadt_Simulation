@@ -41,7 +41,7 @@ namespace WienerNeustadtSimulation.Models
         /// </summary>
         public TimeSpan CalculateFixedDuration()
         {
-            double distanceMeters = 500.0;         // TODO: parameterize by track in future
+            double distanceMeters = 400;         // TODO: parameterize by track in future
             double speedMetersPerMinute = 100;    // Assume train speed, or get from config
             return TimeSpan.FromMinutes(distanceMeters / speedMetersPerMinute);
         }

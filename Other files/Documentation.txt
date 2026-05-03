@@ -1,0 +1,833 @@
+================================================================================
+WIENER NEUSTADT SHUNTING YARD SIMULATION — IMPLEMENTATION DOCUMENTATION
+================================================================================
+
+Purpose: This document is a running technical record of the simulation's
+architecture, design decisions, and the rationale behind each significant
+change. It is structured for direct use as source material when drafting the
+thesis (per-section paraphrasing rather than verbatim quotation). Updated
+continuously as the implementation evolves.
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+The simulation models the Wiener Neustadt railway shunting yard as a discrete-
+event simulation (DES) implemented in C# / .NET 8. It is a FLAT shunting yard:
+trains arrive, are physically broken apart and re-sorted by destination on
+classification tracks, recombined into outbound trains, and depart. The model
+captures activity lifecycles, finite resources (workers, locomotives, the
+passage track between yard areas, the exit gate), worker travel times, and
+worker skill multipliers.
+
+Two artifacts:
+
+  * Simulation engine: C# project producing a CSV event log per run.
+  * Visualizer: standalone HTML5 / JavaScript page (SimulationVisualizer.html)
+    that replays the CSV log over a yard background image, animating trains,
+    wagon groups, workers, and locomotives.
+
+================================================================================
+2. HIGH-LEVEL ARCHITECTURE
+================================================================================
+
+The simulation follows a hierarchical control-unit pattern (see Furian et al.
+2015 for the conceptual framework). Three control units coordinate, each
+responsible for a distinct phase of the yard's operation:
+
+  * ArrivalControlUnit
+      - Receives inbound trains, queues them, assigns arrival tracks, runs the
+        sorting algorithm (destination -> classification track), requests ITP
+        (Incoming Train Preparation), and finally PushOff.
+
+  * ClassificationControlUnit
+      - Receives wagon groups (WGs) on classification tracks after PushOff,
+        decides Securing vs Coupling per arrival, runs the train-completion
+        check, instantiates OutboundTrain entities, and runs OBTP and DEPD.
+
+  * ResourceControlUnit
+      - Centralized broker for all finite resources: workers, shunting
+        locomotives, train locomotives (effectively infinite), the passage
+        track, and the exit gate.
+      - All activity resource needs flow through SubmitRequest. Returns are
+        delayed by travel time (workers ~80 m/min, shunt locos ~25 m/min,
+        train locos ~80 m/min) to model realistic walk-back / drive-back.
+
+Engine: SimulationEngine schedules callbacks against simulated time. Activities
+register OnReadyToCommence and OnCompleted callbacks that are invoked when
+allocated resources arrive and when the activity's calculated duration elapses.
+
+================================================================================
+3. ENTITY MODEL
+================================================================================
+
+Train (inbound)
+  - ID, Length, WagonGroupIds, HasLoco, LocomotiveId, Status, Designation, Time
+
+WagonGroup
+  - Id, Length, Destination, WagonIds, CurrentTrackId, CurrentArea, ArrivedAt
+  - Belongs to a parent inbound Train at first; after a successful sort and
+    PushOff, becomes a standalone entity on a classification track.
+
+OutboundTrain
+  - Id (format: "OBT{ddMMyyHHmmss}-{Destination}")
+  - Destination, CurrentTrackId, CurrentArea, WagonGroups (list reference,
+    not copy — same WagonGroup instances continue to exist), TotalLength,
+    TotalWagonCount, LocomotiveId, LeavingPreparationComplete
+  - Created the moment a classification track's accumulated WG length crosses
+    MIN_TRAIN_LENGTH (currently 100 m).
+
+Worker (WorkerDto)
+  - Id, Name, MovementSpeedMetersPerMinute, Skills (per-activity multiplier),
+    Area ("Arrival" / "Classification" / null = wildcard).
+
+ShuntingLocomotive (ShuntingLocomotiveDto)
+  - Id, MaxSpeed.
+
+Track
+  - StationId, RealLifeID (display name like "615"), Length, Area (canonical
+    short form: "Arrival" or "Classification"), Designation, Reserved,
+    CurrentOccupancies, SegmentIds.
+
+================================================================================
+4. ACTIVITY MODEL
+================================================================================
+
+All activities derive from the abstract Activity base class. The base class
+owns the canonical lifecycle:
+
+  * Submitted    — emitted in the constructor when the activity is instantiated.
+  * Started      — emitted by MarkCommenced(now), called when allocated
+                   resources have arrived and the work physically begins.
+                   Idempotent (guarded against double calls).
+  * Completed    — emitted by MarkCompleted(now), called when the activity's
+                   calculated duration has elapsed. Idempotent.
+
+Each lifecycle event writes one row to the CSV via SimulationLogger.LogActivityEvent
+with the format:
+
+    <simTime>;ActivityEvent;<activityId>;<activityType>;<status>|<details>
+
+Status is "Submitted", "Started", or "Completed" (plus "PassageClaimed" /
+"PassageReleased" for the passage-track resource).
+
+Activity ID format:  Act_<ABBR>_<EntityId>_<HHMMSS>_<Location>
+Example:             Act_ITP_11001_090500_703
+
+Abbreviation table:
+  ARRD = ArrivalDrive
+  ITP  = IncomingTrainPreparation
+  PO   = PushOff (parent)
+  POD  = PushOffDrive (sub-activity)
+  SEC  = Securing
+  COP  = Coupling
+  OBTP = OutboundTrainPreparation
+  DEPD = DepartureDrive
+
+Per-activity attributes (RequiredWorkers, RequiresLocomotive, BaseSecondsPerMeter,
+LocoStaysWithEntity, WorkersReleasedIndividually) are declared on the subclass.
+
+Activity flow per inbound train:
+  Entry (queue)
+   -> ArrivalDrive (5 min fixed)
+   -> IncomingTrainPreparation (workers + shunt loco; loco is kept by activity
+      after completion via LocoStaysWithEntity=true so it carries over to PO)
+   -> PushOff (workers + carried-over loco + passage track)
+        -> n × PushOffDrive sub-activities (one per consecutive same-destination
+           group; 4 min fixed per drive)
+   -> Train graphic dismantled; each WG now standalone on classification track
+
+Activity flow per WagonGroup on classification track:
+   ArrivedClassificationTrack (instantaneous)
+   -> Securing OR Coupling (workers; SEC if first on track, COP if joining)
+   -> Completion check (length threshold)
+   -> If threshold met: become part of a new OutboundTrain entity
+   -> OutboundTrainPreparation (2 workers + train locomotive)
+   -> DepartureDrive (exit gate; 20 min fixed)
+   -> Departed; track unreserved
+
+Worker time multiplier:
+  Activity duration = EntityLength × BaseSecondsPerMeter × AverageWorkerMultiplier
+  AverageWorkerMultiplier averages each allocated worker's skill multiplier
+  for the activity type (default 1.0 if no skill entry).
+
+================================================================================
+5. RESOURCE MODEL
+================================================================================
+
+ResourceControlUnit owns and arbitrates all shared resources:
+
+5.1 Workers
+  - Stored in _availableWorkerIds (HashSet).
+  - Partitioned by yard Area: a worker's Area must equal the activity's Area
+    (case-insensitive). Empty area on either side acts as a wildcard for
+    backward compatibility.
+  - Travel: worker leaves the resting area on TravelStarted, arrives at the
+    track after FixedTravelDistanceMeters (100 m) / worker's speed. Releases
+    after activity ends with travel back to the area.
+  - Worker pool size in the current ResourcePool.json: 10 workers split 5/5
+    between Arrival and Classification. Rationale: a real classification
+    track is ~800 m long, so workers walking from one yard area to the other
+    to satisfy a single activity is unrealistic; in practice, workers are
+    localized per area. (User's supervisor confirmed.)
+
+5.2 Shunting Locomotives
+  - Finite pool (5 in current data).
+  - Travel at LocoSpeedMetersPerMinute (25 m/min, slower than workers).
+  - Carry over from ITP into PushOff (LocoStaysWithEntity=true on ITP).
+  - Released back to pool at PushOff completion.
+
+5.3 Train Locomotives
+  - Effectively infinite (100 IDs initialized: TL001..TL100).
+  - Allocated for OutboundTrainPreparation only.
+  - Travel at 80 m/min (matches fastest workers).
+  - Returned to pool when an outbound train departs (ReturnLoco call).
+
+5.4 Passage Track (single-instance shared resource)
+  - In a flat shunting yard there is exactly ONE physical track that connects
+    the arrival group to the classification group; every PushOff uses it.
+  - Implemented as a boolean _passageTrackAvailable in ResourceCU.
+  - Required exclusively by PushOffActivity. Held for the ENTIRE PushOff
+    (from first sub-drive request through last sub-drive completion) — not
+    just per individual drive — because the loco pulls the train back to the
+    arrival side between sub-drives, still occupying the passage.
+  - On allocation, ResourceCU emits an ActivityEvent with status "PassageClaimed".
+    On release, "PassageReleased". The visualizer reads these to drive the
+    on-screen passage strip indicator (green = available, red = used by trainId).
+
+5.5 Exit Gate
+  - Single-instance shared resource for DepartureDriveActivity.
+  - Pre-existing; behavior mirrors the passage track but no travel time.
+
+5.6 Allocation algorithm (TryAllocateAndDispatchResources)
+  - Up-front feasibility check (workers, loco, train loco, passage). If any
+    requirement is unmet, returns false and the request is queued.
+  - Workers are filtered by Area BEFORE the count check, so an Arrival
+    activity cannot consume Classification workers and vice versa.
+  - On success: workers/locos depart immediately for the work site (with
+    travel-time scheduling for arrival callbacks). Activity commences when
+    all required resources have arrived (RecordWorkerArrival /
+    RecordLocoArrival fires CheckAndTriggerCommencement).
+
+5.7 Queue dispatch policy: FIFO-with-bypass
+  - Initially the queue used Peek + Dequeue-on-success. This caused a
+    pseudo-deadlock: a request stuck on an unavailable resource (e.g., ITP
+    waiting on a busy shunt loco) blocked every later request behind it,
+    even those whose own resources were currently available.
+  - Replaced with a walk-the-whole-queue policy: copy pending to a list,
+    clear the queue, iterate; grant whatever can be granted now, re-enqueue
+    the rest in their original relative order.
+  - Strictly speaking this is no longer pure FIFO — request B can run before
+    request A if A is currently infeasible. This matches what a human
+    yardmaster would do (match free resources to whichever feasible job is
+    next) and is more realistic than letting expensive resources sit idle
+    waiting on one stuck job.
+
+================================================================================
+6. WITHIN-TRACK FIFO FOR SEC / COP
+================================================================================
+
+Problem observed: when two WGs arrive on the same classification track close
+in time, the second one would sometimes start its SEC/COP before the first.
+Two roots:
+  (a) FIFO-with-bypass at ResourceCU could grant a later request first if the
+      earlier one was momentarily infeasible.
+  (b) Worker travel-time variance: workers allocated for B might happen to
+      arrive sooner than those allocated for A.
+
+Fix in ClassificationCU: per-track gating.
+  - _hasLiveSecCopByTrack[trackId]: true when a SEC/COP for that track has
+    been submitted to ResourceCU but has not yet emitted Started.
+  - _deferredPrepsByTrack[trackId]: queue of arrival requests held while the
+    gate is closed.
+  - HandleWagonGroupArrival: if the gate is closed for the track, defer this
+    WG locally instead of submitting. Otherwise mark the gate as held and
+    submit immediately.
+  - CommenceAndScheduleActivity (SEC/COP): after MarkCommenced, call
+    ReleaseNextDeferredPreparation(trackId, now). That helper opens the gate,
+    pops one deferred WG (if any), submits it, and re-closes the gate.
+
+Effect: B's SEC/COP cannot even reach ResourceCU until A's SEC/COP has
+Started, so neither bypass nor travel-time variance can flip the order.
+Across-track parallelism is untouched — different tracks have independent
+gates.
+
+================================================================================
+7. OUTBOUND TRAIN COMMITMENT — RELEASING THE DESTINATION-TRACK MAP
+================================================================================
+
+Problem observed: ArrivalCU sets _destinationToTrackMap[destination] = track
+the first time a destination is sorted. Once a classification track has
+accumulated enough WGs and an OutboundTrain is created on it, the train is
+committed to that track for OBTP/DEPD (which can take ~30+ minutes). During
+that window, additional WGs of the same destination were still being sorted
+to the same track and pushed there, even though the track was committed.
+Result: the visualizer showed independent populations of WGs on the same
+track — some part of the OBT (in OBTP), some not (in their own SEC/COP).
+
+Fix:
+  * ClassificationCU exposes a public event:
+      DestinationCommittedToOutbound(destination, trackId)
+    fired the moment CreateOutboundTrain runs.
+  * ArrivalCU has a public method ReleaseDestinationMapping(destination) that
+    drops the destination -> track binding.
+  * Program.cs wires the two after both CUs are constructed.
+
+After the event fires, the next WG of that destination triggers a fresh
+RunSortingMethod lookup and is assigned a different (still-free)
+classification track.
+
+Additional fix in CompleteDepartureDrive: the classification track is now
+also unreserved (track.Reserved = false), not just emptied. Without this,
+each track ever used by an OBT stays reserved forever — fine before this
+change because every destination kept reusing its single track, but
+post-change with track cycling the simulation would run out of unreserved
+tracks.
+
+Defensive null-check in RunSortingMethod: if no free classification track
+exists, the WG is skipped (logged as ClassificationTrackUnavailable in the
+CSV) instead of NRE'ing. RequestPushOff filters out unassigned WGs from the
+PushOff list so the rest of the train can still be processed.
+
+RESOLVED (see [13]): destination tracks are now resolved late, per
+sub-push, via ArrivalCU.ResolveTrackForDestination. PushOffActivity no
+longer reads from the frozen sort-time wagonGroupToTrackMap; it groups
+WGs by destination NAME and asks ArrivalCU for the current track at the
+moment each sub-drive fires. So a destination committed to an OBT
+between sort time and push time (or between two sub-pushes within the
+same PushOff) gets a fresh classification track for any subsequent WGs
+of that destination instead of piling onto the now-committed track.
+
+================================================================================
+8. SIMULATION LOG (CSV) FORMAT
+================================================================================
+
+The log is a single semicolon-separated CSV file written to
+bin/Debug/net8.0/OutputFiles/SimulationLog.csv.
+
+8.1 Metadata block (one-time, at the top of the file)
+
+    #META;ResourcePool;v1
+    #META;GeneratedAtUtc;<iso8601 utc>
+    #WORKER;<id>;<name>;<speedMetersPerMinute>;<area>
+    #SHUNTLOCO;<id>;<displayName>;<speedMetersPerMinute>
+    #CAPACITY;TrainLocomotives;100
+    #CAPACITY;ExitGate;1
+    #ENDMETA
+
+  * #WORKER's <area> field is "Arrival" / "Classification" / "" (empty =
+    wildcard, back-compat for old data files).
+
+8.2 Event rows
+
+  Column order varies by event type. Layout:
+
+    TrainEvent       : <simTime>;TrainEvent;<actionName>;<entityId>;<details>
+    ActivityEvent    : <simTime>;ActivityEvent;<activityId>;<activityType>;<status>|<details>
+    WorkerEvent      : <simTime>;WorkerEvent;<entityId>;<actionName>;<details>
+    WagonGroupEvent  : <simTime>;WagonGroupEvent;<entityId>;<actionName>;<details>
+
+  ActivityEvent statuses: Submitted, Started, Completed, PassageClaimed,
+  PassageReleased.
+
+  Common WorkerEvent actions (used for both workers and locos):
+    Allocated, TravelStarted, Arrived, ReturnStarted, Returned.
+
+  Common WagonGroupEvent actions:
+    PushingToTrack, EntityCreated, ArrivedClassificationTrack,
+    SecuringRequested, SecuringStarted, Secured,
+    CouplingRequested, CouplingStarted, Coupled.
+
+  Common TrainEvent actions:
+    Entry, AssignedArrivalTrack, ArrivedArrivalTrack,
+    ClassificationTrackAssigned, PreparationRequested, PreparationStarted,
+    PreparationComplete, PushOffRequested, PushOffComplete, ExitedSystem,
+    OutboundTrainCreated, OBTPRequested, OBTPStarted, OBTPComplete,
+    DEPDRequested, DEPDStarted, Departed,
+    ClassificationTrackUnavailable.
+
+================================================================================
+9. VISUALIZER ARCHITECTURE
+================================================================================
+
+Single-page HTML/JS file (Output/SimulationVisualizer.html). User uploads the
+CSV, the page parses it, and on Play replays events at a configurable
+multiplier (1x to 200x).
+
+9.1 Coordinate system
+  Background image is 1920x1080, painted with background-size: 1920px 1080px
+  and background-position: bottom left. The image is bottom-anchored, so when
+  the viewport is taller than 1080 px the top of the image moves UP relative
+  to the container origin. Every layout point uses image-space coordinates,
+  which are converted to container-space by:
+
+      applyImageYOffset({x, y}) -> { x, y + (container.clientHeight - 1080) }
+
+  This keeps the visualization stable across viewport heights without
+  requiring CSS scaling that would distort the image.
+
+9.2 Track positions
+  arrivalTrackPositions and classificationTrackPositions are dictionaries
+  mapping track real-life IDs to {x, y} anchor points. Workers / locos / WGs
+  / standalone WGs all derive their on-track positions from these anchors.
+
+9.3 Slot pool for grid-resident icons
+  Workers and shunt locos reside in two grids on the map's left and right
+  margins. Each grid is a fixed 2-row layout with explicit slot coordinates
+  (R*100 + col, where R=1 is the top row). Whichever icon returns to the
+  area first claims slot 101; later returners get 102, 103, etc. Slots are
+  released on departure to a track and re-claimed on return — so there is
+  no permanent worker-to-slot binding (closer to real shunters' shared rest
+  area than a fixed seating chart).
+
+9.4 Worker icons by area
+  workerIconForArea(area) returns the right PNG:
+    - "arrival"        -> worker_icon_arrival_green.png
+    - "classification" -> worker_icon_classification_orange.png
+    - empty/anything   -> worker_icon.png (back-compat / wildcard)
+  Visualizes the area split at a glance.
+
+9.5 Train graphic
+  - Drawn as a flex-row container right-anchored at the arrival track's pos.x
+    so the L (locomotive) box sits exactly on the track point. Wagon groups
+    flow leftward from the L.
+  - Status pill is absolute-positioned above the train (bottom: 100%; left: 50%;
+    transform: translateX(-50%)) so it stays centered above the wagons
+    regardless of train length.
+  - During IncomingTrainPreparation the L box is hidden (visibility: hidden)
+    so the shunt loco icon visually "replaces" the original locomotive,
+    matching the physical swap.
+  - Wagon groups carry data-wg-id; on each EntityCreated event for a WG
+    pushed to a classification track, that wagon's div is removed from the
+    train AND the train's CSS left is recomputed so the L stays anchored
+    at pos.x. This makes the train shrink visibly as PushOff progresses,
+    rather than disappearing all at once at PushOff completion.
+
+9.6 Standalone wagon groups (post-PushOff)
+  When a WG arrives on its classification track, drawWagonGroupOnClassificationTrack
+  creates a standalone .wagon-group.wg-standalone div with full borders,
+  positioned right-anchored at the track's pos.x and stacking leftward so
+  successive arrivals "park behind" earlier ones. Each carries a small status
+  pill below it (.wg-status), driven by a fan-out from ActivityEvent rows:
+    SEC/COP -> single WG (entityId == wgId)
+    OBTP/DEPD -> all WGs on the activity's location track (fan-out via
+                  findWagonGroupsOnTrack — these activities target the
+                  outbound train, but visually we light up the constituent
+                  WGs).
+    PushOffDrive -> explicitly excluded from the fan-out, since the WG
+                    isn't yet on the classification track when the drive
+                    is in flight.
+
+9.7 Passage strip indicator
+  A small (~2.5 cm) horizontal strip on the map between the two yard areas,
+  with a status pill above it. Driven by the ActivityEvent rows with status
+  PassageClaimed / PassageReleased. Green strip + "Available" pill when free,
+  red strip + "Used by <trainId>" pill when held.
+
+9.8 Train status pill
+  Floats centered above the train. Possible states: "Waiting" (default), the
+  current activity name (e.g., "IncomingTrainPreparation", "PushOff"), or
+  "Driving to track <id>" while the train is still moving from the queue.
+
+9.9 findTrainForActivity (badge bubbling rules)
+  Maps an activity ID to the trainId whose status pill it should drive.
+  Only direct trains[entityId] hits resolve. WG-targeting activities
+  (SEC/COP/PushOffDrive) and OBT-targeting activities (OBTP/DEPD) deliberately
+  return null, so the train pill is not overwritten with WG-level statuses
+  during PushOff. The earlier wagon-group fallback was REMOVED for exactly
+  this reason — it caused the train pill to flip to "Securing" or "Coupling"
+  while PushOff was still running, which was misleading.
+
+9.10 Destinations legend
+  Compact, anchored in image space (top edge at image y=300, x ~ 1255 — under
+  the first column of the shunt-loco grid). Repositioned by positionLegend()
+  on DOMContentLoaded, on window resize, and on CSV load (the last is
+  required because main-content is display:none until the first load, so
+  clientHeight is 0 and the image-y offset is wrong without it).
+
+9.11 Sim clock
+  Displays full date and time: "DD/MM/YYYY HH:MM:SS". Format chosen to match
+  the simulation's Console.WriteLine timestamps so cross-referencing CSV rows
+  or console output is direct.
+
+================================================================================
+10. DESIGN DECISIONS — RATIONALE FOR THE THESIS
+================================================================================
+
+This section records WHY decisions were made, not just WHAT was done.
+
+10.1 Hierarchical control units (per Furian et al. 2015)
+  Three CUs separate the lifecycle into clean responsibility boundaries:
+  inbound side, classification side, and a centralized resource broker. Each
+  CU's queues and state are independent; the only cross-CU communication
+  paths are the train hand-off and the resource broker. This makes the
+  simulation extensible — adding a new activity or resource type touches
+  only the CU that owns its lifecycle.
+
+10.2 Canonical three-timestamp activity lifecycle
+  Every activity instance has Submitted / Started / Completed in the CSV.
+  Implemented as a base-class invariant rather than per-subclass code, so
+  no future activity type can "forget" to emit one. Provides a
+  three-timestamps-per-activity dataset usable for waiting-time analyses.
+
+10.3 Worker area split (Arrival vs Classification)
+  Real classification tracks are ~800 m long; expecting a single worker to
+  walk between yard areas mid-shift to fill a SEC/COP slot is unrealistic.
+  Workers in real yards are localized to one side. Implemented by adding
+  Area to WorkerDto and filtering at allocation time. Empty-area workers
+  remain wildcards for backward compatibility with old data files.
+  (User's supervisor explicitly confirmed this matches operational practice
+  and that finer-grained per-track assignment is too detailed for this
+  project.)
+
+10.4 Passage track as single-instance resource
+  The flat shunting yard's neck — the single track between the arrival and
+  classification groups — is a real physical bottleneck. Modeling it as a
+  shared-capacity-1 resource captures the fact that two PushOffs cannot
+  proceed concurrently; the loco of train T1 occupies the neck during both
+  the push (forward) and pull-back (between sub-drives). Held for the entire
+  PushOff lifecycle, not just per individual drive. Released in
+  ResourceCU.Release alongside the worker/loco return path.
+
+10.5 FIFO-with-bypass queue dispatch
+  Strict FIFO with a single Peek+Dequeue creates pseudo-deadlocks: one
+  infeasible request blocks the entire queue. Walking the whole queue and
+  granting whatever's grantable matches what a real dispatcher does and
+  measurably improves throughput. Strictly, the model is no longer pure
+  FIFO — but the only deviation is that infeasible requests get skipped
+  in favor of feasible ones, which is exactly the human dispatcher's
+  policy.
+
+10.6 Within-track FIFO for SEC/COP
+  Worker travel-time variance and the FIFO-with-bypass change combined to
+  occasionally let a later-arriving WG's COP start before an earlier
+  WG's SEC. Since classification activities are physically sequential (you
+  cannot couple to an unsecured WG), arrival order on a single track must
+  be preserved at the COMMENCEMENT level. Implemented as a per-track gate
+  in ClassificationCU; release on the previous activity's Started event.
+  Across-track parallelism is untouched.
+
+10.7 OBT commitment and destination-map release
+  Once an OutboundTrain is created on a track, that track is "committed"
+  for the duration of OBTP+DEPD. New WGs of the same destination must be
+  routed elsewhere (real dispatchers reassign tracks). Implemented as an
+  event from ClassificationCU back to ArrivalCU. Tracks are unreserved on
+  DEPD completion so they can be reused by any future destination.
+
+10.8 Defensive null-check for unassigned WGs
+  Side effect of (10.7): faster track cycling means more chance of running
+  out of free classification tracks. The pre-existing NRE in
+  RunSortingMethod was replaced with a clear log + a CSV
+  ClassificationTrackUnavailable event + filtering of the affected WG out
+  of the PushOff list. The simulation degrades gracefully instead of
+  crashing on this edge case.
+
+10.9 Image-space coordinate system + bottom anchor
+  Earlier the visualizer used background-size: cover with viewport-relative
+  coordinates, which broke alignment whenever the viewport aspect ratio
+  changed. Switching to a fixed 1920x1080 image with bottom-anchor and an
+  applyImageYOffset helper means every painted element shifts together
+  when the viewport changes — alignment is preserved across resolutions.
+
+10.10 Slot-pool grid for workers/locos
+  Slots are claimed first-free rather than fixed per worker. Mirrors a real
+  rest area where the next-available shunter takes the next-available task
+  rather than each having a private locker. Also produces visually pleasant
+  packing without per-worker layout configuration.
+
+================================================================================
+11. ISSUE LOG (BUGS FOUND AND FIXED)
+================================================================================
+
+11.1 Activity lifecycle was incomplete
+  Some activities never set CommencedAt (e.g., Coupling, Securing, OBTP,
+  DEPD, individual PushOff drives). The CSV was missing Started rows for
+  those activities, breaking any waiting-time analysis. Fixed by introducing
+  MarkCommenced/MarkCompleted on the Activity base class and routing every
+  CU through them. Sweep verified no direct CommencedAt/CompletedAt writes
+  remain.
+
+11.2 Worker travel was instantaneous
+  Workers used to become available again the instant their activity
+  completed, with no return-travel time. Fixed: ReturnStarted is logged at
+  release, and CompleteWorkerReturn fires after worker-specific travel time
+  to actually return them to the pool. Same pattern for shunt and train
+  locos.
+
+11.3 Train's L locomotive box overlapping shunt loco icon
+  Visual: when the shunt loco arrived during ITP, its icon parked exactly
+  where the train's black "L" box was, doubled-up. Fixed by hiding the L
+  box's visibility on ITP Started — physically the train loco is being
+  swapped out for the shunt loco at exactly that moment, so the visual
+  matches reality.
+
+11.4 Train graphic stayed intact through full PushOff
+  Each WG appeared on its classification track but ALSO remained drawn on
+  the arrival train. Fixed: on each EntityCreated event, the matching WG
+  div is removed from the train and the train's CSS left is recomputed so
+  the L stays anchored. Train shrinks visibly as PushOff progresses.
+
+11.5 Head-of-line blocking in ResourceCU's queue
+  Strict FIFO with Peek+Dequeue blocked the entire queue if the head
+  request was infeasible. Replaced with FIFO-with-bypass (see 10.5).
+
+11.6 Worker travel-time variance flipping SEC/COP order
+  Within-track FIFO ordering wasn't guaranteed when workers had different
+  speeds. Fixed by per-track gating in ClassificationCU (see 10.6).
+
+11.7 Train pill bubbling to Securing during PushOff
+  findTrainForActivity had a fallback that scanned all trains' wagonGroups
+  for a wgId match; this caused SEC/COP/PushOffDrive Started events to add
+  themselves to the parent train's activeActivities stack, overwriting
+  PushOff. Fix: removed the fallback. Only direct trains[entityId] hits
+  resolve to a train now. WG fan-out for WG badges is a separate code
+  path (findWagonGroupsForActivity) and is unaffected.
+
+11.8 PushOffDrive WG fan-out hitting bystander WGs
+  findWagonGroupsForActivity fell back to findWagonGroupsOnTrack(location)
+  for unknown entities, which lit up earlier-parked WGs on the same track
+  with "PushOffDrive" even though their work was complete. Fix: explicitly
+  exclude PushOffDrive from the WG fan-out.
+
+11.9 Destination-track mapping never cleared
+  See section 7. Fixed via DestinationCommittedToOutbound event.
+
+11.10 Track.Area was "ArrivalArea" / "ClassificationArea"
+  The Track entity copied segment.RailwayStationArea verbatim from the
+  infrastructure JSON. Activities created with area = arrivalTrack.Area
+  therefore had area="ArrivalArea", which never matched workers tagged
+  area="Arrival". Symptom: workers never moved, simulation froze right
+  after ArrivalDrive completion. Fix: hard-code Track.Area to the canonical
+  short form ("Arrival" / "Classification") in CreateArrivalTracks /
+  CreateClassificationTracks. The Where filters that read
+  segment.RailwayStationArea directly are unaffected.
+
+11.11 Legend disappeared after refactor
+  positionLegend ran on DOMContentLoaded, but main-content was display:none
+  at that moment so clientHeight was 0 and the legend was placed at
+  y = -780. Fixed by re-running positionLegend after main-content becomes
+  visible inside loadCSV.
+
+================================================================================
+12. OPEN ITEMS / FUTURE WORK
+================================================================================
+
+12.1 Dynamic destination resolution at push-off time (deferred)
+  Per-train wagonGroupToTrackMap is captured at sorting (ArrivalDrive
+  completion) and frozen until PushOff fires. WGs from trains sorted before
+  an OBT was committed still go to the original track. To fully resolve,
+  PushOffActivity needs an ArrivalCU reference (or a shared
+  destination-registry service) and needs to look up the destination's
+  current track at each sub-drive instead of consuming a frozen map.
+  Deferred until a thesis scenario explicitly stresses dense arrivals.
+
+12.2 Shunt loco z-order behind train
+  Visual nit: shunt loco icon currently renders in front of the train. User
+  flagged it should render behind. Deferred.
+
+12.3 Removing standalone WGs after DEPD
+  Currently WG rectangles stay on the classification track visually after
+  the OBT departs. Add a hook on TrainEvent | Departed to remove them. Not
+  currently logged as a separate task.
+
+12.4 Per-track / per-zone worker assignment
+  User's supervisor mentioned that in some real yards workers are assigned
+  to specific tracks within a zone, not just to a yard area. Out of scope
+  for this thesis.
+
+12.5 Outbound-train length / weight thresholds
+  Currently the completion check is a single length threshold
+  (MIN_TRAIN_LENGTH = 100 m). Original WG-flow diagram listed three
+  thresholds (length, # of WGs/wagons, total weight). User chose to keep
+  only length for this thesis; the other two are not implemented.
+
+================================================================================
+13. CHRONOLOGICAL CHANGE LOG (chat-driven)
+================================================================================
+
+Each entry summarizes a discrete change that resulted from a chat exchange.
+This is the running narrative; new entries are appended as work continues.
+
+[INITIAL] Pre-existing state at start of this session:
+  * Engine, three CUs, basic activity types in place.
+  * Visualizer existed but with viewport-relative coordinates and limited
+    state representation.
+
+[01] Worker travel time and ReturnStarted event
+  Workers became available the instant their activity ended. Added
+  ReturnStarted at release, scheduled CompleteWorkerReturn after travel
+  time. Same pattern extended to shunt and train locos.
+
+[02] Activity-base canonical lifecycle
+  Added MarkCommenced/MarkCompleted to Activity. Submitted now emitted in
+  the constructor. Swept all CUs to remove direct CommencedAt/CompletedAt
+  writes; previously some activity types were never recording one or both
+  of those timestamps.
+
+[03] Visualizer: train/WG status pills, train shrink, L-box hide
+  Train graphic is right-anchored; status pill is centered above; L box is
+  hidden on ITP Started; per-WG removal on EntityCreated; passage strip
+  indicator (green/red) reading PassageClaimed/PassageReleased rows.
+
+[04] Passage track resource
+  Single-instance resource modeled in ResourceCU. PushOff requests it;
+  released on PushOff completion. Logged as PassageClaimed/PassageReleased
+  ActivityEvent rows.
+
+[05] FIFO-with-bypass queue dispatch
+  Replaced ProcessQueue's Peek+Dequeue with full-queue walk plus re-queue
+  of infeasible items in original order.
+
+[06] Within-track FIFO for SEC/COP
+  Per-track gate in ClassificationCU. New arrivals on a track defer locally
+  while the track has an unstarted SEC/COP. Released when the live SEC/COP
+  fires Started.
+
+[07] OBT commitment event and destination-map release
+  ClassificationCU.DestinationCommittedToOutbound fires on
+  CreateOutboundTrain. ArrivalCU.ReleaseDestinationMapping clears the
+  destination -> track binding so subsequent WGs go to a fresh track.
+  Wire-up in Program.cs. CompleteDepartureDrive now also unreserves the
+  track. RunSortingMethod has a defensive null-check; RequestPushOff
+  filters unassigned WGs out of the PushOff list.
+
+[08] Worker area split (Arrival vs Classification)
+  WorkerDto.Area added. ResourceCU.WorkerMatchesArea filters allocations.
+  #WORKER meta line gains <area>. ResourcePool.json split 5/5 between
+  Arrival and Classification. Visualizer uses worker_icon_arrival_green.png
+  vs worker_icon_classification_orange.png based on area, with empty area
+  falling back to the original worker_icon.png.
+
+[09] Track.Area normalization
+  Bug exposed by [08]: Track.Area was "ArrivalArea"/"ClassificationArea"
+  from the JSON. Hardcoded to canonical "Arrival"/"Classification" in
+  Program.cs's track-creation methods. This was the cause of the
+  "workers don't move" freeze that briefly appeared after [08].
+
+[10] Visualizer cosmetics + sim clock with date
+  Status pill anchored above the train; legend repositioned to image-y=300
+  under shunt-loco grid first column with reduced font/padding;
+  formatSimDateTime now shows DD/MM/YYYY HH:MM:SS in the clock to match
+  Console.WriteLine timestamps. Legend's positionLegend re-runs on CSV
+  load (fixing a regression where main-content's display:none made
+  clientHeight=0 at DOMContentLoaded).
+
+[11] findTrainForActivity fallback removed
+  WG-id fallback was incorrectly bubbling SEC/COP/PushOffDrive into the
+  train's activeActivities stack. Now only direct trains[entityId] hits
+  resolve.
+
+[12] Documentation file (this document)
+  Initial generation. To be updated as work continues.
+
+[13] Late-binding destination -> track at PushOff time
+  Closes the open item flagged in section 7.
+  * ArrivalCU exposes Track? ResolveTrackForDestination(destination):
+      - returns the currently-mapped track if present;
+      - else allocates a free + unreserved classification track, marks
+        it Reserved, registers the mapping, returns it;
+      - returns null if no free track (logged ERROR).
+  * PushOffActivity constructor now takes
+      Func<string, Track?> resolveTrackForDestination
+    and no longer takes the (frozen) wagonGroupDestinations map.
+  * GroupConsecutiveWagonsByDestination now groups by destination NAME
+    (looked up from _wagonGroupData[wgId].Destination), not by Track.
+    The DestinationTrack field on WagonGroupPush is set late, in
+    ExecuteNextPush, by calling the resolver. Each group of the same
+    destination resolves independently — so if an OBT is committed
+    between sub-pushes, the next group of that destination gets a fresh
+    track and is pushed there.
+  * ArrivalCU.RequestPushOff passes ResolveTrackForDestination as the
+    resolver delegate. Sort-time RunSortingMethod is unchanged but its
+    output is now advisory: it provides the SORTING console line and
+    early track reservation, while the actual push targets are
+    re-resolved at sub-push time.
+  * WGs whose destination resolves to null at sub-push time (no free
+    track) are skipped with a PushSkipped_NoTrack log entry instead
+    of NRE'ing.
+
+  Follow-up after observing a real run: late-binding alone wasn't
+  enough because DestinationCommittedToOutbound used to fire only
+  inside CreateOutboundTrain, which itself runs after Coupling/Securing
+  completes. In the gap between "track length crosses MIN_TRAIN_LENGTH
+  on arrival" and "Coupling completes and OBT is created", any PushOff
+  resolving for that destination still picked the doomed track. Fixed
+  by firing the event EARLY, in HandleWagonGroupArrival, the moment a
+  newly-arrived WG pushes the track over MIN_TRAIN_LENGTH:
+    - new private HashSet<string> _committedTracks tracks which
+      tracks have already had the event emitted, preventing double-fire;
+    - HandleWagonGroupArrival sums the WGs on the track after adding
+      the newcomer; if total >= MIN_TRAIN_LENGTH and the track isn't
+      already in _committedTracks, it adds the track and fires
+      DestinationCommittedToOutbound with a "DestinationCommittedEarly"
+      log entry;
+    - CreateOutboundTrain still fires the event but only if
+      _committedTracks.Add returns true (i.e. the early path didn't
+      already do it) — defensive for any track that somehow reaches
+      OBT creation without going through the threshold-cross signal;
+    - CompleteDepartureDrive removes the track from _committedTracks
+      so a future cycle on the same physical track can re-fire the
+      early commit.
+
+[14] Visualizer: per-track worker placement + outbound train frame + S badge
+  * teleportWorkerToTrack uses per-track horizontal offset maps
+    (arrivalTrackWorkerOffsetX, classificationTrackWorkerOffsetX) anchored
+    on the train's track position. Workers stack side-by-side: the
+    function now persists data-teleported / data-at-track / data-slot on
+    each entity so the early-out check works and peer-scan can see used
+    slots (without these writes every worker landed on slot 0).
+  * After OBTP completes, drawOutboundTrainFrame draws a black frame
+    around all WGs sitting on the activity's classification track plus a
+    24px "L" box flush against the right edge. Tracked in
+    placedOutboundTrains; cleared on reset(). No auto-removal on
+    departure (yet).
+  * After Securing completes for a WG, addSecuredBadge stamps a small
+    green "S" pill above the WG and sets meta.status = 'Secured' on the
+    WG metadata object inside trains[].wagonGroups[]. The badge is
+    re-applied by drawWagonGroupOnClassificationTrack on replay if
+    meta.status === 'Secured'. reset() clears wg.status across all WGs.
+
+================================================================================
+14. FILE / MODULE INDEX
+================================================================================
+
+Engine
+  Engine/SimulationEngine.cs           - DES engine, future event list
+  Models/Activity.cs                   - abstract base, lifecycle helpers
+  Models/<ActivityName>.cs             - per-activity subclasses
+  Models/ResourceRequest.cs            - request envelope for ResourceCU
+  Models/ResourcePoolModel.cs          - DTOs for workers/locos
+  Entities/Train.cs                    - inbound train entity
+  Entities/WagonGroup.cs               - WG entity
+  Entities/OutboundTrain.cs            - outbound train entity
+  Infrastructure/Track.cs              - track entity (Area, Designation,
+                                         Reserved, CurrentOccupancies)
+
+Control units
+  Control/ResourceControlUnit.cs       - resource broker (workers, locos,
+                                         passage track, exit gate)
+  Control/ArrivalControlUnit.cs        - inbound flow, sorting, ITP, PushOff
+  Control/ClassificationControlUnit.cs - SEC/COP, completion check,
+                                         OBTP, DEPD
+
+Output
+  Output/SimulationLogger.cs           - CSV writer
+  Output/SimulationVisualizer.html     - replay UI
+  Output/worker_icon.png               - generic worker (fallback)
+  Output/worker_icon_arrival_green.png - Arrival-area worker icon
+  Output/worker_icon_classification_orange.png - Classification-area worker icon
+  Output/shunting_loco.png             - shunt loco icon
+  Output/vis_background_v3.png         - 1920x1080 yard background
+
+Input
+  InputFiles/Infrastructure_*.json     - track segments, switches, areas
+  InputFiles/InboundTrains*.json       - test inbound train scenarios
+  InputFiles/ResourcePool.json         - worker / shunt loco roster
+
+Top-level
+  Program.cs                            - bootstrap, wire CUs, schedule
+                                          inbound trains, run engine
+
+================================================================================
+END OF DOCUMENT
+================================================================================

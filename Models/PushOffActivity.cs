@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using WienerNeustadtSimulation.Engine;
@@ -23,7 +23,6 @@ namespace WienerNeustadtSimulation.Models
         public override bool WorkersReleasedIndividually => true;
 
         public List<string> WagonGroupIds { get; set; }
-        public Dictionary<string, Track> WagonGroupDestinations { get; set; }
 
         private List<WagonGroupPush> _pushGroups = new List<WagonGroupPush>();
         private int _completedPushes = 0;
@@ -31,24 +30,32 @@ namespace WienerNeustadtSimulation.Models
         private readonly Dictionary<string, WagonGroupDto> _wagonGroupData;
         private readonly ClassificationControlUnit _classificationControl;
 
+        // Late-binding resolver supplied by ArrivalCU. Called per sub-push so a
+        // destination committed to an OBT after sort time gets routed to a
+        // fresh classification track instead of stacking onto the now-committed
+        // one. Returns null if no free track is available — the affected
+        // sub-push is then logged and skipped.
+        private readonly Func<string, Track?> _resolveTrackForDestination;
+
         public PushOffActivity(
             string trainId,
             double trainLength,
             List<string> wagonGroupIds,
-            Dictionary<string, Track> wagonGroupDestinations,
             string fromLocation,
             string area,
             DateTime requestedAt,
             SimulationEngine engine,
             Dictionary<string, WagonGroupDto> wagonGroupData,
-            ClassificationControlUnit classificationControl)
+            ClassificationControlUnit classificationControl,
+            Func<string, Track?> resolveTrackForDestination)
             : base("PushOff", trainId, trainLength, fromLocation, area, "ArrivalCU", requestedAt)
         {
             WagonGroupIds = wagonGroupIds ?? new List<string>();
-            WagonGroupDestinations = wagonGroupDestinations ?? new Dictionary<string, Track>();
             _engine = engine;
             _wagonGroupData = wagonGroupData;
             _classificationControl = classificationControl;
+            _resolveTrackForDestination = resolveTrackForDestination
+                ?? throw new ArgumentNullException(nameof(resolveTrackForDestination));
         }
 
         public void CommencePushOff()
@@ -58,9 +65,12 @@ namespace WienerNeustadtSimulation.Models
             // "initialized" is already printed by the base Activity constructor.
             // Only print "Commence" here.
             Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | PushOff: Commence {ActivityId}");
-            SimulationLogger.Instance.LogTrainEvent(EntityId, "PushOffStarted", _engine.Now, $"{_pushGroups.Count} groups");
 
+            // Group BY DESTINATION NAME, not by track. Tracks are resolved
+            // late, per sub-push, in ExecuteNextPush — see _resolveTrackForDestination.
             _pushGroups = GroupConsecutiveWagonsByDestination();
+
+            SimulationLogger.Instance.LogTrainEvent(EntityId, "PushOffStarted", _engine.Now, $"{_pushGroups.Count} groups");
 
             ExecuteNextPush();
         }
@@ -76,15 +86,32 @@ namespace WienerNeustadtSimulation.Models
             var group = _pushGroups[_completedPushes];
             string combinedId = string.Join("+", group.WagonGroupIds);
 
+            // Late-bind the destination track at this exact moment. If the
+            // destination was committed to an OBT since sort time (or since
+            // the previous sub-push of this same activity), the resolver
+            // returns a fresh classification track instead of the committed
+            // one. This is the key invariant the user wants: don't push new
+            // WGs onto a track that is already forming an outgoing train.
+            var destinationTrack = _resolveTrackForDestination(group.DestinationName);
+            if (destinationTrack == null)
+            {
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | PushOff: ERROR — no track available for destination '{group.DestinationName}', skipping group [{combinedId}]");
+                SimulationLogger.Instance.LogWagonGroupEvent(combinedId, "PushSkipped_NoTrack", _engine.Now, group.DestinationName);
+                _completedPushes++;
+                ExecuteNextPush();
+                return;
+            }
+            group.DestinationTrack = destinationTrack;
+
             var driveActivity = new DrivingActivity(
                 activityType: "PushOffDrive",
                 entityId: combinedId,
                 entityLength: group.TotalLength,
-                location: group.DestinationTrack.RealLifeID,
-                area: group.DestinationTrack.Area,
+                location: destinationTrack.RealLifeID,
+                area: destinationTrack.Area,
                 controlUnit: "PushOff",
                 requestedAt: _engine.Now,
-                speed: 25.0
+                speed: 20
             );
 
             driveActivity.AllocatedLocoIds.AddRange(this.AllocatedLocoIds);
@@ -98,8 +125,8 @@ namespace WienerNeustadtSimulation.Models
             driveActivity.MarkCommenced(_engine.Now);
             driveActivity.ScheduledCompletionAt = _engine.Now.Add(pushDuration);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | PushOff drive: {distanceMeters:F0}m {pushDuration.TotalSeconds:F0}s, {EntityId} to track {group.DestinationTrack.RealLifeID}");
-            SimulationLogger.Instance.LogWagonGroupEvent(string.Join("+", group.WagonGroupIds), "PushingToTrack", _engine.Now, group.DestinationTrack.RealLifeID);
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | PushOff drive: {distanceMeters:F0}m {pushDuration.TotalSeconds:F0}s, {EntityId} ({group.DestinationName}) to track {destinationTrack.RealLifeID}");
+            SimulationLogger.Instance.LogWagonGroupEvent(combinedId, "PushingToTrack", _engine.Now, destinationTrack.RealLifeID);
 
             _engine.Schedule(
                 _engine.Now.Add(pushDuration),
@@ -154,43 +181,47 @@ namespace WienerNeustadtSimulation.Models
             OnCompleted?.Invoke(this);
         }
 
+        // Group consecutive WGs by destination NAME (not by track). Tracks are
+        // bound later, in ExecuteNextPush, via _resolveTrackForDestination — so
+        // a destination that gets committed to an OBT mid-PushOff produces a
+        // brand-new track for any subsequent group of the same destination.
+        //
+        // WGs without a known destination (no entry in _wagonGroupData or empty
+        // Destination) are skipped here so they don't create a phantom group.
         private List<WagonGroupPush> GroupConsecutiveWagonsByDestination()
         {
             var groups = new List<WagonGroupPush>();
+            if (WagonGroupIds.Count == 0) return groups;
 
-            if (WagonGroupIds.Count == 0)
-                return groups;
+            WagonGroupPush? currentGroup = null;
 
-            var currentGroup = new WagonGroupPush
+            foreach (var wgId in WagonGroupIds)
             {
-                DestinationTrack = WagonGroupDestinations[WagonGroupIds[0]],
-                WagonGroupIds = new List<string> { WagonGroupIds[0] },
-                TotalLength = GetWagonGroupLength(WagonGroupIds[0])
-            };
+                var destinationName = GetWagonGroupDestination(wgId);
+                if (string.IsNullOrEmpty(destinationName))
+                {
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | PushOff: WARNING - wagon group {wgId} has no destination, skipping");
+                    continue;
+                }
 
-            for (int i = 1; i < WagonGroupIds.Count; i++)
-            {
-                var wgId = WagonGroupIds[i];
-                var destination = WagonGroupDestinations[wgId];
-
-                if (destination.RealLifeID == currentGroup.DestinationTrack.RealLifeID)
+                if (currentGroup != null && currentGroup.DestinationName == destinationName)
                 {
                     currentGroup.WagonGroupIds.Add(wgId);
                     currentGroup.TotalLength += GetWagonGroupLength(wgId);
                 }
                 else
                 {
-                    groups.Add(currentGroup);
+                    if (currentGroup != null) groups.Add(currentGroup);
                     currentGroup = new WagonGroupPush
                     {
-                        DestinationTrack = destination,
+                        DestinationName = destinationName,
                         WagonGroupIds = new List<string> { wgId },
                         TotalLength = GetWagonGroupLength(wgId)
                     };
                 }
             }
 
-            groups.Add(currentGroup);
+            if (currentGroup != null) groups.Add(currentGroup);
             return groups;
         }
 
@@ -201,8 +232,20 @@ namespace WienerNeustadtSimulation.Models
             return 0;
         }
 
+        private string GetWagonGroupDestination(string wagonGroupId)
+        {
+            if (_wagonGroupData.ContainsKey(wagonGroupId))
+                return _wagonGroupData[wagonGroupId].Destination ?? string.Empty;
+            return string.Empty;
+        }
+
         private class WagonGroupPush
         {
+            // Set at grouping time. Stable for the lifetime of the group.
+            public string DestinationName { get; set; } = string.Empty;
+            // Set late, in ExecuteNextPush, via _resolveTrackForDestination.
+            // May resolve to a different track for each group of the same
+            // destination if an OBT was committed in between.
             public Track DestinationTrack { get; set; } = null!;
             public List<string> WagonGroupIds { get; set; } = new List<string>();
             public double TotalLength { get; set; }
