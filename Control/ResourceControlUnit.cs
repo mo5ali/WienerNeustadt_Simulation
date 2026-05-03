@@ -97,6 +97,9 @@ namespace WienerNeustadtSimulation.Control
 
                 _exitGateAvailable = false;
                 Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: Exit cleared for 'Req_{activity.ActivityId}'");
+                // Mirror PassageClaimed: lets the visualizer's exit-gate
+                // indicator turn red and label the owning OBT.
+                SimulationLogger.Instance.LogActivityEvent(activity.ActivityId, activity.ActivityType, _engine.Now, "ExitGateClaimed", "");
 
                 // No travel time for exit gate, directly trigger commencement
                 activity.OnReadyToCommence?.Invoke(activity);
@@ -318,6 +321,9 @@ namespace WienerNeustadtSimulation.Control
             {
                 _exitGateAvailable = true;
                 Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ResourceCU: Exit gate released");
+                // Mirror PassageReleased: lets the visualizer's exit-gate
+                // indicator turn back to green / "Available".
+                SimulationLogger.Instance.LogActivityEvent(activity.ActivityId, activity.ActivityType, _engine.Now, "ExitGateReleased", "");
                 ProcessQueue();
                 return;
             }

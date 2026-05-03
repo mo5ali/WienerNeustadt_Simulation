@@ -132,7 +132,7 @@
         #passage-strip {
             position: absolute;
             top: 60%;
-            left: 62%;
+            left: calc(62% - 45px);
             width: 2.5cm;
             height: 8px;
             transform: translate(-50%, -50%);
@@ -151,7 +151,7 @@
         #passage-pill {
             position: absolute;
             top: calc(60% - 22px);
-            left: 62%;
+            left: calc(62% - 45px);
             transform: translateX(-50%);
             padding: 2px 5px;
             border-radius: 5px;
@@ -167,6 +167,52 @@
         }
 
             #passage-pill.used {
+                background: #B71C1C;
+            }
+
+        /* Exit gate (single-resource that every DepartureDrive must acquire).
+           Mirrors the passage-track indicator stylistically — a small green
+           strip + label pill that turns red while a DEPD owns the gate.
+           Positioned near the bottom-left of the screen so it sits near the
+           departure-area train stack. Adjust top/left to taste. */
+        #exit-gate-strip {
+            position: absolute;
+            top: calc(95% - 200px);
+            left: 13%;
+            width: 100px;
+            height: 8px;
+            transform: translate(-50%, -50%);
+            background: #4CAF50;
+            border: 1px solid rgba(0,0,0,0.35);
+            border-radius: 2px;
+            box-shadow: 0 0 6px rgba(0,0,0,0.2);
+            z-index: 2;
+            transition: background 0.15s linear;
+        }
+
+            #exit-gate-strip.used {
+                background: #C62828;
+            }
+
+        #exit-gate-pill {
+            position: absolute;
+            top: calc(95% - 222px);
+            left: 13%;
+            transform: translateX(-50%);
+            padding: 2px 5px;
+            border-radius: 5px;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            background: #2E7D32;
+            border: 1px solid rgba(0,0,0,0.25);
+            white-space: nowrap;
+            z-index: 3;
+            text-shadow: none;
+            letter-spacing: 0.3px;
+        }
+
+            #exit-gate-pill.used {
                 background: #B71C1C;
             }
 
@@ -316,6 +362,19 @@
                 align-items: center;
                 border: none;
                 box-shadow: none;
+            }
+
+            /* Outgoing train parked in the bottom-left "departure area" while
+               its DepartureDrive runs. Same general layout as .train.queue but
+               scaled down a bit (transform-origin top-left so positioning math
+               stays in untransformed coordinates) and visibly greyed via the
+               grey-a / grey-b classes applied by redrawTrainGreyed. */
+            .train.departing {
+                align-items: center;
+                border: none;
+                box-shadow: none;
+                transform: scale(0.65);
+                transform-origin: top left;
             }
 
         .train-status {
@@ -547,6 +606,10 @@
         <div id="passage-strip"></div>
         <div id="passage-pill">Available</div>
 
+        <!-- Exit gate resource indicator -->
+        <div id="exit-gate-strip"></div>
+        <div id="exit-gate-pill">Exit Gate: Available</div>
+
         <!-- Restored icon grids -->
         <div id="worker-grid"></div>
         <div id="shuntloco-grid"></div>
@@ -610,8 +673,13 @@
 
         // outboundTrainId → { frameDiv, locoDiv, trackId, wgIds }
         // Populated by drawOutboundTrainFrame after OBTP completes; entries
-        // live until the next reset (no auto-removal on departure).
+        // are torn down by removeOutboundTrainFrame when DEPD starts.
         let placedOutboundTrains = {};
+
+        // outboundTrainId → DOM element representing the train inside the
+        // bottom-left departure area while its DepartureDrive runs. Removed
+        // when DEPD completes (the train has physically left the system).
+        let placedDepartingTrains = {};
 
         // Per-WG running activity (Securing / Coupling / OBTP / DEPD) for the
         // status pill that hangs under each standalone wagon group. Empty / missing
@@ -622,6 +690,13 @@
         // Driven by ActivityEvent rows with status PassageClaimed / PassageReleased
         // emitted by ResourceControlUnit.
         let passageState = { available: true, usedByTrainId: null };
+
+        // Exit-gate resource indicator state. Single resource that every DEPD
+        // must acquire — DEPDs are serialized through this gate, which is why
+        // departing trains never overlap unless exitGateCount > 1.
+        // Driven by ActivityEvent rows with status ExitGateClaimed /
+        // ExitGateReleased emitted by ResourceControlUnit.
+        let exitGateState = { available: true, usedByOutboundTrainId: null };
 
         // NEW: extra UI state per train
         // trains[trainId] already holds wagonGroups etc. We'll attach UI fields too.
@@ -1133,9 +1208,9 @@
                 "713": -550,
                 "711": -450,
                 "709": -375,
-                "707": -275,
-                "705": -225,
-                "703": -175
+                "707": -575,
+                "705": -525,
+                "703": -375
             };
             const classificationTrackWorkerOffsetX = {
                 "629": -300,
@@ -1500,6 +1575,25 @@
                 return;
             }
 
+            // Exit-gate resource state — same shape as the passage handler
+            // above. The activityId pattern is Act_DEPD_<obtId>_<HHMMSS>_<loc>,
+            // so parts[2] is the outbound train id holding the gate.
+            if (event.eventType === 'ActivityEvent' &&
+                (event.activityStatus === 'ExitGateClaimed' ||
+                    event.activityStatus === 'ExitGateReleased')) {
+                if (event.activityStatus === 'ExitGateClaimed') {
+                    const parts = String(event.entityId || '').split('_');
+                    const outboundTrainId = parts.length >= 3 ? parts[2] : null;
+                    exitGateState.available = false;
+                    exitGateState.usedByOutboundTrainId = outboundTrainId;
+                } else {
+                    exitGateState.available = true;
+                    exitGateState.usedByOutboundTrainId = null;
+                }
+                updateExitGateUI();
+                return;
+            }
+
             // Generic ActivityEvent lifecycle (all activity types except ArrivalDrive,
             // which has custom handling above). Shows the running activity name on the
             // train's status badge while it's in progress, then reverts to "Waiting".
@@ -1535,6 +1629,22 @@
                     for (const wgId of wgIds) {
                         wagonGroupActivities[wgId] = event.event;
                         updateWagonGroupBadge(wgId);
+                    }
+
+                    // DEPD started → the OBT physically pulls off its
+                    // classification track. Tear down the on-track view (WG
+                    // rectangles, frame, L box) and pop a smaller, greyed
+                    // copy of the train into the bottom-left departure area.
+                    // The activityId pattern is Act_DEPD_<obtId>_<HHMMSS>_<loc>,
+                    // so parts[2] is the outbound train id.
+                    if (event.event === 'DepartureDrive') {
+                        const parts = String(activityId || '').split('_');
+                        const outboundTrainId = parts.length >= 3 ? parts[2] : null;
+                        if (outboundTrainId) {
+                            drawTrainInDepartureArea(outboundTrainId);
+                            removeOutboundWGsFromTrack(outboundTrainId);
+                            removeOutboundTrainFrame(outboundTrainId);
+                        }
                     }
                     return;
                 }
@@ -1579,6 +1689,21 @@
                     if (event.event === 'Securing') {
                         for (const wgId of wgIds) {
                             addSecuredBadge(wgId);
+                        }
+                    }
+
+                    // DEPD completed → the OBT has physically left the system.
+                    // Remove its temporary departure-area block and re-stack
+                    // the remaining departing trains.
+                    if (event.event === 'DepartureDrive') {
+                        const parts = String(activityId || '').split('_');
+                        const outboundTrainId = parts.length >= 3 ? parts[2] : null;
+                        if (outboundTrainId) {
+                            removeTrainFromDepartureArea(outboundTrainId);
+                            // Drop the OBT registry entry as well — its frame /
+                            // L box are already gone (Started branch above)
+                            // and the WG list is no longer needed.
+                            delete placedOutboundTrains[outboundTrainId];
                         }
                     }
                     return;
@@ -1794,6 +1919,26 @@
 
             // Sync badge to whatever state the train is in (Waiting / activity name).
             updateTrainBadge(trainId);
+        }
+
+        // Mirror of updatePassageUI for the single exit-gate resource. Same
+        // safe-to-call-early behaviour: if the DOM nodes haven't been rendered
+        // yet (e.g. before main-content becomes visible) we just bail out.
+        function updateExitGateUI() {
+            const strip = document.getElementById('exit-gate-strip');
+            const pill = document.getElementById('exit-gate-pill');
+            if (!strip || !pill) return;
+
+            if (exitGateState.available) {
+                strip.classList.remove('used');
+                pill.classList.remove('used');
+                pill.textContent = 'Exit Gate: Available';
+            } else {
+                strip.classList.add('used');
+                pill.classList.add('used');
+                const who = exitGateState.usedByOutboundTrainId || '?';
+                pill.textContent = `Exit Gate: Used by ${who}`;
+            }
         }
 
         // Push the passageState into the DOM (strip color + pill text/colour).
@@ -2051,6 +2196,142 @@
             delete placedOutboundTrains[outboundTrainId];
         }
 
+        // ─── Departure area (bottom-left) ─────────────────────────────────
+        //
+        // Mirrors the entry-queue pattern (drawTrainInQueue + relayoutQueue):
+        // when an OBT enters DepartureDrive we (a) tear down its on-track
+        // representation (WG rectangles, frame, L box) and (b) pop a smaller,
+        // greyed copy of the train into a vertical stack at the bottom-left.
+        // The first slot lives at (25, 875) and each subsequent train sits
+        // 25 px lower, so the stack grows downward as more trains depart.
+
+        const DEPARTURE_AREA_X = 25;
+        const DEPARTURE_AREA_Y_TOP = 875;
+        const DEPARTURE_AREA_Y_STEP = 25;
+
+        function getDepartureIndex(trainId) {
+            // Stable index by existing departure-area DOM order — keeps a
+            // train's slot fixed across replays / re-renders. New arrivals
+            // get appended to the bottom.
+            const departing = Array.from(document.querySelectorAll('.train.departing'));
+            const ids = departing.map(el => el.dataset.outboundTrainId).filter(Boolean);
+            const existingIndex = ids.indexOf(trainId);
+            if (existingIndex >= 0) return existingIndex;
+            return ids.length;
+        }
+
+        function relayoutDepartureArea() {
+            const departing = Array.from(document.querySelectorAll('.train.departing'));
+            departing.forEach((el, idx) => {
+                // Image-space y → container-space y via applyImageYOffset, the
+                // same bottom-anchor convention every other on-canvas element
+                // uses (track positions, worker slots, etc).
+                const pos = applyImageYOffset({
+                    x: DEPARTURE_AREA_X,
+                    y: DEPARTURE_AREA_Y_TOP + idx * DEPARTURE_AREA_Y_STEP
+                });
+                el.style.top = `${pos.y}px`;
+            });
+        }
+
+        // Detach every WG that belongs to this OBT from its classification
+        // track: removes the DOM nodes (.wg-standalone), drops the entries
+        // from placedWagonGroups, and zeroes classificationTrackFill for the
+        // freed track so future arrivals on the same physical track don't
+        // start from a stale fill offset.
+        function removeOutboundWGsFromTrack(outboundTrainId) {
+            const entry = placedOutboundTrains[outboundTrainId];
+            if (!entry) return;
+            const wgIds = entry.wgIds || [];
+            for (const wgId of wgIds) {
+                const el = placedWagonGroups[wgId];
+                if (el && el.parentNode) el.parentNode.removeChild(el);
+                delete placedWagonGroups[wgId];
+            }
+            if (entry.trackId) {
+                classificationTrackFill[entry.trackId] = 0;
+            }
+        }
+
+        // Build the smaller, greyed copy of the OBT inside the departure area.
+        // Pulls per-WG metadata via findWagonGroupMeta, mirrors the entry-queue
+        // train layout (wagons left → loco right), and tags grey-a / grey-b on
+        // alternating WGs to match the in-queue greyed look. The transform:
+        // scale lives in the .train.departing CSS rule, so width/top math here
+        // stays in untransformed pixels.
+        function drawTrainInDepartureArea(outboundTrainId) {
+            if (placedDepartingTrains[outboundTrainId]) return;  // idempotent
+            const entry = placedOutboundTrains[outboundTrainId];
+            if (!entry) return;
+            const wgIds = entry.wgIds || [];
+            if (wgIds.length === 0) return;
+
+            // All WGs in an OBT share the same destination — pick the first
+            // one's metadata for the badge text.
+            const firstMeta = findWagonGroupMeta(wgIds[0]);
+            const destination = firstMeta ? firstMeta.destination : 'Unknown';
+
+            const trainDiv = document.createElement('div');
+            trainDiv.className = 'train departing';
+            trainDiv.id = `departing-${outboundTrainId}`;
+            trainDiv.dataset.outboundTrainId = outboundTrainId;
+            trainDiv.style.position = 'absolute';
+            const idx = getDepartureIndex(outboundTrainId);
+            // Convert the image-space coordinate (matching the {x:25,y:875}
+            // anchor used everywhere else in the visualizer) into a real
+            // container-space pixel via applyImageYOffset. Without this the
+            // raw y=875 lands near the bottom edge of the viewport on a
+            // 1080p screen and is mostly off-screen on smaller ones.
+            const pos = applyImageYOffset({
+                x: DEPARTURE_AREA_X,
+                y: DEPARTURE_AREA_Y_TOP + idx * DEPARTURE_AREA_Y_STEP
+            });
+            trainDiv.style.left = `${pos.x}px`;
+            trainDiv.style.top = `${pos.y}px`;
+
+            const pixelsPerMeter = 1.2;  // raw scale; CSS .train.departing
+                                          // applies the visible 0.65× shrink.
+
+            // Wagons in source order, then the locomotive on the right —
+            // matches the in-queue / on-track layout direction.
+            wgIds.forEach((wgId, i) => {
+                const meta = findWagonGroupMeta(wgId);
+                if (!meta) return;
+                const wgDiv = document.createElement('div');
+                wgDiv.className = `wagon-group ${i % 2 === 0 ? 'grey-a' : 'grey-b'}`;
+                wgDiv.style.width = `${(meta.length || 0) * pixelsPerMeter}px`;
+                wgDiv.textContent = wgId;
+                wgDiv.title = `${wgId}: ${meta.length}m → ${meta.destination}`;
+                trainDiv.appendChild(wgDiv);
+            });
+
+            const locoDiv = document.createElement('div');
+            locoDiv.className = 'locomotive';
+            locoDiv.style.width = '24px';
+            locoDiv.style.background = '#222';
+            locoDiv.title = `Locomotive for outbound train ${outboundTrainId}`;
+            locoDiv.textContent = 'L';
+            trainDiv.appendChild(locoDiv);
+
+            const badge = document.createElement('div');
+            badge.className = 'train-status driving';
+            badge.textContent = `Driving to ${destination}`;
+            trainDiv.appendChild(badge);
+
+            document.getElementById('main-content').appendChild(trainDiv);
+            placedDepartingTrains[outboundTrainId] = trainDiv;
+        }
+
+        // Tear down a departing-train block once DEPD completes (the OBT has
+        // physically exited the system). Re-stacks the remaining departing
+        // trains so the gap is closed.
+        function removeTrainFromDepartureArea(outboundTrainId) {
+            const el = placedDepartingTrains[outboundTrainId];
+            if (el && el.parentNode) el.parentNode.removeChild(el);
+            delete placedDepartingTrains[outboundTrainId];
+            relayoutDepartureArea();
+        }
+
         // Stamp the small green "S" badge onto a WG and flip its `status`
         // metadata field so the secured state persists across re-draws.
         // Idempotent: a second call on an already-badged WG is a no-op.
@@ -2107,6 +2388,10 @@
             mainContent.querySelectorAll('.outbound-train-frame, .outbound-train-loco').forEach(div => div.remove());
             placedOutboundTrains = {};
 
+            // Tear down any departure-area trains and clear that registry too.
+            mainContent.querySelectorAll('.train.departing').forEach(div => div.remove());
+            placedDepartingTrains = {};
+
             // Clear the per-WG `status` field (currently only "Secured") so
             // a replay doesn't carry secured-state across runs.
             for (const tId in trains) {
@@ -2118,6 +2403,10 @@
             // Restore the passage track to "available" / green.
             passageState = { available: true, usedByTrainId: null };
             updatePassageUI();
+
+            // Restore the exit gate to "available" / green.
+            exitGateState = { available: true, usedByOutboundTrainId: null };
+            updateExitGateUI();
 
             // Clear per-train replay state so a fresh run starts from scratch.
             for (const tId in trains) {

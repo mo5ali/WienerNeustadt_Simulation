@@ -42,6 +42,15 @@ namespace WienerNeustadtSimulation.Control
         // when the early signal already fired.
         private readonly HashSet<string> _committedTracks = new();
 
+        // Number of SEC/COP activities still pending or running per track —
+        // i.e. WGs that have arrived but not yet finished their per-WG prep.
+        // Incremented in HandleWagonGroupArrival, decremented in
+        // CompleteActivity. HandleCompletionCheck only allows OBT creation
+        // when this count hits zero so an OBT can never include a WG whose
+        // SEC/COP is still in flight (the bug that caused 1100402's badge
+        // to flip from "Coupling" back to "Waiting" mid-OBTP).
+        private readonly Dictionary<string, int> _pendingSecCopCountByTrack = new();
+
         // Fired the moment an OutboundTrain is created on a classification track —
         // i.e. the destination's WGs have reached the threshold and OBTP is about
         // to be requested. ArrivalCU listens to this so it can release its
@@ -115,6 +124,13 @@ namespace WienerNeustadtSimulation.Control
 
             _wagonGroupsByTrack[trackId].Add(wagonGroup);
             _wagonGroupTracks[wagonGroup.Id] = classificationTrack;  // Track the wagon group's track
+
+            // Every arrival schedules a SEC or COP (immediately or via the
+            // deferred queue). Bump the per-track pending counter so the
+            // completion check can refuse to mint an OBT until every WG on
+            // the track has finished its prep.
+            _pendingSecCopCountByTrack[trackId] =
+                (_pendingSecCopCountByTrack.TryGetValue(trackId, out var c) ? c : 0) + 1;
 
             // ONLY show the newly arrived WG, not all WGs on the track
             Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: WG {wagonGroup.Id} arrived at track {trackId}");
@@ -286,6 +302,13 @@ namespace WienerNeustadtSimulation.Control
                 Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: DONE '{activity.ActivityId}' - {wagonGroup.Id} is COUPLED");
             }
 
+            // Pair with the increment in HandleWagonGroupArrival: this WG's
+            // prep is done, so the per-track pending count drops by one.
+            // Once it hits zero AND the threshold is met, HandleCompletionCheck
+            // can mint the OBT.
+            if (_pendingSecCopCountByTrack.TryGetValue(trackId, out var pending) && pending > 0)
+                _pendingSecCopCountByTrack[trackId] = pending - 1;
+
             _resourceControl.Release(activity);
 
             _completionCheckRequests.Enqueue(new CompletionCheckRequest(trackId, _engine.Now));
@@ -306,6 +329,20 @@ namespace WienerNeustadtSimulation.Control
 
             if (string.IsNullOrEmpty(destination))
                 return;
+
+            // Don't create an OBT while any WG on this track still has a
+            // SEC/COP pending or running. Otherwise the OBT would include
+            // a not-yet-prepped WG and that WG's later SEC/COP completion
+            // would clobber its OBTP status badge in the visualizer (and,
+            // logically, an OBT shouldn't be considered "in formation"
+            // until every WG on the track is actually ready to leave).
+            // The next SEC/COP completion will re-enqueue another check.
+            var pending = _pendingSecCopCountByTrack.TryGetValue(trackId, out var p) ? p : 0;
+            if (pending > 0)
+            {
+                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: completion check for track {trackId} deferred — {pending} SEC/COP still in flight");
+                return;
+            }
 
             double totalLength = wagonGroups.Sum(wg => wg.Length);
 
@@ -475,6 +512,10 @@ namespace WienerNeustadtSimulation.Control
             // Track is free again; clear the early-commit marker so a future
             // cycle on this same physical track can re-fire DestinationCommittedToOutbound.
             _committedTracks.Remove(train.CurrentTrackId);
+
+            // Also clear the per-track pending-SEC/COP counter so the next
+            // cycle on this physical track starts from a clean slate.
+            _pendingSecCopCountByTrack.Remove(train.CurrentTrackId);
 
             var track = _classificationTracks.FirstOrDefault(t => t.RealLifeID == train.CurrentTrackId);
             if (track != null)

@@ -787,6 +787,101 @@ This is the running narrative; new entries are appended as work continues.
     re-applied by drawWagonGroupOnClassificationTrack on replay if
     meta.status === 'Secured'. reset() clears wg.status across all WGs.
 
+[15] Visualizer: departure-area rendering for trains in DEPD
+  Mirrors the entry-queue pattern (drawTrainInQueue + relayoutQueue) on
+  the outbound side. When DepartureDrive starts for an OBT we tear down
+  its on-track view (.wg-standalone WG rectangles, the outbound frame +
+  L box) and pop a smaller, greyed copy of the train into a vertical
+  stack at the bottom-left of the screen. Removed when DEPD completes.
+  * New CSS class .train.departing — same layout family as .train.queue
+    but with transform: scale(0.65) (transform-origin top left so the
+    positioning math stays in untransformed pixels).
+  * New state placedDepartingTrains: outboundTrainId → DOM element.
+  * New constants for the departure stack:
+      DEPARTURE_AREA_X = 25
+      DEPARTURE_AREA_Y_TOP = 875
+      DEPARTURE_AREA_Y_STEP = 25
+    First train sits at (25, 875); each subsequent train is 25 px lower.
+    These are IMAGE-SPACE coordinates (1920×1080, bottom-anchored to
+    #main-content), like every other on-canvas position in the file.
+    drawTrainInDepartureArea and relayoutDepartureArea pass them through
+    applyImageYOffset to convert to container-space pixels — without
+    that, the raw y=875 lands at the bottom edge of the viewport.
+  * New helpers:
+      - getDepartureIndex(trainId): stable index by existing DOM order.
+      - relayoutDepartureArea(): re-stacks remaining trains after a
+        departure-area removal so the gap closes.
+      - removeOutboundWGsFromTrack(outboundTrainId): removes all WGs of
+        the OBT from the classification track DOM, drops them from
+        placedWagonGroups, zeroes classificationTrackFill[trackId].
+      - drawTrainInDepartureArea(outboundTrainId): builds the smaller
+        greyed train block (wagons grey-a/grey-b alternating, L box,
+        "Driving to <destination>" badge).
+      - removeTrainFromDepartureArea(outboundTrainId): tears down the
+        block and re-stacks.
+  * Hooks in the activity-event handler:
+      - DepartureDrive Started → drawTrainInDepartureArea +
+        removeOutboundWGsFromTrack + removeOutboundTrainFrame.
+      - DepartureDrive Completed → removeTrainFromDepartureArea + delete
+        placedOutboundTrains[outboundTrainId].
+  * reset() clears .train.departing DOM nodes and placedDepartingTrains.
+
+[16] Exit-gate resource indicator (visualizer + new log events)
+  Mirrors the passage-track indicator for the single exit-gate resource.
+  Every DepartureDriveActivity acquires the gate before starting and
+  releases it on completion, so DEPDs are serialized through it (this is
+  why departing trains never overlap with the default exitGateCount=1).
+  * ResourceControlUnit emits two new ActivityEvent log statuses:
+      - ExitGateClaimed   (when DEPD allocation succeeds)
+      - ExitGateReleased  (when DEPD's Release path runs)
+    Both rows carry the DEPD activityId so the visualizer can recover
+    the owning OBT id (parts[2]).
+  * New DOM elements in the visualizer: #exit-gate-strip and
+    #exit-gate-pill, styled as a small horizontal strip + label pill
+    (green/"Exit Gate: Available" by default, red/"Exit Gate: Used by
+    <obtId>" while held). Positioned at top: 95% / left: 13% so the
+    indicator sits near the bottom-left departure stack.
+  * New JS state: exitGateState = { available, usedByOutboundTrainId }.
+  * New helper updateExitGateUI() pushes state into the DOM (same
+    bail-out-if-not-rendered behaviour as updatePassageUI).
+  * Event handler reacts to ActivityEvent rows with status
+    ExitGateClaimed / ExitGateReleased, parses the OBT id from the
+    activityId, updates state, and calls updateExitGateUI.
+  * reset() restores exitGateState to available + green.
+  * To see DEPDs overlap (and the indicator stay red across two
+    consecutive holds), bump exitGateCount in Program.cs from 1 to 2+.
+
+[17] Defer OBT creation until all SEC/COP on the track are done
+  Bug seen in a real run on track 625 (Ljubljana): when 1100502's COP
+  completed at 10:36:35 the completion check ran and minted the OBT
+  with all three WGs (1100202, 1100502, 1100402) — but 1100402's COP
+  hadn't even started yet (W006 was still busy returning from 1100502).
+  1100402's COP then ran from 10:38:51 to 10:51:39 IN PARALLEL with
+  the OBTP that the OBT had requested. When 1100402's COP completed
+  the visualizer's existing handler (Completed branch flips the WG
+  badge back to Waiting) clobbered its OBTP badge. Logically an OBT
+  can't be "in formation" until every WG on its track is actually
+  ready to leave.
+  Fix in ClassificationControlUnit:
+  * New private field
+      Dictionary<string,int> _pendingSecCopCountByTrack
+    counts SEC/COP that are pending or running per track.
+  * HandleWagonGroupArrival increments the count for the track
+    (every arrival eventually schedules a SEC or COP).
+  * CompleteActivity decrements after Securing/Coupling completes.
+  * HandleCompletionCheck refuses to create the OBT while the count
+    is greater than zero — it logs "completion check for track <id>
+    deferred — N SEC/COP still in flight" and returns. The next
+    SEC/COP completion will re-enqueue another check, which will pass
+    once the count hits zero.
+  * CompleteDepartureDrive removes the track's entry from the dict
+    so the next cycle on the same physical track starts fresh.
+  Note: the early DestinationCommittedToOutbound emit in [13]'s
+  follow-up is unchanged — it's still based purely on length, so the
+  destination map is released as soon as the threshold is crossed
+  (subsequent WGs of that destination still go to a fresh track).
+  Only the actual OBT mint is gated on the SEC/COP-pending count.
+
 ================================================================================
 14. FILE / MODULE INDEX
 ================================================================================
