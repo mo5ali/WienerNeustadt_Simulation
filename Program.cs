@@ -35,7 +35,7 @@ namespace WienerNeustadtSimulation
                 Console.WriteLine($"📝 Logging to: {logPath}\n");
 
                 // Load input data
-                var inboundPath = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "InputFiles", "InboundTrains_test1.json");
+                var inboundPath = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "InputFiles", "InboundTrains_test2.json");
                 if (!File.Exists(inboundPath))
                 {
                     Console.Error.WriteLine($"   Inbound file not found: {inboundPath}");
@@ -231,6 +231,12 @@ namespace WienerNeustadtSimulation
                 var excelPath = Path.Combine(outputFolder, "TrainTimeline.xlsx");
                 excelDashboard.GenerateFromLog(logPath, excelPath);
 
+                // Run the Python analytics script (Step 1 — process durations).
+                // Wrapped in try/catch so a missing Python interpreter or a
+                // missing openpyxl install just prints a warning instead of
+                // failing the whole simulation.
+                RunPythonAnalytics();
+
                 Console.WriteLine("\n═══════════════════════════════════════════════════════════");
                 Console.WriteLine("                   SIMULATION COMPLETE                     ");
                 Console.WriteLine("════════════════════════════════════════════════════════════\n");
@@ -243,6 +249,71 @@ namespace WienerNeustadtSimulation
                 Console.Error.WriteLine($"\n Fatal Error: {ex.Message}");
                 Console.Error.WriteLine(ex.StackTrace);
                 return 99;
+            }
+        }
+
+        // Spawns Output/analytics.py to refresh SimulationAnalytics.xlsx.
+        // analytics.py resolves its own input/output paths off __file__, so we
+        // just locate the script and invoke it. We try `python` first then
+        // `python3` (Linux/macOS default name) so this works on both platforms
+        // without configuration. Errors are printed but do not fail the run —
+        // the C# sim itself has already produced SimulationLog.csv at this
+        // point, so the user can always re-run analytics manually.
+        static void RunPythonAnalytics()
+        {
+            try
+            {
+                // bin/Debug/net8.0/  →  ../../../Output/analytics.py
+                var scriptPath = Path.GetFullPath(
+                    Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Output", "analytics.py"));
+
+                if (!File.Exists(scriptPath))
+                {
+                    Console.WriteLine($"⚠ analytics.py not found at {scriptPath} — skipping.");
+                    return;
+                }
+
+                Console.WriteLine($"\n📊 Running analytics: {scriptPath}");
+
+                foreach (var interpreter in new[] { "python", "python3", "py" })
+                {
+                    try
+                    {
+                        var psi = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = interpreter,
+                            Arguments = $"\"{scriptPath}\"",
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                        };
+                        using var proc = System.Diagnostics.Process.Start(psi);
+                        if (proc == null) continue;
+
+                        proc.WaitForExit(60_000);
+                        var stdout = proc.StandardOutput.ReadToEnd();
+                        var stderr = proc.StandardError.ReadToEnd();
+                        if (!string.IsNullOrWhiteSpace(stdout)) Console.Write(stdout);
+                        if (!string.IsNullOrWhiteSpace(stderr)) Console.Error.Write(stderr);
+
+                        if (proc.ExitCode != 0)
+                            Console.Error.WriteLine($"⚠ analytics.py exited with code {proc.ExitCode} (interpreter '{interpreter}')");
+                        return;  // success or non-zero exit; either way, don't try the next interpreter
+                    }
+                    catch (System.ComponentModel.Win32Exception)
+                    {
+                        // Interpreter not found on PATH; try the next one.
+                        continue;
+                    }
+                }
+
+                Console.Error.WriteLine("⚠ Could not find a Python interpreter on PATH (tried: python, python3, py).");
+                Console.Error.WriteLine("   Install Python 3 and `pip install openpyxl`, then re-run, or invoke analytics.py manually.");
+            }
+            catch (Exception aex)
+            {
+                Console.Error.WriteLine($"⚠ Could not run analytics.py: {aex.Message}");
             }
         }
 
