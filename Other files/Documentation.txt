@@ -882,6 +882,52 @@ This is the running narrative; new entries are appended as work continues.
   (subsequent WGs of that destination still go to a fresh track).
   Only the actual OBT mint is gated on the SEC/COP-pending count.
 
+[18] Variable ArrivalDrive duration (per-track distance + train length)
+  Problem (see screenshot
+  Other files/screenshots/arrival_drive_flat_durations.png):
+  Pre-fix the analytics "Activities (raw)" sheet showed every single
+  ArrivalDrive instance with a flat 240s / 4.00 min duration regardless
+  of which arrival track the train went to or how long the train was.
+  The screenshot shows a column of identical 240.00 / 4.00 values down
+  every row — clearly unrealistic.
+  Cause: ArrivalDriveActivity.CalculateFixedDuration was hard-coded to
+  400 m / 100 m·min⁻¹ → exactly 4 minutes. The TODO comment beside it
+  ("parameterize by track in future") had been there since the activity
+  was first written.
+
+  Fix in Models/ArrivalDriveActivity.cs:
+  * Added a static Dictionary<string,double> TrackDistanceMeters mapping
+    each known arrival track id (731 down to 703) to its distance in
+    metres from the entry gate. Tracks closer to the entry queue get
+    shorter distances. Unknown tracks fall back to FALLBACK_DISTANCE_M
+    (500m) so a typo never crashes the sim.
+        731:250  729:290  727:330  725:380  723:430
+        721:480  719:530  717:580  715:630  713:680
+        711:720  709:770  707:820  705:870  703:920
+  * Added a small length-penalty term: each metre of train length adds
+    LENGTH_PENALTY_S_PER_M (0.2) seconds. Kept small on purpose — for
+    a 200m train it adds only ~40s, while track distance contributes
+    150-552s across the yard. So distance is the BIG weight, length
+    is a SMALLER weight, matching the user's spec.
+  * Constructor now takes an optional `trainLength` parameter
+    (defaults to 0 for back-compat).
+  * Final formula:
+        duration_s = (track_distance_m / TRAIN_SPEED_M_PER_MIN) * 60
+                   + train_length_m * LENGTH_PENALTY_S_PER_M
+    where TRAIN_SPEED_M_PER_MIN = 100 (unchanged from before).
+
+  Fix in Control/ArrivalControlUnit.cs:
+  * The single call site of `new ArrivalDriveActivity(...)` now passes
+    `trainLength: train.Length`.
+
+  Verifying: re-run the simulation, then `python Output/analytics.py`.
+  The "Process Durations" sheet's ArrivalDrive row should now show a
+  real range for Mean / Min / Max instead of flat 240s, and the
+  "Activities (raw)" sheet's ArrivalDrive column will show variation
+  per train. To see per-track variation specifically, sort the raw
+  sheet by ActivityId (which embeds the track id as the last
+  underscore-separated token, e.g. Act_ARRD_12001_050000_703).
+
 ================================================================================
 14. FILE / MODULE INDEX
 ================================================================================

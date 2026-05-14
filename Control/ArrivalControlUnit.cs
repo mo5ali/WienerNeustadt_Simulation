@@ -109,7 +109,10 @@ namespace WienerNeustadtSimulation.Control
                 arrivalTrackId: assignedTrack.RealLifeID,
                 area: assignedTrack.Area,
                 controlUnit: "ArrivalCU",
-                requestedAt: _engine.Now
+                requestedAt: _engine.Now,
+                // Train length feeds the small length-penalty term in
+                // CalculateFixedDuration; per-track distance is the big weight.
+                trainLength: train.Length
             );
 
             var driveTime = driveActivity.CalculateFixedDuration();
