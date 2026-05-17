@@ -897,13 +897,19 @@ This is the running narrative; new entries are appended as work continues.
 
   Fix in Models/ArrivalDriveActivity.cs:
   * Added a static Dictionary<string,double> TrackDistanceMeters mapping
-    each known arrival track id (731 down to 703) to its distance in
-    metres from the entry gate. Tracks closer to the entry queue get
-    shorter distances. Unknown tracks fall back to FALLBACK_DISTANCE_M
-    (500m) so a typo never crashes the sim.
-        731:250  729:290  727:330  725:380  723:430
-        721:480  719:530  717:580  715:630  713:680
-        711:720  709:770  707:820  705:870  703:920
+    each known arrival track id to its distance in metres from the
+    entry gate. SOURCE: real-world Mercator-projection measurements
+    computed off the station data (user-supplied). The values are NOT
+    a clean monotonic ladder — 721 is the shortest at 395.90m even
+    though it sits in the middle of the numbering, and 729 / 731 are
+    identical at 587.14m. This non-monotonicity reflects the actual
+    yard geometry (switches and crossovers, not parallel ladders).
+    Unknown tracks fall back to
+    FALLBACK_DISTANCE_M (550m, roughly the median) so a typo'd track
+    id never crashes the sim.
+        703:766.25  705:765.77  707:670.93  709:629.33  711:587.72
+        713:548.41  715:521.53  717:471.68  719:505.47  721:395.90
+        723:435.33  725:476.05  727:556.20  729:587.14  731:587.14
   * Added a small length-penalty term: each metre of train length adds
     LENGTH_PENALTY_S_PER_M (0.2) seconds. Kept small on purpose — for
     a 200m train it adds only ~40s, while track distance contributes
@@ -927,6 +933,47 @@ This is the running narrative; new entries are appended as work continues.
   per train. To see per-track variation specifically, sort the raw
   sheet by ActivityId (which embeds the track id as the last
   underscore-separated token, e.g. Act_ARRD_12001_050000_703).
+
+[19] Analytics .xlsx → .xlsm post-processor (Windows)
+  openpyxl can't author a valid macro-enabled .xlsm from scratch (no
+  way to set the macroEnabled content-type without a pre-existing
+  vbaProject.bin from a template). Tested: just changing the extension
+  produces a file Excel refuses to open as a macro workbook.
+
+  Workflow chosen:
+  * analytics.py writes SimulationAnalytics.xlsx (plain) as before.
+  * On Windows it then invokes Output/run_analytics_post.vbs via cscript.
+  * The .vbs drives a hidden Excel COM instance to:
+      - Open the .xlsx
+      - SaveAs SimulationAnalytics.xlsm (xlOpenXMLWorkbookMacroEnabled,
+        FileFormat = 52)
+      - Import every Module_*.bas from Output/vba_modules/ into the
+        workbook's VBA project (removing any same-named module first
+        so re-runs don't accumulate duplicates)
+      - Save and close
+      - Delete the intermediate .xlsx
+  * Net result on Windows: only SimulationAnalytics.xlsm exists, with
+    macros pre-imported and ready to run via Alt+F8.
+  * On non-Windows, the post-processor is silently skipped — you keep
+    the .xlsx, just without the macros.
+
+  One-time Excel setting required for the .bas import to work:
+    File → Options → Trust Center → Trust Center Settings → Macro
+    Settings → check "Trust access to the VBA project object model"
+  Without it, Excel blocks programmatic VBA project access and the
+  .vbs prints the exact fix to the console before exiting with code 2.
+
+  Source-of-truth advantage: the macros live in .bas text files in
+  version control. Edit a .bas, re-run the sim, the new macro is
+  re-imported automatically. No binary template to keep in sync.
+
+  Files involved:
+    Output/analytics.py                  — invokes the post-processor
+                                            from _maybe_run_xlsm_postprocessor
+                                            after wb.save() on Windows.
+    Output/run_analytics_post.vbs        — the COM driver script.
+    Output/vba_modules/Module_*.bas      — macro source files.
+    Output/vba_modules/README.md         — user-facing workflow doc.
 
 ================================================================================
 14. FILE / MODULE INDEX
@@ -954,11 +1001,29 @@ Control units
 Output
   Output/SimulationLogger.cs           - CSV writer
   Output/SimulationVisualizer.html     - replay UI
+  Output/analytics.py                  - post-run metrics generator;
+                                         reads SimulationLog.csv and writes
+                                         SimulationAnalytics.xlsx with
+                                         definitions, throughput, process
+                                         durations, train timeline, OBT
+                                         formation, raw sheets + 3 native
+                                         charts. Auto-invoked by Program.cs
+                                         after engine.Run().
+  Output/vba_modules/                  - .bas files importable into Excel
+                                         after Save-As-xlsm. README inside.
+                                         (openpyxl can't author a valid
+                                         .xlsm from scratch.)
   Output/worker_icon.png               - generic worker (fallback)
   Output/worker_icon_arrival_green.png - Arrival-area worker icon
   Output/worker_icon_classification_orange.png - Classification-area worker icon
   Output/shunting_loco.png             - shunt loco icon
   Output/vis_background_v3.png         - 1920x1080 yard background
+
+Other files
+  Other files/Documentation.txt        - this file
+  Other files/screenshots/             - referenced from numbered entries
+                                         above; see screenshots/README.md
+                                         for expected filenames
 
 Input
   InputFiles/Infrastructure_*.json     - track segments, switches, areas

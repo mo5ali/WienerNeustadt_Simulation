@@ -322,16 +322,16 @@ def build_definitions_sheet(wb):
          "(max_event_time - min_event_time) / 3600"),
         ("Trains per hour entered",
          "Average rate of inbound trains entering.",
-         "= total_entries / sim_duration_hours"),
+         "total_entries / sim_duration_hours"),
         ("Trains per hour exited",
          "Average rate of inbound trains finishing PushOff.",
-         "= total_pushoff_completions / sim_duration_hours"),
+         "total_pushoff_completions / sim_duration_hours"),
         ("OBTs per hour created",
          "Average rate of outbound trains being formed.",
-         "= total_obts_created / sim_duration_hours"),
+         "total_obts_created / sim_duration_hours"),
         ("OBTs per hour departed",
          "Average rate of outbound trains physically exiting.",
-         "= total_depd_completed / sim_duration_hours"),
+         "total_depd_completed / sim_duration_hours"),
 
         ("— Reference —", "", ""),
         ("Activity type glossary",
@@ -370,18 +370,29 @@ def build_definitions_sheet(wb):
 def build_activities_raw_sheet(wb, activities):
     ws = wb.create_sheet("Activities (raw)")
     ws.append(["ActivityType", "ActivityId", "StartedAt", "CompletedAt",
-               "Duration (s)", "Duration (min)"])
+               "Duration (s)", "Duration (min)", "Duration (hh:mm:ss)"])
     for a in sorted(activities, key=lambda x: (x["activityType"], x["startedAt"])):
         ws.append([
             a["activityType"], a["activityId"],
-            a["startedAt"].strftime("%Y-%m-%d %H:%M:%S"),
-            a["completedAt"].strftime("%Y-%m-%d %H:%M:%S"),
-            a["durationSec"], None,
+            # IMPORTANT: pass the datetime objects directly (not strftime
+            # strings) so Excel stores them as numeric date serials. That
+            # lets you scatter-plot with StartedAt on the X axis — text
+            # cells fail silently and produce a random-looking 1..N axis.
+            a["startedAt"],
+            a["completedAt"],
+            a["durationSec"], None, None,
         ])
     for r in range(2, ws.max_row + 1):
         ws.cell(row=r, column=6, value=f"=E{r}/60")
+        # hh:mm:ss as a fraction of a day; [h] lets it exceed 24h.
+        ws.cell(row=r, column=7, value=f"=E{r}/86400")
+        # StartedAt / CompletedAt formatted as datetime (the cells hold
+        # real Excel date serials thanks to the datetime objects above).
+        ws.cell(row=r, column=3).number_format = "yyyy-mm-dd hh:mm:ss"
+        ws.cell(row=r, column=4).number_format = "yyyy-mm-dd hh:mm:ss"
         ws.cell(row=r, column=5).number_format = "0.00"
         ws.cell(row=r, column=6).number_format = "0.00"
+        ws.cell(row=r, column=7).number_format = "[h]:mm:ss"
     _style_header_row(ws)
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
         for cell in row:
@@ -392,6 +403,7 @@ def build_activities_raw_sheet(wb, activities):
     ws.column_dimensions["D"].width = 22
     ws.column_dimensions["E"].width = 14
     ws.column_dimensions["F"].width = 14
+    ws.column_dimensions["G"].width = 16
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
     return ws
@@ -400,7 +412,7 @@ def build_activities_raw_sheet(wb, activities):
 def build_process_durations_sheet(wb, activities):
     ws = wb.create_sheet("Process Durations")
     ws.append(["ActivityType", "Count", "Mean (s)", "Mean (min)",
-               "Min (s)", "Max (s)", "Std (s)"])
+               "Min (s)", "Max (s)", "Std (s)", "Mean (hh:mm:ss)"])
     by_type = defaultdict(list)
     for a in activities:
         by_type[a["activityType"]].append(a["durationSec"])
@@ -417,18 +429,21 @@ def build_process_durations_sheet(wb, activities):
             f"=IFERROR(MINIFS({raw_dur},{raw_type},$A{i}),0)",
             f"=IFERROR(MAXIFS({raw_dur},{raw_type},$A{i}),0)",
             pstdev(by_type[t]) if len(by_type[t]) >= 2 else 0.0,
+            f"=C{i}/86400",  # Mean as fraction-of-day for hh:mm:ss format
         ])
     _style_header_row(ws)
     for r in range(2, ws.max_row + 1):
         for c in range(1, ws.max_column + 1):
             cell = ws.cell(row=r, column=c)
             cell.font = FONT
-            if c >= 3:
+            if c >= 3 and c <= 7:
                 cell.number_format = "0.00"
         ws.cell(row=r, column=2).number_format = "0"
+        ws.cell(row=r, column=8).number_format = "[h]:mm:ss"
     ws.column_dimensions["A"].width = 30
     for col in "BCDEFG":
         ws.column_dimensions[col].width = 14
+    ws.column_dimensions["H"].width = 16
     ws.freeze_panes = "A2"
     chart = BarChart()
     chart.type = "bar"
@@ -454,7 +469,7 @@ def build_trains_raw_sheet(wb, trains):
                "Queue Wait (s)", "Pre-ITP Wait (s)", "ITP Duration (s)",
                "Pre-PushOff Wait (s)", "PushOff Duration (s)",
                "Total in Arrival Yard (s)", "Total in System (s)",
-               "Total in System (min)"]
+               "Total in System (min)", "Total in System (hh:mm:ss)"]
     ws.append(headers)
     for t in trains:
         ws.append([
@@ -474,8 +489,11 @@ def build_trains_raw_sheet(wb, trains):
         ws[f"O{r}"] = f'=IF(AND(ISNUMBER(E{r}),ISNUMBER(I{r})),(I{r}-E{r})*86400,"")'
         ws[f"P{r}"] = f'=IF(AND(ISNUMBER(D{r}),ISNUMBER(I{r})),(I{r}-D{r})*86400,"")'
         ws[f"Q{r}"] = f'=IF(ISNUMBER(P{r}),P{r}/60,"")'
+        # Total in System rendered as hh:mm:ss (P holds it in seconds).
+        ws[f"R{r}"] = f'=IF(ISNUMBER(P{r}),P{r}/86400,"")'
         for col in "JKLMNOPQ":
             ws[f"{col}{r}"].number_format = "0.00"
+        ws[f"R{r}"].number_format = "[h]:mm:ss"
     _style_header_row(ws)
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
         for cell in row:
@@ -487,6 +505,7 @@ def build_trains_raw_sheet(wb, trains):
         ws.column_dimensions[col].width = 19
     for col in "JKLMNOPQ":
         ws.column_dimensions[col].width = 14
+    ws.column_dimensions["R"].width = 16
     ws.freeze_panes = "B2"
     ws.auto_filter.ref = ws.dimensions
     return ws
@@ -505,7 +524,8 @@ TIMELINE_METRICS = [
 
 def build_train_timeline_sheet(wb, trains):
     ws = wb.create_sheet("Train Timeline")
-    ws.append(["Metric", "Count", "Mean (s)", "Mean (min)", "Min (s)", "Max (s)"])
+    ws.append(["Metric", "Count", "Mean (s)", "Mean (min)", "Min (s)", "Max (s)",
+               "Mean (hh:mm:ss)"])
     raw_last = len(trains) + 1
     for i, (label, col) in enumerate(TIMELINE_METRICS, start=2):
         col_range = f"'Trains (raw)'!${col}$2:${col}${raw_last}"
@@ -516,18 +536,21 @@ def build_train_timeline_sheet(wb, trains):
             f"=C{i}/60",
             f"=IFERROR(MIN({col_range}),0)",
             f"=IFERROR(MAX({col_range}),0)",
+            f"=C{i}/86400",
         ])
     _style_header_row(ws)
     for r in range(2, ws.max_row + 1):
         for c in range(1, ws.max_column + 1):
             cell = ws.cell(row=r, column=c)
             cell.font = FONT
-            if c >= 3:
+            if c >= 3 and c <= 6:
                 cell.number_format = "0.00"
         ws.cell(row=r, column=2).number_format = "0"
+        ws.cell(row=r, column=7).number_format = "[h]:mm:ss"
     ws.column_dimensions["A"].width = 26
     for col in "BCDEF":
         ws.column_dimensions[col].width = 14
+    ws.column_dimensions["G"].width = 16
     ws.freeze_panes = "A2"
     chart = BarChart()
     chart.type = "bar"
@@ -542,7 +565,9 @@ def build_train_timeline_sheet(wb, trains):
     chart.set_categories(cats)
     chart.height = 10
     chart.width = 18
-    ws.add_chart(chart, "H2")
+    # Anchored at I2 (was H2) so the chart doesn't sit on top of the new
+    # Mean (hh:mm:ss) column G.
+    ws.add_chart(chart, "I2")
     return ws
 
 
@@ -553,7 +578,8 @@ def build_obts_raw_sheet(wb, obts):
                "First WG Arrival", "OBT Created",
                "OBTP Start", "OBTP End", "DEPD Start", "DEPD End",
                "Formation Time (s)", "Pre-OBTP Wait (s)",
-               "Gate Wait (s)", "OBT Total on Classif Track (s)"]
+               "Gate Wait (s)", "OBT Total on Classif Track (s)",
+               "OBT Total (hh:mm:ss)"]
     ws.append(headers)
     for o in obts:
         ws.append([
@@ -575,8 +601,11 @@ def build_obts_raw_sheet(wb, obts):
         ws[f"L{r}"] = f'=IF(AND(ISNUMBER(F{r}),ISNUMBER(G{r})),(G{r}-F{r})*86400,"")'
         ws[f"M{r}"] = f'=IF(AND(ISNUMBER(H{r}),ISNUMBER(I{r})),(I{r}-H{r})*86400,"")'
         ws[f"N{r}"] = f'=IF(AND(ISNUMBER(E{r}),ISNUMBER(J{r})),(J{r}-E{r})*86400,"")'
+        # hh:mm:ss view of the OBT-total seconds (column N).
+        ws[f"O{r}"] = f'=IF(ISNUMBER(N{r}),N{r}/86400,"")'
         for col in "KLMN":
             ws[f"{col}{r}"].number_format = "0.00"
+        ws[f"O{r}"].number_format = "[h]:mm:ss"
     _style_header_row(ws)
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
         for cell in row:
@@ -589,6 +618,7 @@ def build_obts_raw_sheet(wb, obts):
         ws.column_dimensions[col].width = 19
     for col in "KLMN":
         ws.column_dimensions[col].width = 14
+    ws.column_dimensions["O"].width = 16
     ws.freeze_panes = "B2"
     ws.auto_filter.ref = ws.dimensions
     return ws
@@ -598,7 +628,8 @@ def build_wgs_raw_sheet(wb, wgs):
     ws = wb.create_sheet("WGs (raw)")
     headers = ["WG Id", "Track", "Arrived At", "OBT Id",
                "OBT Created", "OBT Departed",
-               "Dwell Until OBT Created (s)", "Total in Classification (s)"]
+               "Dwell Until OBT Created (s)", "Total in Classification (s)",
+               "Total in Classification (hh:mm:ss)"]
     ws.append(headers)
     for w in wgs:
         ws.append([
@@ -612,8 +643,11 @@ def build_wgs_raw_sheet(wb, wgs):
         # Total = OBT Departed (F) - Arrived At (C)
         ws[f"G{r}"] = f'=IF(AND(ISNUMBER(C{r}),ISNUMBER(E{r})),(E{r}-C{r})*86400,"")'
         ws[f"H{r}"] = f'=IF(AND(ISNUMBER(C{r}),ISNUMBER(F{r})),(F{r}-C{r})*86400,"")'
+        # hh:mm:ss view of the WG total seconds (column H).
+        ws[f"I{r}"] = f'=IF(ISNUMBER(H{r}),H{r}/86400,"")'
         for col in "GH":
             ws[f"{col}{r}"].number_format = "0.00"
+        ws[f"I{r}"].number_format = "[h]:mm:ss"
     _style_header_row(ws)
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
         for cell in row:
@@ -625,6 +659,7 @@ def build_wgs_raw_sheet(wb, wgs):
     ws.column_dimensions["D"].width = 30
     for col in "GH":
         ws.column_dimensions[col].width = 22
+    ws.column_dimensions["I"].width = 18
     ws.freeze_panes = "B2"
     ws.auto_filter.ref = ws.dimensions
     return ws
@@ -643,7 +678,8 @@ OBT_FORMATION_METRICS = [
 
 def build_obt_formation_sheet(wb, obts, wgs):
     ws = wb.create_sheet("OBT Formation")
-    ws.append(["Metric", "Count", "Mean (s)", "Mean (min)", "Min (s)", "Max (s)"])
+    ws.append(["Metric", "Count", "Mean (s)", "Mean (min)", "Min (s)", "Max (s)",
+               "Mean (hh:mm:ss)"])
     obt_last = len(obts) + 1
     wg_last = len(wgs) + 1
     for i, (label, sheet, col) in enumerate(OBT_FORMATION_METRICS, start=2):
@@ -656,18 +692,21 @@ def build_obt_formation_sheet(wb, obts, wgs):
             f"=C{i}/60",
             f"=IFERROR(MIN({col_range}),0)",
             f"=IFERROR(MAX({col_range}),0)",
+            f"=C{i}/86400",
         ])
     _style_header_row(ws)
     for r in range(2, ws.max_row + 1):
         for c in range(1, ws.max_column + 1):
             cell = ws.cell(row=r, column=c)
             cell.font = FONT
-            if c >= 3:
+            if c >= 3 and c <= 6:
                 cell.number_format = "0.00"
         ws.cell(row=r, column=2).number_format = "0"
+        ws.cell(row=r, column=7).number_format = "[h]:mm:ss"
     ws.column_dimensions["A"].width = 32
     for col in "BCDEF":
         ws.column_dimensions[col].width = 14
+    ws.column_dimensions["G"].width = 16
     ws.freeze_panes = "A2"
     chart = BarChart()
     chart.type = "bar"
@@ -682,7 +721,9 @@ def build_obt_formation_sheet(wb, obts, wgs):
     chart.set_categories(cats)
     chart.height = 10
     chart.width = 18
-    ws.add_chart(chart, "H2")
+    # Chart anchored at I2 (was H2) so it doesn't sit on top of the new
+    # Mean (hh:mm:ss) column G.
+    ws.add_chart(chart, "I2")
     return ws
 
 
@@ -711,12 +752,12 @@ def build_throughput_sheet(wb, trains, obts):
         ("Sim duration (h)", round(sim_hours, 2), "(Sim end - Sim start) / 3600"),
         ("Trains entered (Q2)", len(entries), "Count of TrainEvent;Entry rows."),
         ("Trains exited (Q3)", len(pushoff_ends), "Count of TrainEvent;PushOffComplete rows."),
-        ("Trains/hour entered", round(rate_in, 3), "= Trains entered / Sim duration (h)"),
-        ("Trains/hour exited", round(rate_out, 3), "= Trains exited / Sim duration (h)"),
+        ("Trains/hour entered", round(rate_in, 3), "Trains entered / Sim duration (h)"),
+        ("Trains/hour exited", round(rate_out, 3), "Trains exited / Sim duration (h)"),
         ("OBTs created (Q1 input)", len(obt_created), "Count of OutboundTrainCreated rows."),
         ("OBTs departed (Q1)", len(obt_departed), "Count of TrainEvent;Departed rows."),
-        ("OBTs/hour created", round(rate_obt_in, 3), "= OBTs created / Sim duration (h)"),
-        ("OBTs/hour departed", round(rate_obt_out, 3), "= OBTs departed / Sim duration (h)"),
+        ("OBTs/hour created", round(rate_obt_in, 3), "OBTs created / Sim duration (h)"),
+        ("OBTs/hour departed", round(rate_obt_out, 3), "OBTs departed / Sim duration (h)"),
     ]
     for r in rows:
         ws.append(r)
@@ -730,6 +771,38 @@ def build_throughput_sheet(wb, trains, obts):
     ws.column_dimensions["C"].width = 60
     ws.freeze_panes = "A2"
     return ws
+
+
+# ── Optional Windows post-processor ──────────────────────────────────────────
+def _maybe_run_xlsm_postprocessor():
+    """Invoke Output/run_analytics_post.vbs via cscript to convert the
+    just-written .xlsx into a macro-enabled .xlsm with the .bas modules in
+    Output/vba_modules/ pre-imported. Windows-only — silently no-ops on
+    other platforms. Failures are reported but don't crash analytics: the
+    .xlsx is already a complete deliverable on its own."""
+    import platform
+    import subprocess
+    if platform.system() != "Windows":
+        return
+    vbs = os.path.join(SCRIPT_DIR, "run_analytics_post.vbs")
+    if not os.path.exists(vbs):
+        return
+    print(f"\nWindows detected — running post-processor: {vbs}")
+    try:
+        result = subprocess.run(
+            ["cscript", "//Nologo", vbs],
+            capture_output=True, text=True, timeout=90,
+        )
+        if result.stdout:
+            print(result.stdout.rstrip())
+        if result.stderr:
+            print(result.stderr.rstrip())
+        if result.returncode != 0:
+            print(f"  (post-processor exited {result.returncode}; .xlsx is still good)")
+    except FileNotFoundError:
+        print("  (cscript not found on PATH — skipped; install Windows Script Host)")
+    except subprocess.TimeoutExpired:
+        print("  (post-processor timed out after 90s — skipped)")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -759,6 +832,12 @@ def main():
     os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
     wb.save(OUT_PATH)
     print(f"Wrote:   {OUT_PATH}")
+
+    # Windows-only: convert .xlsx → .xlsm + import .bas modules so the
+    # user gets a macro-enabled file ready to go. Silently skipped on
+    # non-Windows or if Excel/cscript aren't available — the .xlsx alone
+    # is still fully usable, the user just won't have the VBA macros.
+    _maybe_run_xlsm_postprocessor()
 
     # Console previews
     by_type = defaultdict(list)

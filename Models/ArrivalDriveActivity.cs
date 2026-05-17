@@ -25,19 +25,22 @@ namespace WienerNeustadtSimulation.Models
         private readonly double _trainLength;
 
         // Distance from the entry gate to each arrival track, in meters.
-        // Tracks closer to the entry queue get shorter drives; the distances
-        // here are illustrative — adjust to match the actual yard geometry
-        // when better data is available. Unknown tracks fall back to
-        // FALLBACK_DISTANCE_M so a typo'd track id never crashes the sim.
+        // Source: real-world Mercator-projection measurements from the
+        // station data (provided by user, 2025). Note the non-monotonic
+        // pattern (e.g. 717 < 721, 729 == 731) which reflects actual yard
+        // geometry — switches and crossovers don't lay out as a clean
+        // ladder. Unknown tracks fall back to FALLBACK_DISTANCE_M so a
+        // typo'd track id never crashes the sim.
         private static readonly Dictionary<string, double> TrackDistanceMeters =
             new Dictionary<string, double>
             {
-                { "731", 250 }, { "729", 290 }, { "727", 330 }, { "725", 380 },
-                { "723", 430 }, { "721", 480 }, { "719", 530 }, { "717", 580 },
-                { "715", 630 }, { "713", 680 }, { "711", 720 }, { "709", 770 },
-                { "707", 820 }, { "705", 870 }, { "703", 920 },
+                { "703", 766.25 }, { "705", 765.77 }, { "707", 670.93 },
+                { "709", 629.33 }, { "711", 587.72 }, { "713", 548.41 },
+                { "715", 521.53 }, { "717", 471.68 }, { "719", 505.47 },
+                { "721", 395.90 }, { "723", 435.33 }, { "725", 476.05 },
+                { "727", 556.20 }, { "729", 587.14 }, { "731", 587.14 },
             };
-        private const double FALLBACK_DISTANCE_M = 500;
+        private const double FALLBACK_DISTANCE_M = 550;
 
         // Train speed during ArrivalDrive (constant; unchanged from before).
         private const double TRAIN_SPEED_M_PER_MIN = 100;

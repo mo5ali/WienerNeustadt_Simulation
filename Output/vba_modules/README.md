@@ -1,33 +1,71 @@
-# VBA modules for SimulationAnalytics.xlsx
+# VBA modules for SimulationAnalytics
 
-`analytics.py` produces a plain `.xlsx` file (openpyxl can't author a valid
-`.xlsm` from scratch — it'd need a pre-existing template with a vbaProject).
-To use the macros below, do this once after each fresh sim run:
+After every simulation run you should get a `SimulationAnalytics.xlsm` in
+`bin\Debug\net8.0\OutputFiles\` with these macro modules pre-imported and
+ready to use (via **Alt+F8**).
 
-1. Open `SimulationAnalytics.xlsx` in Excel.
-2. **File → Save As → Excel Macro-Enabled Workbook (`.xlsm`)**.
-3. Press **Alt+F11** to open the VBA editor.
-4. **File → Import File…**, then import each `.bas` file in this folder.
-5. Save the `.xlsm`. From now on you can run any macro via **Alt+F8**.
+## Automated workflow (Windows only)
 
-Each module is self-contained — they don't depend on the analytics sheets'
-specific layout, so you can run them on any selection.
+`analytics.py` does the heavy lifting in two steps:
+
+1. **Python phase** — writes `SimulationAnalytics.xlsx` using openpyxl
+   (sheets, formulas, native charts).
+2. **Windows post-processor** — invokes `Output\run_analytics_post.vbs`
+   via cscript, which:
+   - Opens the `.xlsx` in a hidden Excel COM instance.
+   - **Save-As** as `SimulationAnalytics.xlsm` (macro-enabled,
+     `XlFileFormat = 52`).
+   - Imports every `Module_*.bas` from this folder into the workbook's
+     VBA project (replacing same-named modules so re-runs don't pile up
+     duplicates).
+   - Saves and closes Excel.
+   - Deletes the intermediate `.xlsx`.
+
+End state: only `SimulationAnalytics.xlsm` in `OutputFiles`, with macros
+ready.
+
+### One-time setup
+
+Programmatic VBA import requires Excel's Trust Center setting:
+
+> **File → Options → Trust Center → Trust Center Settings → Macro Settings**
+> → check **"Trust access to the VBA project object model"**
+
+Without that, the `.vbs` errors with "Programmatic access to Visual Basic
+Project is not trusted." and exits with code 2. The script prints that
+exact fix to the console when it happens.
+
+On non-Windows machines (or any machine without Excel installed), the
+post-processor is silently skipped and you just get the `.xlsx`. The data
+sheets are the same — you only lose the macros.
+
+### Heads-up
+
+If the `.xlsm` is open in Excel when the next sim run fires, the
+post-processor can't overwrite it and bails with a clear error. Close
+Excel before re-running.
 
 ## Modules
 
-- **`Module_QuickStats.bas`** — Select any range of numeric cells and run
-  `QuickStats`. Shows count, mean, median, min, max, stdev in a popup.
-- **`Module_HighlightOutliers.bas`** — Select one column of numbers and run
-  `HighlightOutliers`. Cells more than 2σ above the mean are filled red,
-  more than 2σ below are filled blue. Quick visual outlier scan.
-- **`Module_Histogram.bas`** — Select one column of numbers and run
-  `Histogram`. Bins the data into 10 equal-width buckets, dumps the table
-  next to your selection, and inserts a column chart of the distribution.
+- **`Module_QuickStats.bas`** — Select any range of numeric cells, run
+  `QuickStats`. Popup shows count, mean, median, min, max, stdev.
+- **`Module_HighlightOutliers.bas`** — Select a column of numbers, run
+  `HighlightOutliers`. Cells > mean+2σ get red fill, < mean−2σ get blue
+  fill, plus a summary popup. Run again after sorting/filtering to refresh.
+- **`Module_Histogram.bas`** — Select a column of numbers, run
+  `Histogram`. Drops a 10-bin frequency table two columns to the right of
+  the selection and inserts a column chart over it.
 
-After the first manual save-as-xlsm + import, future re-runs of `analytics.py`
-will overwrite the data sheets but leave your macros intact ONLY if you
-keep the .xlsm and update the data inside it manually (e.g. paste from the
-freshly-generated .xlsx). For a fully automated path you'd need a template
-.xlsm with macros pre-imported and have analytics.py load+populate it
-(`openpyxl.load_workbook(template_path, keep_vba=True)`). Happy to wire
-that up once you've authored the template once and committed it.
+All three modules are layout-agnostic — they operate on the current
+selection, so they work on any sheet (raw or summary).
+
+## Adding your own macros
+
+Drop a new `Module_*.bas` file in this folder. On the next sim run it
+gets imported automatically. The naming convention is just a convention
+— the post-processor imports every `.bas` regardless of name — but
+`Module_<purpose>.bas` keeps the VBA project tidy in the editor.
+
+The first line of each module should be the `Attribute VB_Name = "..."`
+directive so Excel uses the right module name; the existing
+`Module_*.bas` files here all have it as a template.
