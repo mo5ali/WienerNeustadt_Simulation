@@ -35,7 +35,12 @@ Option Explicit
 ' code.
 ' ---------------------------------------------------------------------------
 
-Public Sub PlotActivitiesByTrack()
+' silent:=True suppresses the final MsgBox and the sheet activation. The
+' post-processor (run_analytics_post.vbs) passes True so the macro can run
+' under COM automation without a modal dialog hanging the hidden Excel
+' instance. Manual runs via Alt+F8 leave it False, so you still get the
+' "Created N charts" confirmation.
+Public Sub PlotActivitiesByTrack(Optional ByVal silent As Boolean = False)
     Dim wsData As Worksheet
     On Error Resume Next
     Set wsData = ThisWorkbook.Worksheets("Activities (raw)")
@@ -118,11 +123,13 @@ Public Sub PlotActivitiesByTrack()
     Next i
 
     Application.ScreenUpdating = True
-    wsOut.Activate
-    wsOut.Cells(1, 1).Select
-    MsgBox "Created " & (UBound(prefixes) + 1) & _
-           " scatter charts on '" & wsOut.Name & "'.", _
-           vbInformation, "PlotActivitiesByTrack"
+    If Not silent Then
+        wsOut.Activate
+        wsOut.Cells(1, 1).Select
+        MsgBox "Created " & (UBound(prefixes) + 1) & _
+               " scatter charts on '" & wsOut.Name & "'.", _
+               vbInformation, "PlotActivitiesByTrack"
+    End If
 End Sub
 
 ' --- internals ------------------------------------------------------------

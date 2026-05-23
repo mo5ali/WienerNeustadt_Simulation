@@ -51,6 +51,11 @@ FONT_HEADER = Font(name="Arial", size=11, bold=True, color="FFFFFF")
 FILL_HEADER = PatternFill("solid", start_color="305496")
 ALIGN_TOP_WRAP = Alignment(vertical="top", wrap_text=True)
 
+# When True, the finished workbook is opened in the OS default app
+# (Excel / LibreOffice / Numbers) at the end of the run. Flip to False to
+# disable the auto-open.
+AUTO_OPEN_RESULT = True
+
 
 # ── CSV parsing ───────────────────────────────────────────────────────────────
 def _iter_rows(csv_path):
@@ -805,6 +810,33 @@ def _maybe_run_xlsm_postprocessor():
         print("  (post-processor timed out after 90s — skipped)")
 
 
+def _open_result_file():
+    """Open the finished analytics workbook in the OS default application
+    (Excel on Windows, LibreOffice/Numbers elsewhere). Prefers the .xlsm
+    produced by the Windows post-processor and falls back to the .xlsx if
+    the .xlsm wasn't created. Best-effort — any failure just prints a note
+    and never crashes the run. Controlled by the AUTO_OPEN_RESULT flag."""
+    if not AUTO_OPEN_RESULT:
+        return
+    import platform
+    import subprocess
+    xlsm = os.path.splitext(OUT_PATH)[0] + ".xlsm"
+    target = xlsm if os.path.exists(xlsm) else OUT_PATH
+    if not os.path.exists(target):
+        return
+    print(f"Opening {target} ...")
+    try:
+        system = platform.system()
+        if system == "Windows":
+            os.startfile(target)  # type: ignore[attr-defined]
+        elif system == "Darwin":
+            subprocess.Popen(["open", target])
+        else:
+            subprocess.Popen(["xdg-open", target])
+    except Exception as e:  # noqa: BLE001 — best-effort launch
+        print(f"  (could not auto-open the file: {e})")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     print(f"Reading: {CSV_PATH}")
@@ -909,6 +941,10 @@ def main():
         if vals:
             print(f"  {label:32s} {len(vals):4d} {sum(vals)/len(vals):10.2f} "
                   f"{min(vals):9.2f} {max(vals):9.2f}")
+
+    # Launch the finished workbook in the OS default app (last step so the
+    # console summary above has already printed).
+    _open_result_file()
 
 
 if __name__ == "__main__":

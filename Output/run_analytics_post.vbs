@@ -116,6 +116,38 @@ For Each file In folder.Files
     End If
 Next
 
+' Save first so the freshly-imported VBA project is committed before we try
+' to run a macro out of it — running straight after Import can occasionally
+' fail to resolve the new procedure.
+wb.Save
+
+' Pre-build the scatter charts so they're baked into the saved .xlsm and
+' the user sees them immediately on open (no Alt+F8 needed). Passing True
+' runs the macro in silent mode -- without it, the macro's end-of-run MsgBox
+' would block this hidden Excel instance forever and hang the sim run.
+'
+' We try the workbook-qualified macro name first ("Book.xlsm!Macro") because
+' a bare name sometimes won't resolve under COM automation, then fall back
+' to the bare name.
+Dim ranPlot
+ranPlot = False
+On Error Resume Next
+xl.Run "'" & wb.Name & "'!PlotActivitiesByTrack", True
+If Err.Number = 0 Then
+    ranPlot = True
+Else
+    WScript.Echo "[vbs] qualified Run failed (" & Err.Description & "); trying bare name"
+    Err.Clear
+    xl.Run "PlotActivitiesByTrack", True
+    If Err.Number = 0 Then
+        ranPlot = True
+    Else
+        WScript.Echo "[vbs] Warning: PlotActivitiesByTrack did not run: " & Err.Description
+        Err.Clear
+    End If
+End If
+On Error GoTo 0
+
 wb.Save
 wb.Close False
 xl.Quit
@@ -127,5 +159,12 @@ On Error Resume Next
 fso.DeleteFile xlsxPath, True
 On Error GoTo 0
 
-WScript.Echo "[vbs] Wrote " & xlsmPath & " with " & importedCount & " macro module(s) imported."
+Dim plotMsg
+If ranPlot Then
+    plotMsg = " Scatter charts pre-built on 'Activity Scatter Charts'."
+Else
+    plotMsg = " (charts not pre-built — run PlotActivitiesByTrack manually via Alt+F8)."
+End If
+WScript.Echo "[vbs] Wrote " & xlsmPath & " with " & importedCount & _
+             " macro module(s) imported." & plotMsg
 WScript.Quit 0
