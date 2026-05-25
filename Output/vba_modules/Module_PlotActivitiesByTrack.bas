@@ -2,63 +2,82 @@ Attribute VB_Name = "Module_PlotActivitiesByTrack"
 Option Explicit
 
 ' ---------------------------------------------------------------------------
-' PlotActivitiesByTrack
+' Activity scatter charts from the "Activities (raw)" sheet.
 '
-' Reads the "Activities (raw)" sheet, groups rows by activity-type prefix,
-' and creates one XY scatter chart per prefix on a fresh "Activity Scatter
-' Charts" sheet.
+' Two entry points (both runnable via Alt+F8):
+'   PlotActivitiesByTrack        - one chart per activity type, points
+'                                  coloured by destination track.
+'   PlotActivitiesByLengthGroup  - one chart per activity type, points
+'                                  coloured by entity-length bucket (5 equal
+'                                  width bins over each chart's own range).
 '
-'   X axis: StartedAt   (real Excel date serial, plots on a time axis)
+' Each chart:
+'   X axis: StartedAt   (real Excel date serial -> time axis)
 '   Y axis: Duration (min)
-'   Series: one per track. The track id is the last underscore-segment of
-'           the ActivityId, e.g.
-'             Act_ARRD_12001_050000_703            -> track "703"
-'             Act_OBTP_OBT010125102335-Graz_..._615 -> track "615"
 '
-' Prefixes covered (in this order, top-left to bottom-right, 2 charts/row):
-'   Act_ARRD_   ArrivalDrive
-'   Act_ITP_    IncomingTrainPreparation
-'   Act_PO_     PushOff (parent)
-'   Act_POD_    PushOffDrive
-'   Act_SEC_    Securing
-'   Act_COP_    Coupling
-'   Act_OBTP_   OutboundTrainPreparation
-'   Act_DEPD_   DepartureDrive
+' Which colouring is meaningful depends on what drives the duration:
+'   - ArrivalDrive duration is driven by per-track distance -> colour by TRACK
+'     makes same-track points cluster at the same Y.
+'   - ITP / Securing / Coupling / OBTP durations are driven by entity LENGTH
+'     -> colour by LENGTH bucket shows the length->duration relationship.
+'   - PushOffDrive / DepartureDrive are fixed -> flat regardless of colour.
 '
-' Note: "Act_PO_" and "Act_POD_" stay distinct because the prefix match
-' includes the trailing underscore -- Left("Act_POD_...", 7) = "Act_POD"
-' which does NOT equal "Act_PO_".
+' Track id = the last underscore-segment of the ActivityId, e.g.
+'   Act_ARRD_12001_050000_703              -> "703"
+'   Act_OBTP_OBT010125102335-Graz_..._615  -> "615"
 '
-' NOTE on encoding: keep this .bas file PURE ASCII. VBA imports .bas as
-' Windows-1252, not UTF-8 -- non-ASCII chars (em-dashes, box-drawing,
-' ellipsis, arrows) get mangled into garbage like "aEUR" in the imported
-' code.
+' NOTE: keep this file PURE ASCII. VBA imports .bas as Windows-1252, so
+' non-ASCII characters get mangled into garbage on import.
 ' ---------------------------------------------------------------------------
 
-' silent:=True suppresses the final MsgBox and the sheet activation. The
-' post-processor (run_analytics_post.vbs) passes True so the macro can run
-' under COM automation without a modal dialog hanging the hidden Excel
-' instance. Manual runs via Alt+F8 leave it False, so you still get the
-' "Created N charts" confirmation.
-Public Sub PlotActivitiesByTrack(Optional ByVal silent As Boolean = False)
+Private Const N_LENGTH_BINS As Long = 5
+
+' IMPORTANT: these public entry points MUST be parameterless. A Sub with any
+' argument -- even an Optional one -- is hidden from the Alt+F8 "Macros"
+' dialog. Keeping them argument-free is what makes them runnable manually.
+
+Public Sub PlotActivitiesByTrack()
+    PlotActivities "track", False
+End Sub
+
+Public Sub PlotActivitiesByLengthGroup()
+    PlotActivities "length", False
+End Sub
+
+' Silent driver used by run_analytics_post.vbs: builds BOTH chart sheets with
+' no end-of-run MsgBox (a modal dialog would block the hidden Excel COM
+' instance forever and hang the sim run). Also parameterless so the .vbs can
+' invoke it by bare name and so it still shows in Alt+F8 if you want it.
+Public Sub PlotAllSilent()
+    PlotActivities "track", True
+    PlotActivities "length", True
+End Sub
+
+Private Sub PlotActivities(ByVal groupMode As String, ByVal silent As Boolean)
     Dim wsData As Worksheet
     On Error Resume Next
     Set wsData = ThisWorkbook.Worksheets("Activities (raw)")
     On Error GoTo 0
     If wsData Is Nothing Then
-        MsgBox "Sheet 'Activities (raw)' not found.", vbCritical, _
-               "PlotActivitiesByTrack"
+        If Not silent Then MsgBox "Sheet 'Activities (raw)' not found.", vbCritical
         Exit Sub
     End If
 
-    Dim colId As Long, colStart As Long, colDurMin As Long
+    Dim colId As Long, colStart As Long, colDurMin As Long, colLen As Long
     colId     = FindHeaderColumn(wsData, "ActivityId")
     colStart  = FindHeaderColumn(wsData, "StartedAt")
     colDurMin = FindHeaderColumn(wsData, "Duration (min)")
+    colLen    = FindHeaderColumn(wsData, "Length (m)")
     If colId = 0 Or colStart = 0 Or colDurMin = 0 Then
-        MsgBox "One or more required columns are missing on 'Activities (raw)':" _
-            & vbCrLf & "  ActivityId, StartedAt, Duration (min)", _
-            vbCritical, "PlotActivitiesByTrack"
+        If Not silent Then MsgBox _
+            "Missing required column(s): ActivityId, StartedAt, Duration (min).", _
+            vbCritical
+        Exit Sub
+    End If
+    If groupMode = "length" And colLen = 0 Then
+        If Not silent Then MsgBox _
+            "No 'Length (m)' column found - re-run analytics.py to add it.", _
+            vbCritical
         Exit Sub
     End If
 
@@ -66,22 +85,31 @@ Public Sub PlotActivitiesByTrack(Optional ByVal silent As Boolean = False)
     lastRow = wsData.Cells(wsData.Rows.Count, colId).End(xlUp).Row
     If lastRow < 2 Then Exit Sub
 
-    ' Bulk-read the three relevant columns into in-memory arrays. Touching
-    ' Cells(r,c).Value in a row loop on a thousand-row sheet is ~100x slower.
-    Dim ids() As Variant, starts() As Variant, durs() As Variant
+    Dim ids() As Variant, starts() As Variant, durs() As Variant, lens() As Variant
     ids    = wsData.Range(wsData.Cells(2, colId),     wsData.Cells(lastRow, colId)).Value2
     starts = wsData.Range(wsData.Cells(2, colStart),  wsData.Cells(lastRow, colStart)).Value2
     durs   = wsData.Range(wsData.Cells(2, colDurMin), wsData.Cells(lastRow, colDurMin)).Value2
+    If colLen > 0 Then
+        lens = wsData.Range(wsData.Cells(2, colLen), wsData.Cells(lastRow, colLen)).Value2
+    Else
+        lens = durs   ' unused in track mode; keep shapes aligned
+    End If
 
-    ' Recreate the output sheet so re-runs don't pile up old charts.
+    Dim sheetName As String
+    If groupMode = "length" Then
+        sheetName = "Activity Charts (by length)"
+    Else
+        sheetName = "Activity Charts (by track)"
+    End If
+
     Dim wsOut As Worksheet
     Application.DisplayAlerts = False
     On Error Resume Next
-    ThisWorkbook.Worksheets("Activity Scatter Charts").Delete
+    ThisWorkbook.Worksheets(sheetName).Delete
     On Error GoTo 0
     Application.DisplayAlerts = True
     Set wsOut = ThisWorkbook.Worksheets.Add(After:=wsData)
-    wsOut.Name = "Activity Scatter Charts"
+    wsOut.Name = sheetName
 
     Dim prefixes As Variant
     prefixes = Array( _
@@ -96,97 +124,108 @@ Public Sub PlotActivitiesByTrack(Optional ByVal silent As Boolean = False)
     )
 
     Const CHART_W As Long = 600
-    Const CHART_H As Long = 460          ' was 360; taller leaves room for
-                                          ' the vertical date labels.
+    Const CHART_H As Long = 460
     Const CHART_GAP As Long = 20
     Const COLS_PER_ROW As Long = 2
 
     Application.ScreenUpdating = False
-
     Dim i As Long
     For i = 0 To UBound(prefixes)
-        Dim prefix As String, friendly As String
-        prefix = prefixes(i)(0)
-        friendly = prefixes(i)(1)
-
-        Dim rowIdx As Long, colIdx As Long
-        rowIdx = i \ COLS_PER_ROW
-        colIdx = i Mod COLS_PER_ROW
-
-        Dim chartLeft As Single, chartTop As Single
-        chartLeft = 10 + colIdx * (CHART_W + CHART_GAP)
-        chartTop = 10 + rowIdx * (CHART_H + CHART_GAP)
-
-        BuildChartForPrefix wsOut, prefix, friendly, _
-            ids, starts, durs, _
-            chartLeft, chartTop, CHART_W, CHART_H
+        Dim rIdx As Long, cIdx As Long
+        rIdx = i \ COLS_PER_ROW
+        cIdx = i Mod COLS_PER_ROW
+        Dim cLeft As Single, cTop As Single
+        cLeft = 10 + cIdx * (CHART_W + CHART_GAP)
+        cTop = 10 + rIdx * (CHART_H + CHART_GAP)
+        BuildChart wsOut, CStr(prefixes(i)(0)), CStr(prefixes(i)(1)), groupMode, _
+                   ids, starts, durs, lens, cLeft, cTop, CHART_W, CHART_H
     Next i
-
     Application.ScreenUpdating = True
+
     If Not silent Then
         wsOut.Activate
         wsOut.Cells(1, 1).Select
-        MsgBox "Created " & (UBound(prefixes) + 1) & _
-               " scatter charts on '" & wsOut.Name & "'.", _
-               vbInformation, "PlotActivitiesByTrack"
+        MsgBox "Created " & (UBound(prefixes) + 1) & " charts on '" & _
+               sheetName & "'.", vbInformation
     End If
 End Sub
 
-' --- internals ------------------------------------------------------------
+Private Sub BuildChart(wsOut As Worksheet, prefix As String, friendly As String, _
+    groupMode As String, _
+    ids() As Variant, starts() As Variant, durs() As Variant, lens() As Variant, _
+    chartLeft As Single, chartTop As Single, chartW As Long, chartH As Long)
 
-Private Sub BuildChartForPrefix(wsOut As Worksheet, prefix As String, _
-    friendly As String, _
-    ids() As Variant, starts() As Variant, durs() As Variant, _
-    chartLeft As Single, chartTop As Single, _
-    chartW As Long, chartH As Long)
+    Dim n As Long: n = UBound(ids, 1)
 
-    ' Group row indices by track id.
-    Dim tracks As Object
-    Set tracks = CreateObject("Scripting.Dictionary")
-
-    Dim n As Long, r As Long, actId As String, track As String
-    n = UBound(ids, 1)
+    ' Pass 1: collect matching rows; in length mode find min/max length.
+    Dim matched As Collection: Set matched = New Collection
+    Dim minLen As Double, maxLen As Double, haveLen As Boolean
+    minLen = 1E+30: maxLen = -1E+30: haveLen = False
+    Dim r As Long, actId As String
     For r = 1 To n
         actId = CStr(ids(r, 1))
         If Len(actId) >= Len(prefix) Then
             If Left$(actId, Len(prefix)) = prefix Then
-                track = ExtractTrack(actId)
-                If Not tracks.Exists(track) Then
-                    tracks.Add track, New Collection
+                matched.Add r
+                If groupMode = "length" Then
+                    If IsNumeric(lens(r, 1)) Then
+                        Dim lv As Double: lv = CDbl(lens(r, 1))
+                        If lv < minLen Then minLen = lv
+                        If lv > maxLen Then maxLen = lv
+                        haveLen = True
+                    End If
                 End If
-                tracks(track).Add r
             End If
         End If
     Next r
+    If matched.Count = 0 Then Exit Sub
 
-    If tracks.Count = 0 Then Exit Sub
+    ' Group rows into a dict keyed by an ordering index, with a label per key.
+    Dim grpRows As Object: Set grpRows = CreateObject("Scripting.Dictionary")
+    Dim grpLabel As Object: Set grpLabel = CreateObject("Scripting.Dictionary")
+
+    Dim idx As Variant, key As String, lbl As String, ord As Long
+    For Each idx In matched
+        r = CLng(idx)
+        actId = CStr(ids(r, 1))
+        If groupMode = "length" Then
+            ord = LengthBinIndex(lens(r, 1), minLen, maxLen)
+            key = Format(ord, "00")           ' numeric-sortable key
+            lbl = LengthBinLabel(ord, minLen, maxLen)
+        Else
+            key = ExtractTrack(actId)
+            lbl = "Track " & key
+        End If
+        If Not grpRows.Exists(key) Then
+            grpRows.Add key, New Collection
+            grpLabel.Add key, lbl
+        End If
+        grpRows(key).Add r
+    Next idx
 
     Dim cht As ChartObject
     Set cht = wsOut.ChartObjects.Add(Left:=chartLeft, Top:=chartTop, _
                                       Width:=chartW, Height:=chartH)
+    Dim modeLbl As String
+    If groupMode = "length" Then modeLbl = "by length" Else modeLbl = "by track"
     With cht.Chart
         .ChartType = xlXYScatter
         .HasTitle = True
-        .ChartTitle.Text = friendly & " - Duration (min) vs StartedAt, by track"
+        .ChartTitle.Text = friendly & " - Duration (min) vs StartedAt, " & modeLbl
         .HasLegend = True
         .Legend.Position = xlLegendPositionRight
-        ' Strip the default empty series that .Add gives us.
         Do While .SeriesCollection.Count > 0
             .SeriesCollection(1).Delete
         Loop
     End With
 
-    ' Add one series per track. Sort track keys for a sensible legend order.
-    Dim trackKeys As Variant
-    trackKeys = tracks.Keys
-    SortStringArray trackKeys
+    Dim keys As Variant: keys = grpRows.Keys
+    SortStringArray keys
 
-    Dim seriesIdx As Long
-    seriesIdx = 0
+    Dim seriesIdx As Long: seriesIdx = 0
     Dim k As Variant
-    For Each k In trackKeys
-        Dim coll As Collection
-        Set coll = tracks(CStr(k))
+    For Each k In keys
+        Dim coll As Collection: Set coll = grpRows(CStr(k))
         Dim m As Long: m = coll.Count
         Dim xArr() As Variant, yArr() As Variant
         ReDim xArr(1 To m), yArr(1 To m)
@@ -196,43 +235,29 @@ Private Sub BuildChartForPrefix(wsOut As Worksheet, prefix As String, _
             xArr(j) = starts(rr, 1)
             yArr(j) = durs(rr, 1)
         Next j
-        Dim s As Series
-        Set s = cht.Chart.SeriesCollection.NewSeries
+        Dim s As Series: Set s = cht.Chart.SeriesCollection.NewSeries
         s.XValues = xArr
         s.Values = yArr
-        s.Name = "Track " & CStr(k)
+        s.Name = grpLabel(CStr(k))
         s.MarkerStyle = xlMarkerStyleCircle
-        ' Was 6; 25% smaller -> ~4.5, rounded to 5. Adjust if too small.
         s.MarkerSize = 5
-        ' NOTE: do NOT name this `rgb` -- VBA is case-insensitive, so a local
-        ' `rgb` shadows the built-in RGB() function and any later RGB(...)
-        ' call in this Sub becomes "Expected array".
-        Dim clr As Long
-        clr = PaletteColor(seriesIdx)
-        ' Legacy MarkerBackground/Foreground are the reliable cross-version
-        ' way to colour the marker FACE on XY scatter. Format.Fill on Series
-        ' often only reaches the marker BORDER, leaving the inside default-blue.
+        Dim clr As Long: clr = PaletteColor(seriesIdx)
+        ' Legacy MarkerBackground/Foreground reliably colour the marker FACE
+        ' on XY scatter across Excel versions (Format.Fill often only reaches
+        ' the border).
         s.MarkerBackgroundColor = clr
         s.MarkerForegroundColor = clr
-        ' Belt-and-braces: ensure no connecting line ever appears between
-        ' points (xlXYScatter implies markers-only, but explicit is safer).
         s.Format.Line.Visible = msoFalse
         seriesIdx = seriesIdx + 1
     Next k
 
-    ' --- axes ---
-    ' For XY Scatter, xlCategory IS the X axis (a value axis even though the
-    ' constant says category). Set the date format on its tick labels so the
-    ' numeric serials render as dates, rotate them vertical so successive
-    ' timestamps don't overlap, and turn on major gridlines for day boundaries.
     On Error Resume Next
     With cht.Chart.Axes(xlCategory)
         .HasTitle = True
         .AxisTitle.Text = "Start time"
         .TickLabels.NumberFormat = "yyyy-mm-dd hh:mm"
-        .TickLabels.Orientation = 90       ' 90 = vertical (reading bottom-up)
+        .TickLabels.Orientation = 90
         .HasMajorGridlines = True
-        .MajorGridlines.Format.Line.Visible = msoTrue
         .MajorGridlines.Format.Line.ForeColor.RGB = RGB(200, 200, 200)
     End With
     With cht.Chart.Axes(xlValue)
@@ -241,22 +266,44 @@ Private Sub BuildChartForPrefix(wsOut As Worksheet, prefix As String, _
         .HasMajorGridlines = True
         .MajorGridlines.Format.Line.ForeColor.RGB = RGB(220, 220, 220)
     End With
-    On Error GoTo 0
-
-    ' --- shrink plot area so vertical date labels fit ---
-    ' Excel's auto-layout often clips vertical tick labels at the bottom of
-    ' the chart frame. Manually carve out room: pin the plot area top below
-    ' the title and stop its bottom edge well above the chart's bottom edge,
-    ' leaving the lower band of the chart for the rotated labels.
-    On Error Resume Next
     With cht.Chart.PlotArea
         .Top = 30
-        .Height = chartH * 0.62           ' leave ~38% of chart height for
-                                           ' title + rotated x labels + axis
-                                           ' title underneath.
+        .Height = chartH * 0.62
     End With
     On Error GoTo 0
 End Sub
+
+Private Function LengthBinIndex(lenVal As Variant, minLen As Double, maxLen As Double) As Long
+    If Not IsNumeric(lenVal) Then
+        LengthBinIndex = N_LENGTH_BINS    ' "unknown" bucket at the end
+        Exit Function
+    End If
+    If maxLen <= minLen Then
+        LengthBinIndex = 0
+        Exit Function
+    End If
+    Dim w As Double: w = (maxLen - minLen) / N_LENGTH_BINS
+    Dim b As Long: b = Int((CDbl(lenVal) - minLen) / w)
+    If b < 0 Then b = 0
+    If b >= N_LENGTH_BINS Then b = N_LENGTH_BINS - 1
+    LengthBinIndex = b
+End Function
+
+Private Function LengthBinLabel(binIdx As Long, minLen As Double, maxLen As Double) As String
+    If binIdx >= N_LENGTH_BINS Then
+        LengthBinLabel = "(no length)"
+        Exit Function
+    End If
+    If maxLen <= minLen Then
+        LengthBinLabel = Format(minLen, "0") & " m"
+        Exit Function
+    End If
+    Dim w As Double: w = (maxLen - minLen) / N_LENGTH_BINS
+    Dim lo As Double, hi As Double
+    lo = minLen + binIdx * w
+    hi = lo + w
+    LengthBinLabel = Format(lo, "0") & "-" & Format(hi, "0") & " m"
+End Function
 
 Private Function FindHeaderColumn(ws As Worksheet, header As String) As Long
     Dim lastCol As Long
@@ -278,7 +325,6 @@ Private Function ExtractTrack(actId As String) As String
 End Function
 
 Private Function PaletteColor(idx As Long) As Long
-    ' Tableau-10 palette + 6 extras -- distinguishable up to ~16 tracks.
     Dim p As Variant
     p = Array( _
         RGB(31, 119, 180),  RGB(255, 127, 14),  RGB(44, 160, 44), _
@@ -291,7 +337,6 @@ Private Function PaletteColor(idx As Long) As Long
 End Function
 
 Private Sub SortStringArray(arr As Variant)
-    ' In-place insertion sort. ~30 tracks max in practice, so O(n^2) is fine.
     Dim i As Long, j As Long, tmp As Variant
     For i = LBound(arr) + 1 To UBound(arr)
         tmp = arr(i)

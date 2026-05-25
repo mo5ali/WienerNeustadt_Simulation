@@ -90,7 +90,7 @@ def parse_activity_durations(csv_path):
         activity_id = c2
         activity_type = c3
         status = details.split("|", 1)[0]
-        if status not in ("Started", "Completed"):
+        if status not in ("Submitted", "Started", "Completed"):
             continue
         try:
             ts = datetime.fromisoformat(sim_time)
@@ -101,11 +101,23 @@ def parse_activity_durations(csv_path):
             "activityId": activity_id,
             "startedAt": None,
             "completedAt": None,
+            "length": None,
         })
         if status == "Started":
             entry["startedAt"] = ts
-        else:
+        elif status == "Completed":
             entry["completedAt"] = ts
+        elif status == "Submitted":
+            # The Submitted row's detail block carries the entity length, e.g.
+            #   Submitted|entity=12001;length=224.0;location=703;cu=ArrivalCU
+            # Capture it so charts can colour/group by length. (DEPD logs 0.)
+            rest = details.split("|", 1)[1] if "|" in details else ""
+            for part in rest.split(";"):
+                if part.startswith("length="):
+                    try:
+                        entry["length"] = float(part.split("=", 1)[1])
+                    except ValueError:
+                        pass
     out = []
     for e in by_id.values():
         if e["startedAt"] and e["completedAt"]:
@@ -375,7 +387,8 @@ def build_definitions_sheet(wb):
 def build_activities_raw_sheet(wb, activities):
     ws = wb.create_sheet("Activities (raw)")
     ws.append(["ActivityType", "ActivityId", "StartedAt", "CompletedAt",
-               "Duration (s)", "Duration (min)", "Duration (hh:mm:ss)"])
+               "Duration (s)", "Duration (min)", "Duration (hh:mm:ss)",
+               "Length (m)"])
     for a in sorted(activities, key=lambda x: (x["activityType"], x["startedAt"])):
         ws.append([
             a["activityType"], a["activityId"],
@@ -386,6 +399,9 @@ def build_activities_raw_sheet(wb, activities):
             a["startedAt"],
             a["completedAt"],
             a["durationSec"], None, None,
+            # Entity length parsed from the Submitted event; used by the
+            # PlotActivitiesByLengthGroup macro to colour points by length.
+            a.get("length"),
         ])
     for r in range(2, ws.max_row + 1):
         ws.cell(row=r, column=6, value=f"=E{r}/60")
@@ -398,6 +414,7 @@ def build_activities_raw_sheet(wb, activities):
         ws.cell(row=r, column=5).number_format = "0.00"
         ws.cell(row=r, column=6).number_format = "0.00"
         ws.cell(row=r, column=7).number_format = "[h]:mm:ss"
+        ws.cell(row=r, column=8).number_format = "0.0"
     _style_header_row(ws)
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
         for cell in row:
@@ -409,6 +426,7 @@ def build_activities_raw_sheet(wb, activities):
     ws.column_dimensions["E"].width = 14
     ws.column_dimensions["F"].width = 14
     ws.column_dimensions["G"].width = 16
+    ws.column_dimensions["H"].width = 12
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
     return ws
@@ -793,10 +811,14 @@ def _maybe_run_xlsm_postprocessor():
     if not os.path.exists(vbs):
         return
     print(f"\nWindows detected — running post-processor: {vbs}")
+    # Generous timeout: building the scatter chart sheets via Excel COM is
+    # slow (many series x marker styling). If this is killed mid-run, the
+    # hidden Excel is orphaned, keeps the .xlsm locked, and the user gets a
+    # "file in use" dialog + missing charts. 300s gives ample headroom.
     try:
         result = subprocess.run(
             ["cscript", "//Nologo", vbs],
-            capture_output=True, text=True, timeout=90,
+            capture_output=True, text=True, timeout=300,
         )
         if result.stdout:
             print(result.stdout.rstrip())
@@ -807,7 +829,7 @@ def _maybe_run_xlsm_postprocessor():
     except FileNotFoundError:
         print("  (cscript not found on PATH — skipped; install Windows Script Host)")
     except subprocess.TimeoutExpired:
-        print("  (post-processor timed out after 90s — skipped)")
+        print("  (post-processor timed out after 300s — skipped; charts may be incomplete)")
 
 
 def _open_result_file():
@@ -820,10 +842,21 @@ def _open_result_file():
         return
     import platform
     import subprocess
+    import time
     xlsm = os.path.splitext(OUT_PATH)[0] + ".xlsm"
     target = xlsm if os.path.exists(xlsm) else OUT_PATH
     if not os.path.exists(target):
         return
+    # The post-processor's hidden Excel may take a moment to release the file
+    # after it quits. Poll until we can open it read-write (i.e. nobody holds
+    # an exclusive lock) so the user doesn't get a "file in use by me" dialog.
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        try:
+            with open(target, "r+b"):
+                break          # lock released
+        except (PermissionError, OSError):
+            time.sleep(0.5)
     print(f"Opening {target} ...")
     try:
         system = platform.system()
@@ -843,9 +876,10 @@ def main():
     activities = parse_activity_durations(CSV_PATH)
     trains = parse_train_timeline(CSV_PATH)
     obts, wgs = parse_obts_and_wgs(CSV_PATH)
+    wg_yard = parse_wg_yard_times(CSV_PATH, obts)
     print(f"Parsed {len(activities)} activity instances, "
           f"{len(trains)} inbound trains, {len(obts)} OBTs, "
-          f"{len(wgs)} classified WGs.")
+          f"{len(wgs)} classified WGs, {len(wg_yard)} WG yard-time rows.")
     if not activities:
         sys.exit("No activities found — nothing to write.")
 
@@ -856,6 +890,7 @@ def main():
     build_process_durations_sheet(wb, activities)
     build_train_timeline_sheet(wb, trains)
     build_obt_formation_sheet(wb, obts, wgs)
+    build_wg_yard_times_sheet(wb, wg_yard)
     build_activities_raw_sheet(wb, activities)
     build_trains_raw_sheet(wb, trains)
     build_obts_raw_sheet(wb, obts)
@@ -945,6 +980,143 @@ def main():
     # Launch the finished workbook in the OS default app (last step so the
     # console summary above has already printed).
     _open_result_file()
+
+
+# ── WG yard-time sheet (per-WG arrival/classification dwell) ──────────────────
+def parse_wg_yard_times(csv_path, obts):
+    """One record per wagon group with the 10 timestamps/IDs the supervisor's
+    'time in each yard area' metric needs:
+        WG id, parent train id, train spawn, train-arrived-at-arrival-track,
+        WG push-off-drive start, WG arrived-at-classification-track,
+        parent OBT id, OBT formed, OBT leaves classif (DEPD start),
+        train exits station (Departed).
+    OBT-side fields come from the already-matched `obts` list."""
+    trains = {}
+    wg = {}
+    for sim_time, et, c2, c3, details in _iter_rows(csv_path):
+        try:
+            ts = datetime.fromisoformat(sim_time)
+        except ValueError:
+            continue
+        if et == "TrainEvent":
+            ev, tid = c2, c3
+            if tid.startswith("OBT"):
+                continue
+            t = trains.setdefault(tid, {})
+            if ev == "Entry":
+                t["spawn"] = ts
+                for part in details.split("|"):
+                    if part.startswith("wgIds="):
+                        t["wgIds"] = [x for x in part.split("=", 1)[1].split(",") if x]
+            elif ev == "ArrivedArrivalTrack":
+                t["arrivedTrack"] = ts
+        elif et == "WagonGroupEvent":
+            wgid, ev = c2, c3
+            if ev == "PushingToTrack":
+                for one in wgid.split("+"):
+                    w = wg.setdefault(one, {})
+                    if w.get("pushStart") is None or ts < w["pushStart"]:
+                        w["pushStart"] = ts
+            elif ev == "ArrivedClassificationTrack":
+                wg.setdefault(wgid, {})["arrivedClassif"] = ts
+
+    for tid, t in trains.items():
+        for one in t.get("wgIds", []):
+            wg.setdefault(one, {})["parentTrain"] = tid
+
+    obt_by_id = {o["obtId"]: o for o in obts}
+    wg_to_obt = {}
+    for o in obts:
+        for one in o.get("wgIds", []):
+            wg_to_obt[one] = o["obtId"]
+
+    out = []
+    for wgid, w in wg.items():
+        if not w.get("arrivedClassif"):
+            continue
+        parent = w.get("parentTrain")
+        t = trains.get(parent, {})
+        obtId = wg_to_obt.get(wgid)
+        o = obt_by_id.get(obtId, {})
+        out.append({
+            "wgId": wgid, "parentTrain": parent,
+            "spawn": t.get("spawn"), "arrivedTrack": t.get("arrivedTrack"),
+            "pushStart": w.get("pushStart"), "arrivedClassif": w.get("arrivedClassif"),
+            "obtId": obtId, "obtFormed": o.get("createdAt"),
+            "obtLeaves": o.get("depdStart"), "trainExit": o.get("depdEnd"),
+        })
+    out.sort(key=lambda x: (x["arrivedClassif"], x["wgId"]))
+    return out
+
+
+def build_wg_yard_times_sheet(wb, records):
+    ws = wb.create_sheet("WG Yard Times")
+    headers = [
+        "WG Id", "Parent Train", "Train Spawn", "Train Arrived Track",
+        "WG PushOff Drive Start", "WG Arrived Classif",
+        "Parent OBT", "OBT Formed", "OBT Leaves Classif (DEPD start)",
+        "Train Exits Station",
+        "Arrival Yard Time (s)", "Classif Yard Time (s)",
+        "Arrival Yard (hh:mm:ss)", "Classif Yard (hh:mm:ss)",
+    ]
+    ws.append(headers)
+    for rec in records:
+        ws.append([
+            rec["wgId"], rec.get("parentTrain"),
+            rec.get("spawn"), rec.get("arrivedTrack"),
+            rec.get("pushStart"), rec.get("arrivedClassif"),
+            rec.get("obtId"), rec.get("obtFormed"),
+            rec.get("obtLeaves"), rec.get("trainExit"),
+        ])
+    for r in range(2, ws.max_row + 1):
+        for col in ("C", "D", "E", "F", "H", "I", "J"):
+            ws[f"{col}{r}"].number_format = "yyyy-mm-dd hh:mm:ss"
+        # Arrival yard = WG PushOff Drive Start (E) - Train Arrived Track (D)
+        ws[f"K{r}"] = f'=IF(AND(ISNUMBER(D{r}),ISNUMBER(E{r})),(E{r}-D{r})*86400,"")'
+        # Classification yard = OBT Leaves Classif (I) - WG Arrived Classif (F)
+        ws[f"L{r}"] = f'=IF(AND(ISNUMBER(F{r}),ISNUMBER(I{r})),(I{r}-F{r})*86400,"")'
+        ws[f"M{r}"] = f'=IF(ISNUMBER(K{r}),K{r}/86400,"")'
+        ws[f"N{r}"] = f'=IF(ISNUMBER(L{r}),L{r}/86400,"")'
+        ws[f"K{r}"].number_format = "0.00"
+        ws[f"L{r}"].number_format = "0.00"
+        ws[f"M{r}"].number_format = "[h]:mm:ss"
+        ws[f"N{r}"].number_format = "[h]:mm:ss"
+
+    _style_header_row(ws)
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
+        for cell in row:
+            cell.font = FONT
+    widths = {"A": 11, "B": 13, "C": 19, "D": 19, "E": 21, "F": 19,
+              "G": 30, "H": 19, "I": 26, "J": 19, "K": 16, "L": 16,
+              "M": 16, "N": 16}
+    for col, w in widths.items():
+        ws.column_dimensions[col].width = w
+    ws.freeze_panes = "B2"
+    ws.auto_filter.ref = ws.dimensions
+
+    last = ws.max_row
+    ws["P1"] = "Summary (s)"
+    ws["P1"].font = FONT_BOLD
+    summ = [
+        ("Arrival yard mean",   f"=IFERROR(AVERAGE(K2:K{last}),0)"),
+        ("Arrival yard median", f"=IFERROR(MEDIAN(K2:K{last}),0)"),
+        ("Arrival yard min",    f"=IFERROR(MIN(K2:K{last}),0)"),
+        ("Arrival yard max",    f"=IFERROR(MAX(K2:K{last}),0)"),
+        ("Classif yard mean",   f"=IFERROR(AVERAGE(L2:L{last}),0)"),
+        ("Classif yard median", f"=IFERROR(MEDIAN(L2:L{last}),0)"),
+        ("Classif yard min",    f"=IFERROR(MIN(L2:L{last}),0)"),
+        ("Classif yard max",    f"=IFERROR(MAX(L2:L{last}),0)"),
+    ]
+    for i, (label, formula) in enumerate(summ, start=2):
+        ws.cell(row=i, column=16, value=label).font = FONT
+        c = ws.cell(row=i, column=17, value=formula); c.font = FONT
+        c.number_format = "0.00"
+        h = ws.cell(row=i, column=18, value=f"=Q{i}/86400"); h.font = FONT
+        h.number_format = "[h]:mm:ss"
+    ws.column_dimensions["P"].width = 20
+    ws.column_dimensions["Q"].width = 12
+    ws.column_dimensions["R"].width = 14
+    return ws
 
 
 if __name__ == "__main__":

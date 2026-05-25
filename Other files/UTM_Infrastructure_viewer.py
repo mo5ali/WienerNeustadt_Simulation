@@ -110,16 +110,19 @@ for track_data in json_data["TrackSegments"]:
 
     if start_node and end_node:
         if not interim_nodes:
+            # No interim points: insert a synthetic midpoint purely so the
+            # segment-building loop below has something to iterate over. Do
+            # NOT append a start->midpoint segment here -- the loop (i==0)
+            # already creates start->midpoint and the final block creates
+            # midpoint->end. Appending it here too double-counted the first
+            # half and made every interim-less track report 1.5x its true
+            # length.
             midpoint_easting = (start_node.easting + end_node.easting) / 2
             midpoint_northing = (start_node.northing + end_node.northing) / 2
             midpoint_node = Node(
                 _type="Midpoint", _ID=-1, point_ID=-1, easting=midpoint_easting, northing=midpoint_northing
             )
             interim_nodes = [midpoint_node]
-            segment_length = calculate_distance(
-                start_node.easting, start_node.northing, midpoint_node.easting, midpoint_node.northing
-            )
-            track.segments.append(Segment(start_node, midpoint_node, segment_length, track))
 
         for i in range(len(interim_nodes)):
             if i == 0:
