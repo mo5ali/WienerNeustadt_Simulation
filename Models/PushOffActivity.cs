@@ -24,6 +24,63 @@ namespace WienerNeustadtSimulation.Models
 
         public List<string> WagonGroupIds { get; set; }
 
+        // ---------------------------------------------------------------------
+        // Push-off drive distance model (see [20] in Other files/Documentation.txt)
+        //
+        // A real push-off drive runs in two legs that meet at the single
+        // decoupling point (infrastructure node 172):
+        //   1. arrival track  -> decoupling point   (depends on where the
+        //      train came from; keyed by this.Location = arrival track id)
+        //   2. decoupling point -> classification track (depends on the
+        //      destination track resolved per sub-drive)
+        // Total push-off drive distance = leg1 + leg2. Both legs are exact
+        // Euclidean polyline lengths summed from the UTM node coordinates in
+        // Infrastructure_WienerNeustadt_V20.json (validated: reconstructing
+        // stored TrackSegment.Length from the same coords matches to < 0.5 m).
+        // ---------------------------------------------------------------------
+
+        // Leg 1: arrival track id -> decoupling point (node 172), meters.
+        private static readonly Dictionary<string, double> ArrivalToDecouplingMeters =
+            new Dictionary<string, double>
+            {
+                { "703", 193.03 }, { "705", 193.03 }, { "707", 165.50 },
+                { "709", 139.11 }, { "711", 111.74 }, { "713", 84.51 },
+                { "715", 57.70 },  { "717", 29.68 },  { "719", 35.20 },
+                { "721", 104.62 }, { "723", 131.97 }, { "725", 158.84 },
+                { "727", 186.20 }, { "729", 277.92 }, { "731", 277.92 },
+            };
+
+        // Leg 2: decoupling point (node 172) -> classification track id, meters.
+        private static readonly Dictionary<string, double> DecouplingToClassMeters =
+            new Dictionary<string, double>
+            {
+                { "605", 212.40 }, { "607", 185.37 }, { "609", 157.84 },
+                { "611", 131.32 }, { "613", 104.40 }, { "615", 76.89 },
+                { "617", 106.08 }, { "619", 266.93 }, { "621", 266.93 },
+                { "623", 219.02 }, { "625", 284.72 }, { "627", 257.39 },
+                { "629", 257.39 },
+            };
+
+        // Fallbacks (~ median of each leg) so an unknown track id never
+        // produces a zero-distance push or crashes the sim.
+        private const double FALLBACK_ARRIVAL_LEG_M = 139.0;
+        private const double FALLBACK_CLASS_LEG_M = 212.0;
+
+        // Shunting locomotive speed while pushing a cut of wagons in a flat
+        // shunting yard. Real flat-yard shunting is controlled to ~10-15 km/h
+        // (dropping to ~5 km/h only for the final coupling approach). We use
+        // 15 km/h = 250 m/min for the push move. Replaces the previous
+        // unrealistic 20 m/min (~1.2 km/h, walking pace).
+        private const double PUSH_SPEED_M_PER_MIN = 250.0; // 15 km/h
+
+        // Length penalty for the push-off drive, kept small so path distance
+        // stays the dominant factor (matches [18]/[20]). IMPORTANT: this is
+        // applied to the length of the WAGON-GROUP CUT being pushed in this
+        // sub-drive (group.TotalLength), NOT the whole inbound train — each
+        // sub-drive only propels the consecutive same-destination group that
+        // is decoupled at the decoupling point.
+        private const double PUSH_LENGTH_PENALTY_S_PER_M = 0.2;
+
         private List<WagonGroupPush> _pushGroups = new List<WagonGroupPush>();
         private int _completedPushes = 0;
         private readonly SimulationEngine _engine;
@@ -111,7 +168,7 @@ namespace WienerNeustadtSimulation.Models
                 area: destinationTrack.Area,
                 controlUnit: "PushOff",
                 requestedAt: _engine.Now,
-                speed: 20
+                speed: PUSH_SPEED_M_PER_MIN
             );
 
             driveActivity.AllocatedLocoIds.AddRange(this.AllocatedLocoIds);
@@ -119,8 +176,21 @@ namespace WienerNeustadtSimulation.Models
             if (driveActivity.AllocatedLocoIds.Count > 0)
                 driveActivity.RecordLocoArrival(driveActivity.AllocatedLocoIds[0], _engine.Now);
 
-            double distanceMeters = 100.0;
-            var pushDuration = driveActivity.CalculateDrivingDuration(distanceMeters);
+            // Distance = arrival-track->decoupling leg + decoupling->dest-track leg.
+            // this.Location is the arrival track id (fromLocation); the dest
+            // classification track is resolved above for this sub-drive.
+            double arrivalLeg = ArrivalToDecouplingMeters.TryGetValue(this.Location, out var aLeg)
+                ? aLeg
+                : FALLBACK_ARRIVAL_LEG_M;
+            double classLeg = DecouplingToClassMeters.TryGetValue(destinationTrack.RealLifeID, out var cLeg)
+                ? cLeg
+                : FALLBACK_CLASS_LEG_M;
+            double distanceMeters = arrivalLeg + classLeg;
+            // Duration = travel time over the two-leg distance, plus a small
+            // length penalty for the cut being pushed (group.TotalLength only,
+            // not the whole train — see PUSH_LENGTH_PENALTY_S_PER_M).
+            var pushDuration = driveActivity.CalculateDrivingDuration(distanceMeters)
+                + TimeSpan.FromSeconds(group.TotalLength * PUSH_LENGTH_PENALTY_S_PER_M);
 
             driveActivity.MarkCommenced(_engine.Now);
             driveActivity.ScheduledCompletionAt = _engine.Now.Add(pushDuration);

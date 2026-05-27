@@ -129,12 +129,15 @@ LocoStaysWithEntity, WorkersReleasedIndividually) are declared on the subclass.
 
 Activity flow per inbound train:
   Entry (queue)
-   -> ArrivalDrive (5 min fixed)
+   -> ArrivalDrive (variable: per-arrival-track distance / 20 km/h + length
+      penalty — see [18] and [20])
    -> IncomingTrainPreparation (workers + shunt loco; loco is kept by activity
       after completion via LocoStaysWithEntity=true so it carries over to PO)
    -> PushOff (workers + carried-over loco + passage track)
         -> n × PushOffDrive sub-activities (one per consecutive same-destination
-           group; 4 min fixed per drive)
+           group; variable: (arrival-track->decoupling + decoupling->class-track)
+           distance / 15 km/h + cut-length penalty (group, not whole train)
+           — see [20])
    -> Train graphic dismantled; each WG now standalone on classification track
 
 Activity flow per WagonGroup on classification track:
@@ -143,7 +146,8 @@ Activity flow per WagonGroup on classification track:
    -> Completion check (length threshold)
    -> If threshold met: become part of a new OutboundTrain entity
    -> OutboundTrainPreparation (2 workers + train locomotive)
-   -> DepartureDrive (exit gate; 20 min fixed)
+   -> DepartureDrive (exit gate; variable: per-class-track distance to exit
+      gate / 20 km/h + length penalty — see [20])
    -> Departed; track unreserved
 
 Worker time multiplier:
@@ -974,6 +978,107 @@ This is the running narrative; new entries are appended as work continues.
     Output/run_analytics_post.vbs        — the COM driver script.
     Output/vba_modules/Module_*.bas      — macro source files.
     Output/vba_modules/README.md         — user-facing workflow doc.
+
+[20] Variable PushOff-drive and DepartureDrive durations (path-distance +
+     realistic yard speeds); ArrivalDrive speed corrected
+  Extends the entry-[18] philosophy (distance is the BIG weight) to the two
+  remaining flat-duration drives — PushOffDrive and DepartureDrive — and
+  corrects the unrealistically slow ArrivalDrive speed. All distances are
+  exact Euclidean polyline lengths summed from the UTM node coordinates
+  (Easting/Northing, metres) in Infrastructure_WienerNeustadt_V20.json.
+
+  Method validation: reconstructing each stored TrackSegment.Length from the
+  same node coordinates (ConnectionPoint1 -> InterimPoints -> ConnectionPoint2)
+  reproduces the stored value to < 0.5 m on every segment tested (12/12 within
+  2 m), confirming the coordinate system is metric and the summation is sound.
+  The supplied node paths are sparse waypoints, so the polyline slightly cuts
+  corners on curved track, but curvature contributes < 0.5 m even on 300 m
+  segments — negligible.
+
+  20.1 PushOff drive — two-leg distance model
+    A real push-off drive runs in two legs meeting at the single decoupling
+    point (node 172): (1) arrival track -> decoupling point, depending on
+    where the train came from; (2) decoupling point -> destination
+    classification track, depending on the resolved target. Total push
+    distance = leg1 + leg2. Modeled in PushOffActivity.cs as two static
+    dictionaries:
+      ArrivalToDecouplingMeters  (arrival track id -> metres, 703..731)
+        703/705:193.03  707:165.50  709:139.11  711:111.74  713:84.51
+        715:57.70  717:29.68  719:35.20  721:104.62  723:131.97
+        725:158.84  727:186.20  729/731:277.92
+      DecouplingToClassMeters    (classification track id -> metres, 605..629)
+        605:212.40  607:185.37  609:157.84  611:131.32  613:104.40
+        615:76.89  617:106.08  619/621:266.93  623:219.02  625:284.72
+        627/629:257.39
+    The arrival leg is keyed on this.Location (= fromLocation = arrival track
+    RealLifeID, set by ArrivalCU); the class leg is keyed on the per-sub-drive
+    resolved destinationTrack.RealLifeID. ExecuteNextPush sums the two and
+    feeds the result to DrivingActivity.CalculateDrivingDuration instead of
+    the previous hard-coded distanceMeters = 100.0. Unknown ids fall back to
+    FALLBACK_ARRIVAL_LEG_M (139) / FALLBACK_CLASS_LEG_M (212) — roughly each
+    leg's median — so a typo'd id never produces a zero-distance push.
+    Resulting full push distances range ~107 m (717->615) to ~563 m
+    (729/731->625), versus the old flat 100 m.
+    A small length penalty is added on top of travel time
+    (PUSH_LENGTH_PENALTY_S_PER_M = 0.2 s/m), applied to the length of the
+    WAGON-GROUP CUT being pushed in that sub-drive (group.TotalLength), NOT
+    the whole inbound train — each PushOffDrive only propels the consecutive
+    same-destination group that decouples at the decoupling point. Final
+    push-drive duration:
+        duration_s = (leg1_m + leg2_m) / 15 km/h
+                   + cut_length_m * PUSH_LENGTH_PENALTY_S_PER_M
+    The penalty is applied inline in ExecuteNextPush; the shared
+    DrivingActivity.CalculateDrivingDuration stays pure (distance / speed).
+
+  20.2 DepartureDrive — per-track distance to the exit gate
+    DepartureDriveActivity.cs rewritten to mirror ArrivalDriveActivity:
+    a TrackDistanceMeters dictionary (classification track -> exit gate, node
+    775) plus a small length penalty.
+        605/607:286.14  609:259.16  611:231.94  613:205.90  615:223.61
+        617/619:262.93  621/623:259.31  625:240.31  627:188.33  629:182.11
+    Identical pairs (605/607, 617/619, 621/623) share the same node path —
+    real shared switch geometry, not a clean ladder. Constructor now takes an
+    optional trainLength (default 0); ClassificationControlUnit.RequestDepartureDrive
+    passes trainLength: train.TotalLength. Unknown tracks fall back to
+    FALLBACK_DISTANCE_M (245, ~ median). Formula identical in shape to [18]:
+        duration_s = (track_distance_m / TRAIN_SPEED_M_PER_MIN) * 60
+                   + train_length_m * LENGTH_PENALTY_S_PER_M
+
+  20.3 Realistic speeds (replacing placeholder values)
+    Researched, sourced figures replace the previous placeholders:
+    * Shunting push (PushOff drive): flat-yard shunting is controlled to
+      ~10-15 km/h (down to ~5 km/h only for the final coupling approach).
+      Used PUSH_SPEED_M_PER_MIN = 250 (15 km/h). Was 20 m/min (~1.2 km/h,
+      walking pace — far too slow).
+    * Trains entering/leaving the yard on their own road loco (ArrivalDrive
+      and DepartureDrive): governed by "restricted speed" (<= ~32 km/h / 20 mph)
+      and FRA Class-1 yard track (~16-24 km/h). Because these moves include
+      decelerating to / accelerating from a dead stop on the (arrival/
+      classification) track, an effective 20 km/h = 333.33 m/min is used for
+      BOTH directions. ArrivalDrive was previously 100 m/min (~6 km/h, too
+      slow); DepartureDrive was previously 25 m/min over a flat 500 m.
+    Sources (operational shunting & yard speed references):
+      - Flat-yard shunting controlled to 10-15 km/h; 5 km/h final approach.
+        (Railway operations references; UK propelling-move limit 15 mph
+        approach / 5 mph last 100 m.)
+      - FRA "restricted speed" <= 20 mph; Class-1 track 10 mph freight /
+        15 mph passenger (yard, branch, industrial trackage).
+
+  20.4 Files touched
+    Models/PushOffActivity.cs            - two-leg distance maps, fallbacks,
+                                           PUSH_SPEED_M_PER_MIN; ExecuteNextPush
+                                           sums legs, uses the new speed.
+    Models/DepartureDriveActivity.cs     - per-track distance map + length
+                                           penalty + 20 km/h; optional
+                                           trainLength ctor param.
+    Models/ArrivalDriveActivity.cs       - TRAIN_SPEED_M_PER_MIN 100 -> 333.33.
+    Control/ClassificationControlUnit.cs - passes trainLength: train.TotalLength
+                                           to DepartureDriveActivity.
+
+  Verifying: re-run the sim, then python Output/analytics.py. The "Process
+  Durations" sheet should now show real Mean/Min/Max ranges for PushOffDrive
+  and DepartureDrive (not flat values), and per-instance variation in the
+  "Activities (raw)" sheet keyed by the track ids embedded in the ActivityId.
 
 ================================================================================
 14. FILE / MODULE INDEX

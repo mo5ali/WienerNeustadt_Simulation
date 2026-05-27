@@ -42,8 +42,14 @@ namespace WienerNeustadtSimulation.Models
             };
         private const double FALLBACK_DISTANCE_M = 550;
 
-        // Train speed during ArrivalDrive (constant; unchanged from before).
-        private const double TRAIN_SPEED_M_PER_MIN = 100;
+        // Train (own road locomotive) speed entering the yard. Yard movements
+        // are governed by "restricted speed" (<= ~32 km/h) and Class-1 yard
+        // track (~16-24 km/h); since an arriving train runs at restricted
+        // speed through the throat and decelerates to a dead stop on its
+        // arrival track, we use an effective 20 km/h = 333.33 m/min. Same
+        // value as DepartureDrive (leaving) for consistency. (Was 100 m/min
+        // = ~6 km/h, unrealistically slow — see [20].)
+        private const double TRAIN_SPEED_M_PER_MIN = 333.33; // 20 km/h
 
         // Length penalty: extra seconds added per meter of train length.
         // Kept small so per-track distance stays the dominant factor — a

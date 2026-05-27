@@ -468,7 +468,8 @@ namespace WienerNeustadtSimulation.Control
                 train.CurrentTrackId,
                 "Exit",
                 "ClassificationCU",
-                time
+                time,
+                trainLength: train.TotalLength
             );
 
             depdActivity.OnReadyToCommence = (act) => CommenceDepartureDrive(train, (DepartureDriveActivity)act);
