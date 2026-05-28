@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Globalization;
+using WienerNeustadtSimulation.Entities;
 using WienerNeustadtSimulation.Models;
 
 namespace WienerNeustadtSimulation.Output
@@ -87,6 +89,60 @@ namespace WienerNeustadtSimulation.Output
             _writer.Flush();
 
             _metadataWritten = true;
+        }
+
+        /// <summary>
+        /// Writes inbound train and wagon group entity metadata into the CSV.
+        /// Call once after wagon group lengths have been computed.
+        /// </summary>
+        public void WriteInboundMetadata(InboundRoot root)
+        {
+            if (!_isInitialized) return;
+
+            // Build inverse map: wgId → parentTrainId
+            var wgToTrain = new Dictionary<string, string>();
+            foreach (var t in root.InboundTrains ?? Enumerable.Empty<TrainDto>())
+            {
+                if (string.IsNullOrWhiteSpace(t.ID)) continue;
+                foreach (var wgId in t.WagonGroupIds ?? new List<string>())
+                    wgToTrain[wgId] = t.ID!;
+            }
+
+            foreach (var t in root.InboundTrains ?? Enumerable.Empty<TrainDto>())
+            {
+                if (string.IsNullOrWhiteSpace(t.ID)) continue;
+                var wgIds = string.Join("|", t.WagonGroupIds ?? new List<string>());
+                var hasLoco = (t.HasLoco ?? false).ToString();
+                var locoId = (t.LocomotiveId ?? "").Replace(";", ",");
+                // #INTRAIN;<id>;<arrivalTimeISO>;<wgIds_pipe_sep>;<hasLoco>;<locoId>
+                _writer.WriteLine($"#INTRAIN;{t.ID};{t.Time ?? ""};{wgIds};{hasLoco};{locoId}");
+            }
+
+            foreach (var wg in root.WagonGroups ?? Enumerable.Empty<WagonGroupDto>())
+            {
+                if (string.IsNullOrWhiteSpace(wg.ID)) continue;
+                var length = (wg.Length ?? 0).ToString(CultureInfo.InvariantCulture);
+                var dest = (wg.Destination ?? "").Replace(";", ",");
+                var wagonIds = string.Join("|", wg.WagonIds ?? new List<string>());
+                var parentId = wgToTrain.TryGetValue(wg.ID!, out var pid) ? pid : "";
+                // #WAGONGROUP;<id>;<lengthMeters>;<destination>;<wagonIds_pipe_sep>;<parentTrainId>
+                _writer.WriteLine($"#WAGONGROUP;{wg.ID};{length};{dest};{wagonIds};{parentId}");
+            }
+
+            _writer.Flush();
+        }
+
+        /// <summary>
+        /// Logs an outbound train entity as it is created during simulation.
+        /// </summary>
+        public void LogOutboundTrain(OutboundTrain train, DateTime simTime)
+        {
+            if (!_isInitialized) return;
+            var wgIds = string.Join("|", train.WagonGroups.Select(wg => wg.Id));
+            var length = train.TotalLength.ToString(CultureInfo.InvariantCulture);
+            // #OUTTRAIN;<id>;<destination>;<trackId>;<wgIds_pipe_sep>;<totalLength>;<totalWagonCount>;<createdAtISO>
+            _writer.WriteLine($"#OUTTRAIN;{train.Id};{train.Destination};{train.CurrentTrackId};{wgIds};{length};{train.TotalWagonCount};{simTime:yyyy-MM-ddTHH:mm:ssZ}");
+            _writer.Flush();
         }
 
         public void LogTrainEvent(string trainId, string eventName, DateTime simTime, string details = "")

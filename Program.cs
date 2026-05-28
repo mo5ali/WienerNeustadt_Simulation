@@ -114,6 +114,8 @@ namespace WienerNeustadtSimulation
                     }
                 }
 
+                SimulationLogger.Instance.WriteInboundMetadata(root);
+
                 // Create control units (in correct dependency order!)
                 Console.WriteLine("\n[Initializing control units...]");
 

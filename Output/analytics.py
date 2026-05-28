@@ -58,6 +58,27 @@ AUTO_OPEN_RESULT = True
 
 
 # ── CSV parsing ───────────────────────────────────────────────────────────────
+def _parse_length(raw):
+    """Parse a length value from the log into a float, or None on failure.
+
+    The C# logger writes lengths with a locale-dependent decimal separator:
+    TrainEvent rows log an integer ("length=224"), but ActivityEvent rows log
+    a German-formatted decimal with a comma ("length=208,0"). float("208,0")
+    raises ValueError, which is why the Activities (raw) Length column came out
+    blank. Normalise the comma to a dot before converting. This logger does not
+    emit thousands separators, so a plain comma->dot swap is sufficient.
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip().replace(",", ".")
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
 def _iter_rows(csv_path):
     """Yield (sim_time, event_type, c2, c3, details) per non-meta CSV row.
     The C# logger emits each row type with a different column order:
@@ -114,10 +135,7 @@ def parse_activity_durations(csv_path):
             rest = details.split("|", 1)[1] if "|" in details else ""
             for part in rest.split(";"):
                 if part.startswith("length="):
-                    try:
-                        entry["length"] = float(part.split("=", 1)[1])
-                    except ValueError:
-                        pass
+                    entry["length"] = _parse_length(part.split("=", 1)[1])
     out = []
     for e in by_id.values():
         if e["startedAt"] and e["completedAt"]:
@@ -145,10 +163,7 @@ def parse_train_timeline(csv_path):
             entry["entry"] = ts
             for part in details.split("|"):
                 if part.startswith("length="):
-                    try:
-                        entry["length"] = float(part.split("=", 1)[1])
-                    except ValueError:
-                        pass
+                    entry["length"] = _parse_length(part.split("=", 1)[1])
         elif event_name == "ArrivedArrivalTrack":
             entry["arrivedTrack"] = ts
             entry["assignedTrack"] = details

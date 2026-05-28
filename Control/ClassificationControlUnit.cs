@@ -361,6 +361,7 @@ namespace WienerNeustadtSimulation.Control
             _trainsByTrack[trackId] = train;
 
             Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: TRAIN COMPLETE '{train.Id}' on track {trackId} ({train.TotalLength:F0}m, {train.WagonGroups.Count} WGs)");
+            SimulationLogger.Instance.LogOutboundTrain(train, time);
             SimulationLogger.Instance.LogTrainEvent(train.Id, "OutboundTrainCreated", time, destination);
 
             // CRITICAL FIX: Remove wagon groups from tracking - they're now part of a train
