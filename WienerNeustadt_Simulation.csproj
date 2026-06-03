@@ -11,12 +11,4 @@
     <None Include="InputFiles\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-	<ItemGroup>
-		<None Include="Output\Excel_Dashboard_Template.xlsx" CopyToOutputDirectory="PreserveNewest" />
-	</ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="EPPlus" Version="7.3.2" />
-  </ItemGroup>
-
 </Project>

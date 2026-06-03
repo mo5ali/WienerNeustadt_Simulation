@@ -11,7 +11,6 @@ using WienerNeustadtSimulation.Infrastructure;
 using System.Runtime.InteropServices;
 using WienerNeustadtSimulation.Entities;
 using WienerNeustadtSimulation.Output;
-using OfficeOpenXml;  // ← ADD THIS
 
 namespace WienerNeustadtSimulation
 {
@@ -21,9 +20,6 @@ namespace WienerNeustadtSimulation
         {
             try
             {
-                // Set EPPlus license
-                OfficeOpenXml.ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
-
                 Console.WriteLine("╔════════════════════════════════════════════════════════════╗");
                 Console.WriteLine("║   Wiener Neustadt Train Shunting Yard Simulation           ║");
                 Console.WriteLine("╚════════════════════════════════════════════════════════════╝\n");
@@ -213,25 +209,6 @@ namespace WienerNeustadtSimulation
 
                 // Close logger
                 SimulationLogger.Instance.Close();
-
-                // Print activity summary
-                ActivityRegistry.Instance.PrintSummary();
-
-                // Export activities to JSON
-                Directory.CreateDirectory(outputFolder);
-                var activityLogPath = Path.Combine(outputFolder, "ActivityLog.json");
-                ActivityRegistry.Instance.ExportToJson(activityLogPath);
-
-                // ✨ NEW: Generate dashboard
-                var dashboardGenerator = new DashboardGenerator();
-
-
-                var dashboardPath = Path.Combine(outputFolder, "TrainTimeline.html");
-                dashboardGenerator.GenerateFromLog(logPath, dashboardPath);
-
-                var excelDashboard = new ExcelDashboardGenerator();
-                var excelPath = Path.Combine(outputFolder, "TrainTimeline.xlsx");
-                excelDashboard.GenerateFromLog(logPath, excelPath);
 
                 // Run the Python analytics script (Step 1 — process durations).
                 // Wrapped in try/catch so a missing Python interpreter or a

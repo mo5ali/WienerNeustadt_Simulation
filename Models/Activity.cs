@@ -78,8 +78,6 @@ namespace WienerNeustadtSimulation.Models
             }
 
 
-            ActivityRegistry.Instance.Register(this);
-
             // Canonical activity lifecycle log: every activity emits Submitted at creation,
             // then Started via MarkCommenced() and Completed via MarkCompleted().
             // This is the single source of truth for "three timestamps per activity" in the CSV.
