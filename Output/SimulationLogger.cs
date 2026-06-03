@@ -120,22 +120,38 @@ namespace WienerNeustadtSimulation.Output
         {
             if (!_isInitialized) return;
 
-            // Build inverse map: wgId → parentTrainId
+            // Build inverse map: wgId → parentTrainId, and a wgId -> length
+            // lookup so we can sum each inbound train's total length below.
+            // Program.cs has already mutated WagonGroupDto.Length to reflect
+            // sum-of-wagon-lengths before calling this method, so the values
+            // here match what the Train entity gets at HandleTrainArrival time.
             var wgToTrain = new Dictionary<string, string>();
+            var wgLength = new Dictionary<string, double>();
             foreach (var t in root.InboundTrains ?? Enumerable.Empty<TrainDto>())
             {
                 if (string.IsNullOrWhiteSpace(t.ID)) continue;
                 foreach (var wgId in t.WagonGroupIds ?? new List<string>())
                     wgToTrain[wgId] = t.ID!;
             }
+            foreach (var wg in root.WagonGroups ?? Enumerable.Empty<WagonGroupDto>())
+            {
+                if (string.IsNullOrWhiteSpace(wg.ID)) continue;
+                wgLength[wg.ID!] = wg.Length ?? 0;
+            }
 
             foreach (var t in root.InboundTrains ?? Enumerable.Empty<TrainDto>())
             {
                 if (string.IsNullOrWhiteSpace(t.ID)) continue;
+
+                double trainLength = 0;
+                foreach (var wgId in t.WagonGroupIds ?? new List<string>())
+                    if (wgLength.TryGetValue(wgId, out var len)) trainLength += len;
+
                 _inboundTrains[t.ID!] = new Dictionary<string, object?>
                 {
                     ["id"] = t.ID,
                     ["arrivalTime"] = t.Time ?? "",
+                    ["length"] = trainLength,
                     ["wagonGroupIds"] = t.WagonGroupIds ?? new List<string>(),
                     ["hasLoco"] = t.HasLoco ?? false,
                     ["locomotiveId"] = t.LocomotiveId ?? "",
@@ -169,7 +185,9 @@ namespace WienerNeustadtSimulation.Output
                 ["destination"] = train.Destination,
                 ["trackId"] = train.CurrentTrackId,
                 ["wagonGroupIds"] = train.WagonGroups.Select(wg => wg.Id).ToList(),
-                ["totalLength"] = train.TotalLength,
+                // Same field name as inboundTrains[].length for symmetric
+                // consumer code (sum of WG lengths on the train).
+                ["length"] = train.TotalLength,
                 ["totalWagonCount"] = train.TotalWagonCount,
                 ["createdAt"] = simTime.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             };
