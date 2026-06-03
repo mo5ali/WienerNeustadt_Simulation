@@ -2,7 +2,7 @@
 analytics.py — process-duration, train-timeline, and OBT/WG formation metrics
 for the WienerNeustadt simulation, with native Excel charts baked in.
 
-Reads:  ../bin/Debug/net8.0/OutputFiles/SimulationLog.csv
+Reads:  ../bin/Debug/net8.0/OutputFiles/SimulationLog.json
 Writes: ../bin/Debug/net8.0/OutputFiles/SimulationAnalytics.xlsx
 
 Usage:
@@ -24,6 +24,7 @@ Sheets produced:
                               (sortable; only the ones that became part of an OBT).
 """
 
+import json
 import os
 import sys
 from collections import defaultdict
@@ -40,8 +41,8 @@ except ImportError:
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-CSV_PATH = os.path.join(REPO_ROOT, "bin", "Debug", "net8.0", "OutputFiles",
-                        "SimulationLog.csv")
+LOG_PATH = os.path.join(REPO_ROOT, "bin", "Debug", "net8.0", "OutputFiles",
+                        "SimulationLog.json")
 OUT_PATH = os.path.join(REPO_ROOT, "bin", "Debug", "net8.0", "OutputFiles",
                         "SimulationAnalytics.xlsx")
 
@@ -57,16 +58,17 @@ ALIGN_TOP_WRAP = Alignment(vertical="top", wrap_text=True)
 AUTO_OPEN_RESULT = True
 
 
-# ── CSV parsing ───────────────────────────────────────────────────────────────
+# ── JSON parsing ──────────────────────────────────────────────────────────────
 def _parse_length(raw):
-    """Parse a length value from the log into a float, or None on failure.
+    """Parse a length value out of an event's `details` string into a float, or
+    None on failure.
 
-    The C# logger writes lengths with a locale-dependent decimal separator:
-    TrainEvent rows log an integer ("length=224"), but ActivityEvent rows log
-    a German-formatted decimal with a comma ("length=208,0"). float("208,0")
-    raises ValueError, which is why the Activities (raw) Length column came out
-    blank. Normalise the comma to a dot before converting. This logger does not
-    emit thousands separators, so a plain comma->dot swap is sufficient.
+    The C# logger writes lengths into the free-form `details` string with a
+    locale-dependent decimal separator. TrainEvent rows log an integer
+    (`length=224`), but ActivityEvent rows log a German-formatted decimal with
+    a comma (`length=208,0`). `float("208,0")` raises ValueError. Normalise
+    the comma to a dot before converting. The logger does not emit thousands
+    separators, so a plain comma->dot swap is sufficient.
     """
     if raw is None:
         return None
@@ -79,44 +81,56 @@ def _parse_length(raw):
         return None
 
 
-def _iter_rows(csv_path):
-    """Yield (sim_time, event_type, c2, c3, details) per non-meta CSV row.
-    The C# logger emits each row type with a different column order:
-      TrainEvent:       SimTime ; TrainEvent ; eventName ; trainId ; details
-      WagonGroupEvent:  SimTime ; WagonGroupEvent ; wgId ; eventName ; details
-      WorkerEvent:      SimTime ; WorkerEvent ; workerId ; eventName ; details
-      ActivityEvent:    SimTime ; ActivityEvent ; activityId ; activityType ; status|details
-    So caller must interpret c2 / c3 according to event_type. Header row is
-    'EventType;EntityId;Event;SimTime;Details' (a leftover bug in the C#
-    logger) — we parse positionally and ignore it."""
-    if not os.path.exists(csv_path):
-        sys.exit(f"CSV not found: {csv_path}\n"
-                 "Run the simulation first to produce SimulationLog.csv.")
-    with open(csv_path, encoding="utf-8") as f:
-        for raw in f:
-            line = raw.rstrip("\r\n")
-            if not line or line.startswith("#") or line.startswith("EventType"):
-                continue
-            parts = line.split(";", 4)
-            if len(parts) < 5:
-                continue
-            yield parts
+# Cache the loaded JSON so multiple parse_* calls in main() don't re-read the
+# file. Keyed by absolute path so re-pointing the path invalidates the cache.
+_LOG_CACHE = {}
 
 
-def parse_activity_durations(csv_path):
-    by_id = {}
-    for sim_time, event_type, c2, c3, details in _iter_rows(csv_path):
-        if event_type != "ActivityEvent":
+def _load_log(log_path):
+    """Load the JSON simulation log into a dict and cache it.
+
+    Document shape:
+        { "metadata": {...},
+          "entities": { "inboundTrains": {...}, "wagonGroups": {...}, "outboundTrains": {...} },
+          "events":   [ {...}, {...}, ... ] }
+    """
+    abs_path = os.path.abspath(log_path)
+    if abs_path in _LOG_CACHE:
+        return _LOG_CACHE[abs_path]
+    if not os.path.exists(abs_path):
+        sys.exit(f"Log not found: {abs_path}\n"
+                 "Run the simulation first to produce SimulationLog.json.")
+    with open(abs_path, encoding="utf-8") as f:
+        doc = json.load(f)
+    _LOG_CACHE[abs_path] = doc
+    return doc
+
+
+def _iter_events(log_path):
+    """Yield event dicts in the order they were written, skipping anything
+    that doesn't have a simTime (defensive)."""
+    doc = _load_log(log_path)
+    for ev in doc.get("events", []) or []:
+        if not ev.get("simTime"):
             continue
-        activity_id = c2
-        activity_type = c3
-        status = details.split("|", 1)[0]
+        yield ev
+
+
+def parse_activity_durations(log_path):
+    by_id = {}
+    for ev in _iter_events(log_path):
+        if ev.get("type") != "ActivityEvent":
+            continue
+        status = ev.get("status")
         if status not in ("Submitted", "Started", "Completed"):
             continue
         try:
-            ts = datetime.fromisoformat(sim_time)
+            ts = datetime.fromisoformat(ev["simTime"])
         except ValueError:
             continue
+        activity_id = ev.get("activityId", "")
+        activity_type = ev.get("activityType", "")
+        details = ev.get("details", "") or ""
         entry = by_id.setdefault(activity_id, {
             "activityType": activity_type,
             "activityId": activity_id,
@@ -130,10 +144,9 @@ def parse_activity_durations(csv_path):
             entry["completedAt"] = ts
         elif status == "Submitted":
             # The Submitted row's detail block carries the entity length, e.g.
-            #   Submitted|entity=12001;length=224.0;location=703;cu=ArrivalCU
+            #   entity=12001;length=224.0;location=703;cu=ArrivalCU
             # Capture it so charts can colour/group by length. (DEPD logs 0.)
-            rest = details.split("|", 1)[1] if "|" in details else ""
-            for part in rest.split(";"):
+            for part in details.split(";"):
                 if part.startswith("length="):
                     entry["length"] = _parse_length(part.split("=", 1)[1])
     out = []
@@ -144,15 +157,16 @@ def parse_activity_durations(csv_path):
     return out
 
 
-def parse_train_timeline(csv_path):
+def parse_train_timeline(log_path):
     trains = {}
-    for sim_time, event_type, c2, c3, details in _iter_rows(csv_path):
-        if event_type != "TrainEvent":
+    for ev in _iter_events(log_path):
+        if ev.get("type") != "TrainEvent":
             continue
-        event_name = c2
-        train_id = c3
+        event_name = ev.get("action", "")
+        train_id = ev.get("entityId", "")
+        details = ev.get("details", "") or ""
         try:
-            ts = datetime.fromisoformat(sim_time)
+            ts = datetime.fromisoformat(ev["simTime"])
         except ValueError:
             continue
         # Skip outbound-train events (OBT IDs look like "OBT...-Graz")
@@ -180,7 +194,7 @@ def parse_train_timeline(csv_path):
     return out
 
 
-def parse_obts_and_wgs(csv_path):
+def parse_obts_and_wgs(log_path):
     """Parse OBT lifecycle events and WG arrivals. Then match WGs to OBTs by
     track + time window: an OBT created at time T on track X owns all WGs that
     arrived on track X at or before T and weren't already claimed by a
@@ -188,23 +202,26 @@ def parse_obts_and_wgs(csv_path):
     obts = {}
     wgs = {}
 
-    for sim_time, event_type, c2, c3, details in _iter_rows(csv_path):
+    for ev in _iter_events(log_path):
         try:
-            ts = datetime.fromisoformat(sim_time)
+            ts = datetime.fromisoformat(ev["simTime"])
         except ValueError:
             continue
+        et = ev.get("type")
 
-        if event_type == "WagonGroupEvent":
-            wg_id = c2
-            event_name = c3
+        if et == "WagonGroupEvent":
+            wg_id = ev.get("entityId", "")
+            event_name = ev.get("action", "")
+            details = ev.get("details", "") or ""
             if event_name == "ArrivedClassificationTrack":
                 wgs.setdefault(wg_id, {"wgId": wg_id, "obtId": None})
                 wgs[wg_id]["arrivedAt"] = ts
                 wgs[wg_id]["trackId"] = details
 
-        elif event_type == "TrainEvent":
-            event_name = c2
-            train_id = c3
+        elif et == "TrainEvent":
+            event_name = ev.get("action", "")
+            train_id = ev.get("entityId", "")
+            details = ev.get("details", "") or ""
             if not train_id.startswith("OBT"):
                 continue  # only outbound-train events here
             entry = obts.setdefault(train_id, {"obtId": train_id, "wgIds": []})
@@ -222,9 +239,9 @@ def parse_obts_and_wgs(csv_path):
             elif event_name == "Departed":
                 entry["depdEnd"] = ts
 
-        elif event_type == "ActivityEvent":
-            activity_id = c2
-            activity_type = c3
+        elif et == "ActivityEvent":
+            activity_id = ev.get("activityId", "")
+            activity_type = ev.get("activityType", "")
             # OBTP activity ID is Act_OBTP_<obtId>_<HHMMSS>_<trackId>;
             # use it to recover the track the OBT was formed on.
             if activity_type == "OutboundTrainPreparation":
@@ -887,11 +904,11 @@ def _open_result_file():
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
-    print(f"Reading: {CSV_PATH}")
-    activities = parse_activity_durations(CSV_PATH)
-    trains = parse_train_timeline(CSV_PATH)
-    obts, wgs = parse_obts_and_wgs(CSV_PATH)
-    wg_yard = parse_wg_yard_times(CSV_PATH, obts)
+    print(f"Reading: {LOG_PATH}")
+    activities = parse_activity_durations(LOG_PATH)
+    trains = parse_train_timeline(LOG_PATH)
+    obts, wgs = parse_obts_and_wgs(LOG_PATH)
+    wg_yard = parse_wg_yard_times(LOG_PATH, obts)
     print(f"Parsed {len(activities)} activity instances, "
           f"{len(trains)} inbound trains, {len(obts)} OBTs, "
           f"{len(wgs)} classified WGs, {len(wg_yard)} WG yard-time rows.")
@@ -998,7 +1015,7 @@ def main():
 
 
 # ── WG yard-time sheet (per-WG arrival/classification dwell) ──────────────────
-def parse_wg_yard_times(csv_path, obts):
+def parse_wg_yard_times(log_path, obts):
     """One record per wagon group with the 10 timestamps/IDs the supervisor's
     'time in each yard area' metric needs:
         WG id, parent train id, train spawn, train-arrived-at-arrival-track,
@@ -1008,13 +1025,16 @@ def parse_wg_yard_times(csv_path, obts):
     OBT-side fields come from the already-matched `obts` list."""
     trains = {}
     wg = {}
-    for sim_time, et, c2, c3, details in _iter_rows(csv_path):
+    for event in _iter_events(log_path):
         try:
-            ts = datetime.fromisoformat(sim_time)
+            ts = datetime.fromisoformat(event["simTime"])
         except ValueError:
             continue
+        et = event.get("type")
         if et == "TrainEvent":
-            ev, tid = c2, c3
+            ev = event.get("action", "")
+            tid = event.get("entityId", "")
+            details = event.get("details", "") or ""
             if tid.startswith("OBT"):
                 continue
             t = trains.setdefault(tid, {})
@@ -1026,7 +1046,8 @@ def parse_wg_yard_times(csv_path, obts):
             elif ev == "ArrivedArrivalTrack":
                 t["arrivedTrack"] = ts
         elif et == "WagonGroupEvent":
-            wgid, ev = c2, c3
+            wgid = event.get("entityId", "")
+            ev = event.get("action", "")
             if ev == "PushingToTrack":
                 for one in wgid.split("+"):
                     w = wg.setdefault(one, {})
@@ -1124,9 +1145,11 @@ def build_wg_yard_times_sheet(wb, records):
     ]
     for i, (label, formula) in enumerate(summ, start=2):
         ws.cell(row=i, column=16, value=label).font = FONT
-        c = ws.cell(row=i, column=17, value=formula); c.font = FONT
+        c = ws.cell(row=i, column=17, value=formula)
+        c.font = FONT
         c.number_format = "0.00"
-        h = ws.cell(row=i, column=18, value=f"=Q{i}/86400"); h.font = FONT
+        h = ws.cell(row=i, column=18, value=f"=Q{i}/86400")
+        h.font = FONT
         h.number_format = "[h]:mm:ss"
     ws.column_dimensions["P"].width = 20
     ws.column_dimensions["Q"].width = 12

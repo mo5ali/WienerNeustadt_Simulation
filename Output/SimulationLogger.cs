@@ -1,45 +1,72 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Globalization;
+using System.Text.Json;
 using WienerNeustadtSimulation.Entities;
 using WienerNeustadtSimulation.Models;
 
 namespace WienerNeustadtSimulation.Output
 {
     /// <summary>
-    /// High-performance CSV logger for simulation events
+    /// Buffers simulation events + metadata + entity declarations in memory and
+    /// writes a single JSON document on Close().
+    ///
+    /// File shape (SimulationLog.json):
+    ///   {
+    ///     "metadata":  { generatedAtUtc, workers[], shuntingLocomotives[], capacities{} },
+    ///     "entities":  { inboundTrains{id->...}, wagonGroups{id->...}, outboundTrains{id->...} },
+    ///     "events":    [ { simTime, type, ... }, ... ]
+    ///   }
+    ///
+    /// Events keep the same logical fields they had in the old CSV; the only
+    /// thing that changes is the wire format. "details" stays a string for now
+    /// (e.g. "entity=X;length=208,0;...") to keep the port mechanical — callers
+    /// upstream do not need to change.
     /// </summary>
     public class SimulationLogger
     {
-        private static SimulationLogger _instance;
+        private static SimulationLogger? _instance;
         public static SimulationLogger Instance => _instance ??= new SimulationLogger();
 
-        private StreamWriter _writer;
+        private string? _logPath;
         private bool _isInitialized = false;
         private bool _metadataWritten = false;
 
+        // ── In-memory buffers ─────────────────────────────────────────────────
+        private readonly Dictionary<string, object?> _metadata = new();
+        private readonly Dictionary<string, Dictionary<string, object?>> _inboundTrains = new();
+        private readonly Dictionary<string, Dictionary<string, object?>> _wagonGroups = new();
+        private readonly Dictionary<string, Dictionary<string, object?>> _outboundTrains = new();
+        private readonly List<Dictionary<string, object?>> _events = new();
+
         public void Initialize(string logPath)
         {
+            // Caller still passes the path so the file lands in the same OutputFiles
+            // directory; we just rewrite the extension if anyone still hands us
+            // "...SimulationLog.csv" (Program.cs has been updated to pass .json
+            // directly, but this keeps the API forgiving).
+            if (logPath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                logPath = Path.ChangeExtension(logPath, ".json");
+
             var directory = Path.GetDirectoryName(logPath);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                 Directory.CreateDirectory(directory);
 
-            _writer = new StreamWriter(logPath, false);
-
-            // Write CSV header
-            _writer.WriteLine("EventType;EntityId;Event;SimTime;Details");
-            _writer.Flush();
+            _logPath = logPath;
+            _metadata.Clear();
+            _inboundTrains.Clear();
+            _wagonGroups.Clear();
+            _outboundTrains.Clear();
+            _events.Clear();
 
             _isInitialized = true;
             _metadataWritten = false;
         }
 
         /// <summary>
-        /// Writes static resource metadata into the same CSV as comment-style lines.
-        /// These lines start with '#' so parsers can ignore them easily.
-        ///
+        /// Records static resource metadata (workers, shunt locos, capacities).
         /// Call once after Initialize() and after loading ResourcePool.json.
         /// </summary>
         public void WriteResourceMetadata(
@@ -52,47 +79,41 @@ namespace WienerNeustadtSimulation.Output
             if (!_isInitialized) return;
             if (_metadataWritten) return;
 
-            _writer.WriteLine("#META;ResourcePool;v1");
-            _writer.WriteLine($"#META;GeneratedAtUtc;{DateTime.UtcNow:yyyy-MM-ddTHH:mm:ssZ}");
+            _metadata["generatedAtUtc"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
-            // Workers (these fields exist in your WorkerDto usage in ResourceControlUnit)
-            var workers = resourcePool?.Workers ?? Enumerable.Empty<WorkerDto>();
-            foreach (var w in workers.Where(x => !string.IsNullOrWhiteSpace(x.Id)))
+            var workers = (resourcePool?.Workers ?? Enumerable.Empty<WorkerDto>())
+                .Where(w => !string.IsNullOrWhiteSpace(w.Id))
+                .Select(w => new Dictionary<string, object?>
+                {
+                    ["id"] = w.Id!.Trim(),
+                    ["name"] = w.Name ?? "",
+                    ["movementSpeedMetersPerMinute"] = w.MovementSpeedMetersPerMinute ?? 0,
+                    ["area"] = w.Area ?? "",
+                })
+                .ToList();
+            _metadata["workers"] = workers;
+
+            var shuntLocos = (resourcePool?.ShuntingLocomotives ?? Enumerable.Empty<ShuntingLocomotiveDto>())
+                .Where(l => !string.IsNullOrWhiteSpace(l.Id))
+                .Select(l => new Dictionary<string, object?>
+                {
+                    ["id"] = l.Id!.Trim(),
+                    ["speedMetersPerMinute"] = shuntingLocoSpeedMetersPerMinute,
+                })
+                .ToList();
+            _metadata["shuntingLocomotives"] = shuntLocos;
+
+            _metadata["capacities"] = new Dictionary<string, object?>
             {
-                var id = w.Id!.Trim();
-                var name = (w.Name ?? "").Replace(";", ",").Trim();
-                var speed = w.MovementSpeedMetersPerMinute ?? 0;
-                var area = (w.Area ?? "").Replace(";", ",").Trim();
-
-                // #WORKER;<Id>;<Name>;<SpeedMetersPerMinute>;<Area>
-                // Area is optional — empty string means the worker is area-agnostic.
-                _writer.WriteLine($"#WORKER;{id};{name};{speed.ToString(CultureInfo.InvariantCulture)};{area}");
-            }
-
-            // Shunting locomotives:
-            // Your ShuntingLocomotiveDto doesn't have Name/MovementSpeedMetersPerMinute.
-            // We log Id and a fixed speed (matches ResourceControlUnit constant behavior).
-            var locos = resourcePool?.ShuntingLocomotives ?? Enumerable.Empty<ShuntingLocomotiveDto>();
-            foreach (var l in locos.Where(x => !string.IsNullOrWhiteSpace(x.Id)))
-            {
-                var id = l.Id!.Trim();
-
-                // #SHUNTLOCO;<Id>;<DisplayName>;<SpeedMetersPerMinute>
-                _writer.WriteLine($"#SHUNTLOCO;{id};{id};{shuntingLocoSpeedMetersPerMinute.ToString(CultureInfo.InvariantCulture)}");
-            }
-
-            // Global capacities / synthetic resources used by sim
-            _writer.WriteLine($"#CAPACITY;TrainLocomotives;{trainLocoCount}");
-            _writer.WriteLine($"#CAPACITY;ExitGate;{exitGateCount}");
-
-            _writer.WriteLine("#ENDMETA");
-            _writer.Flush();
+                ["trainLocomotives"] = trainLocoCount,
+                ["exitGate"] = exitGateCount,
+            };
 
             _metadataWritten = true;
         }
 
         /// <summary>
-        /// Writes inbound train and wagon group entity metadata into the CSV.
+        /// Records inbound train + wagon group entity declarations.
         /// Call once after wagon group lengths have been computed.
         /// </summary>
         public void WriteInboundMetadata(InboundRoot root)
@@ -111,80 +132,134 @@ namespace WienerNeustadtSimulation.Output
             foreach (var t in root.InboundTrains ?? Enumerable.Empty<TrainDto>())
             {
                 if (string.IsNullOrWhiteSpace(t.ID)) continue;
-                var wgIds = string.Join("|", t.WagonGroupIds ?? new List<string>());
-                var hasLoco = (t.HasLoco ?? false).ToString();
-                var locoId = (t.LocomotiveId ?? "").Replace(";", ",");
-                // #INTRAIN;<id>;<arrivalTimeISO>;<wgIds_pipe_sep>;<hasLoco>;<locoId>
-                _writer.WriteLine($"#INTRAIN;{t.ID};{t.Time ?? ""};{wgIds};{hasLoco};{locoId}");
+                _inboundTrains[t.ID!] = new Dictionary<string, object?>
+                {
+                    ["id"] = t.ID,
+                    ["arrivalTime"] = t.Time ?? "",
+                    ["wagonGroupIds"] = t.WagonGroupIds ?? new List<string>(),
+                    ["hasLoco"] = t.HasLoco ?? false,
+                    ["locomotiveId"] = t.LocomotiveId ?? "",
+                };
             }
 
             foreach (var wg in root.WagonGroups ?? Enumerable.Empty<WagonGroupDto>())
             {
                 if (string.IsNullOrWhiteSpace(wg.ID)) continue;
-                var length = (wg.Length ?? 0).ToString(CultureInfo.InvariantCulture);
-                var dest = (wg.Destination ?? "").Replace(";", ",");
-                var wagonIds = string.Join("|", wg.WagonIds ?? new List<string>());
-                var parentId = wgToTrain.TryGetValue(wg.ID!, out var pid) ? pid : "";
-                // #WAGONGROUP;<id>;<lengthMeters>;<destination>;<wagonIds_pipe_sep>;<parentTrainId>
-                _writer.WriteLine($"#WAGONGROUP;{wg.ID};{length};{dest};{wagonIds};{parentId}");
+                _wagonGroups[wg.ID!] = new Dictionary<string, object?>
+                {
+                    ["id"] = wg.ID,
+                    ["length"] = wg.Length ?? 0,
+                    ["destination"] = wg.Destination ?? "",
+                    ["wagonIds"] = wg.WagonIds ?? new List<string>(),
+                    ["parentTrainId"] = wgToTrain.TryGetValue(wg.ID!, out var pid) ? pid : "",
+                };
             }
-
-            _writer.Flush();
         }
 
         /// <summary>
-        /// Logs an outbound train entity as it is created during simulation.
+        /// Records an outbound train entity as it is created during simulation.
         /// </summary>
         public void LogOutboundTrain(OutboundTrain train, DateTime simTime)
         {
             if (!_isInitialized) return;
-            var wgIds = string.Join("|", train.WagonGroups.Select(wg => wg.Id));
-            var length = train.TotalLength.ToString(CultureInfo.InvariantCulture);
-            // #OUTTRAIN;<id>;<destination>;<trackId>;<wgIds_pipe_sep>;<totalLength>;<totalWagonCount>;<createdAtISO>
-            _writer.WriteLine($"#OUTTRAIN;{train.Id};{train.Destination};{train.CurrentTrackId};{wgIds};{length};{train.TotalWagonCount};{simTime:yyyy-MM-ddTHH:mm:ssZ}");
-            _writer.Flush();
+
+            _outboundTrains[train.Id] = new Dictionary<string, object?>
+            {
+                ["id"] = train.Id,
+                ["destination"] = train.Destination,
+                ["trackId"] = train.CurrentTrackId,
+                ["wagonGroupIds"] = train.WagonGroups.Select(wg => wg.Id).ToList(),
+                ["totalLength"] = train.TotalLength,
+                ["totalWagonCount"] = train.TotalWagonCount,
+                ["createdAt"] = simTime.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            };
         }
 
         public void LogTrainEvent(string trainId, string eventName, DateTime simTime, string details = "")
         {
             if (!_isInitialized) return;
 
-            _writer.WriteLine($"{simTime:yyyy-MM-ddTHH:mm:ss};TrainEvent;{eventName};{trainId};{details}");
-            _writer.Flush();
+            _events.Add(new Dictionary<string, object?>
+            {
+                ["simTime"] = simTime.ToString("yyyy-MM-ddTHH:mm:ss"),
+                ["type"] = "TrainEvent",
+                ["action"] = eventName,
+                ["entityId"] = trainId,
+                ["details"] = details ?? "",
+            });
         }
 
         public void LogWagonGroupEvent(string wagonGroupId, string eventName, DateTime simTime, string details = "")
         {
             if (!_isInitialized) return;
 
-            _writer.WriteLine($"{simTime:yyyy-MM-ddTHH:mm:ss};WagonGroupEvent;{wagonGroupId};{eventName};{details}");
-            _writer.Flush();
+            _events.Add(new Dictionary<string, object?>
+            {
+                ["simTime"] = simTime.ToString("yyyy-MM-ddTHH:mm:ss"),
+                ["type"] = "WagonGroupEvent",
+                ["entityId"] = wagonGroupId,
+                ["action"] = eventName,
+                ["details"] = details ?? "",
+            });
         }
 
         public void LogWorkerEvent(string workerId, string eventName, DateTime simTime, string details = "")
         {
             if (!_isInitialized) return;
 
-            _writer.WriteLine($"{simTime:yyyy-MM-ddTHH:mm:ss};WorkerEvent;{workerId};{eventName};{details}");
-            _writer.Flush();
+            _events.Add(new Dictionary<string, object?>
+            {
+                ["simTime"] = simTime.ToString("yyyy-MM-ddTHH:mm:ss"),
+                ["type"] = "WorkerEvent",
+                ["entityId"] = workerId,
+                ["action"] = eventName,
+                ["details"] = details ?? "",
+            });
         }
 
         public void LogActivityEvent(string activityId, string activityType, DateTime simTime, string status, string details = "")
         {
             if (!_isInitialized) return;
 
-            _writer.WriteLine($"{simTime:yyyy-MM-ddTHH:mm:ss};ActivityEvent;{activityId};{activityType};{status}|{details}");
-            _writer.Flush();
+            _events.Add(new Dictionary<string, object?>
+            {
+                ["simTime"] = simTime.ToString("yyyy-MM-ddTHH:mm:ss"),
+                ["type"] = "ActivityEvent",
+                ["activityId"] = activityId,
+                ["activityType"] = activityType,
+                ["status"] = status,
+                ["details"] = details ?? "",
+            });
         }
 
         public void Close()
         {
-            if (_writer != null)
+            if (!_isInitialized || _logPath == null)
             {
-                _writer.Close();
-                _writer.Dispose();
-                _writer = null;
+                _isInitialized = false;
+                _metadataWritten = false;
+                return;
             }
+
+            var document = new Dictionary<string, object?>
+            {
+                ["metadata"] = _metadata,
+                ["entities"] = new Dictionary<string, object?>
+                {
+                    ["inboundTrains"] = _inboundTrains,
+                    ["wagonGroups"] = _wagonGroups,
+                    ["outboundTrains"] = _outboundTrains,
+                },
+                ["events"] = _events,
+            };
+
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            };
+
+            var json = JsonSerializer.Serialize(document, options);
+            File.WriteAllText(_logPath, json);
 
             _isInitialized = false;
             _metadataWritten = false;

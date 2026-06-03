@@ -595,7 +595,7 @@
         </div>
         <button onclick="reset()">Reset</button>
         <div id="file-upload" onclick="document.getElementById('file-input').click()">
-            <input type="file" id="file-input" accept=".csv" onchange="loadCSV(event)">
+            <input type="file" id="file-input" accept=".json" onchange="loadCSV(event)">
             <p id="file-label">📂 Load CSV</p>
         </div>
         <div id="sim-time">--/--/---- --:--:--</div>
@@ -801,6 +801,9 @@
             "Unknown": "#9e9e9e"
         };
 
+        // File-input handler. The function is still called loadCSV() for
+        // back-compat with the onchange attribute above, but it now consumes
+        // a SimulationLog.json document instead of the legacy CSV.
         function loadCSV(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -808,7 +811,15 @@
             const reader = new FileReader();
             reader.onload = function (e) {
                 const text = e.target.result;
-                parseCSV(text);
+                let doc;
+                try {
+                    doc = JSON.parse(text);
+                } catch (err) {
+                    console.error('Failed to parse SimulationLog JSON:', err);
+                    alert('Could not parse the log file as JSON. See console for details.');
+                    return;
+                }
+                parseLog(doc);
 
                 document.getElementById('file-upload').classList.add('loaded');
                 document.getElementById('file-label').textContent = `✅ Loaded: ${file.name} (${events.length} events)`;
@@ -829,90 +840,72 @@
             };
             reader.readAsText(file);
         }
-        function parseMeta(content) {
+
+        // Parse a full SimulationLog.json document into the visualizer's
+        // existing in-memory state (workers, shuntLocos, trains, events,
+        // simStartTime, simEndTime). The downstream playback code is left
+        // unchanged — every eventObj produced here has the same shape that
+        // the old CSV parser used to produce, so the dispatcher and DOM
+        // animators all continue to work without modification.
+        //
+        // Document shape (written by SimulationLogger.cs):
+        //   {
+        //     metadata: { workers[], shuntingLocomotives[], capacities{}, ... },
+        //     entities: { inboundTrains{}, wagonGroups{}, outboundTrains{} },
+        //     events:   [ { simTime, type, ... }, ... ]
+        //   }
+        //
+        // The visualizer ignores entities{} for now (it reconstructs its own
+        // state from the event stream — same as it did under the CSV format).
+        function parseLog(doc) {
+            events = [];
             workers = [];
             shuntLocos = [];
-            const lines = content.trim().split('\n');
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (trimmed === '#ENDMETA') break;
-                const values = trimmed.split(';').map(v => v.trim());
-
-                // You need these two blocks!
-                if (values[0] === '#WORKER') {
-                    workers.push({ id: values[1], name: values[2], speed: values[3], area: values[4] || '' });
-                }
-                if (values[0] === '#SHUNTLOCO') {
-                    shuntLocos.push({ id: values[1], name: values[2], speed: values[3] });
-                }
-            }
-        }
-        function parseCSV(text) {
-            const lines = text.trim().split('\n');
-            events = [];
-            workers = [];    // Reset as Array
-            shuntLocos = []; // Reset as Array
             trains = {};
 
+            // ── Metadata: workers + shunt locos ──────────────────────────────
+            const meta = doc.metadata || {};
+            for (const w of meta.workers || []) {
+                workers.push({
+                    id: w.id,
+                    name: w.name || w.id,
+                    speed: w.movementSpeedMetersPerMinute,
+                    area: (w.area || '').trim()   // "Arrival" / "Classification" / ""
+                });
+            }
+            for (const l of meta.shuntingLocomotives || []) {
+                shuntLocos.push({
+                    id: l.id,
+                    name: l.id,            // CSV used to carry a display name; the JSON shape only has id
+                    speed: l.speedMetersPerMinute
+                });
+            }
+
+            // ── Events ───────────────────────────────────────────────────────
             let minTime = null;
             let maxTime = null;
 
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (!line) continue;
+            for (const ev of doc.events || []) {
+                const simTimeStr = ev.simTime;
+                const eventType = ev.type;
+                if (!simTimeStr || !eventType) continue;
 
-                // Skip headers
-                if (line.startsWith('EventType') || line.startsWith('#META') || line.startsWith('#ENDMETA')) continue;
-
-                // PARSE WORKERS
-                if (line.startsWith('#WORKER')) {
-                    const parts = line.split(/[;\t]/);
-                    workers.push({
-                        id: parts[1],
-                        name: parts[2],
-                        speed: parseFloat(parts[3]),
-                        area: (parts[4] || '').trim()   // "Arrival" / "Classification" / ""
-                    });
-                    continue;
-                }
-
-                // PARSE SHUNTING LOCOS
-                if (line.startsWith('#SHUNTLOCO')) {
-                    const parts = line.split(/[;\t]/);
-                    shuntLocos.push({
-                        id: parts[1],
-                        name: parts[2],
-                        speed: parseFloat(parts[3])
-                    });
-                    continue;
-                }
-
-                // PARSE REGULAR EVENTS
-                if (line.startsWith('#')) continue;
-
-                const parts = line.split(/[;\t]/);
-                if (parts.length < 4) continue;
-
-                const simTimeStr = parts[0];
-                const eventType = parts[1];
-
-                // Column order differs by event type:
-                //   TrainEvent:       SimTime ; EventType ; ActionName ; EntityId   ; Details
-                //   ActivityEvent:    SimTime ; EventType ; ActivityId ; ActionName ; Status|Details
-                //   WorkerEvent:      SimTime ; EventType ; EntityId   ; ActionName ; Details
-                //   WagonGroupEvent:  SimTime ; EventType ; EntityId   ; ActionName ; Details
-                let eventAction, entityId;
-                if (eventType === 'ActivityEvent' ||
-                    eventType === 'WorkerEvent' ||
-                    eventType === 'WagonGroupEvent') {
-                    entityId = parts[2];
-                    eventAction = parts[3];
+                // Normalize the per-event fields into the legacy eventObj shape
+                // that the rest of this file expects. The biggest change from
+                // CSV: status and details are now separate fields on
+                // ActivityEvent, so we no longer need to split on '|'.
+                let entityId, eventAction, details;
+                if (eventType === 'ActivityEvent') {
+                    entityId = ev.activityId || '';
+                    eventAction = ev.activityType || '';
+                    details = ev.details || '';
                 } else {
-                    // TrainEvent (and any other legacy rows that follow this layout)
-                    eventAction = parts[2];
-                    entityId = parts[3];
+                    // TrainEvent / WorkerEvent / WagonGroupEvent: all carry
+                    // entityId + action + details.
+                    entityId = ev.entityId || '';
+                    eventAction = ev.action || '';
+                    details = ev.details || '';
                 }
-                const details = parts.length > 4 ? parts[4] : '';
 
                 const timestamp = new Date(simTimeStr);
                 if (isNaN(timestamp.getTime())) continue;
@@ -928,14 +921,12 @@
                     details
                 };
 
-                // ActivityEvent parsing
                 if (eventType === 'ActivityEvent') {
-                    const [status, rest] = (details || '').split('|');
-                    eventObj.activityStatus = (status || '').trim();   // Submitted / Started / Completed
-                    eventObj.activityDetails = (rest || '').trim();
+                    eventObj.activityStatus = ev.status || '';   // Submitted / Started / Completed / PassageClaimed / ExitGateClaimed / ...
+                    eventObj.activityDetails = details;
                 }
 
-                // Train entry parsing (this was in your old file — you still need it!)
+                // Train entry parsing — same as in the CSV path.
                 if (eventType === 'TrainEvent' && eventAction === 'Entry') {
                     const trainData = parseTrainDetails(details);
                     if (trainData) {
@@ -944,7 +935,7 @@
                     }
                 }
 
-                // Store assigned arrival track
+                // Store assigned arrival track for later lookup.
                 if (eventType === 'TrainEvent' && eventAction === 'AssignedArrivalTrack') {
                     if (!trains[entityId]) trains[entityId] = {};
                     trains[entityId].assignedArrivalTrack = details; // e.g. "703"
@@ -958,6 +949,7 @@
 
             console.log("Parsed Workers:", workers);
             console.log("Parsed Locos:", shuntLocos);
+            console.log("Parsed Events:", events.length);
         }
         // Build slot id "RCC" from row and column (1-indexed).
         function makeSlotId(row, col) {

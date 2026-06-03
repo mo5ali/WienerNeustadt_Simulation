@@ -26,7 +26,7 @@ namespace WienerNeustadtSimulation
 
                 // Initialize logger
                 var outputFolder = Path.Combine(AppContext.BaseDirectory, "OutputFiles");
-                var logPath = Path.Combine(outputFolder, "SimulationLog.csv");
+                var logPath = Path.Combine(outputFolder, "SimulationLog.json");
                 SimulationLogger.Instance.Initialize(logPath);
                 Console.WriteLine($"📝 Logging to: {logPath}\n");
 
@@ -236,7 +236,7 @@ namespace WienerNeustadtSimulation
         // just locate the script and invoke it. We try `python` first then
         // `python3` (Linux/macOS default name) so this works on both platforms
         // without configuration. Errors are printed but do not fail the run —
-        // the C# sim itself has already produced SimulationLog.csv at this
+        // the C# sim itself has already produced SimulationLog.json at this
         // point, so the user can always re-run analytics manually.
         static void RunPythonAnalytics()
         {
