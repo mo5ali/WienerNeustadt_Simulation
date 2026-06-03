@@ -286,6 +286,243 @@ def parse_obts_and_wgs(log_path):
     return obts_list, wgs_list
 
 
+def parse_incoming_trains(log_path):
+    """One record per inbound train with the 10 columns for the Incoming Trains
+    sheet: ID, length, entry to station, at arrival track, ITP init/starts/ends,
+    PushOff init/starts/ends.
+
+    Length comes from the entity dict (entities.inboundTrains[id].length, which
+    the C# logger now writes — sum-of-WG-lengths). Lifecycle timestamps come
+    from the event stream:
+      * Entry / ArrivedArrivalTrack: TrainEvent rows for the train.
+      * ITP init / starts / ends: ActivityEvent for activityType
+        IncomingTrainPreparation with status Submitted / Started / Completed.
+      * PushOff init / starts / ends: ActivityEvent for activityType PushOff
+        with status Submitted / Started / Completed.
+    The trainId is recovered from the ActivityId, which is structured as
+    Act_<ABBR>_<trainId>_<HHMMSS>_<trackId>."""
+    doc = _load_log(log_path)
+    inbound_entities = (doc.get("entities") or {}).get("inboundTrains") or {}
+
+    by_train = {}
+
+    for ev in _iter_events(log_path):
+        try:
+            ts = datetime.fromisoformat(ev["simTime"])
+        except (ValueError, KeyError):
+            continue
+
+        et = ev.get("type")
+
+        if et == "TrainEvent":
+            tid = ev.get("entityId", "")
+            if tid.startswith("OBT"):
+                continue
+            entry = by_train.setdefault(tid, {"id": tid})
+            action = ev.get("action", "")
+            if action == "Entry":
+                entry["entryToStation"] = ts
+            elif action == "ArrivedArrivalTrack":
+                entry["atArrivalTrack"] = ts
+
+        elif et == "ActivityEvent":
+            activity_type = ev.get("activityType", "")
+            if activity_type not in ("ArrivalDrive", "IncomingTrainPreparation", "PushOff"):
+                continue
+            activity_id = ev.get("activityId", "")
+            status = ev.get("status", "")
+            # Recover trainId from Activity ID: Act_<ABBR>_<trainId>_<HHMMSS>_<trackId>
+            parts = activity_id.split("_")
+            if len(parts) < 5:
+                continue
+            tid = parts[2]
+            if tid.startswith("OBT"):
+                continue
+            entry = by_train.setdefault(tid, {"id": tid})
+            if activity_type == "ArrivalDrive":
+                # ArrivalDrive ends == "At arrival track" (already captured as
+                # the TrainEvent ArrivedArrivalTrack above), so we only record
+                # the Started timestamp here per the column spec.
+                if status == "Started":
+                    entry["arrivalDriveStart"] = ts
+            elif activity_type == "IncomingTrainPreparation":
+                if status == "Submitted":
+                    entry["itpInit"] = ts
+                elif status == "Started":
+                    entry["itpStarts"] = ts
+                elif status == "Completed":
+                    entry["itpEnds"] = ts
+            elif activity_type == "PushOff":
+                if status == "Submitted":
+                    entry["pushOffInit"] = ts
+                elif status == "Started":
+                    entry["pushOffStarts"] = ts
+                elif status == "Completed":
+                    entry["pushOffEnds"] = ts
+
+    # Stitch in the length from the entity dict written by SimulationLogger.
+    # Falls back to None for any train that for some reason has no entity
+    # entry (shouldn't happen, but the sheet handles a blank cell gracefully).
+    for tid, rec in by_train.items():
+        meta = inbound_entities.get(tid) or {}
+        rec["length"] = meta.get("length")
+
+    # Drop trains that never made it past Entry (rare; defensive).
+    out = [r for r in by_train.values() if r.get("entryToStation") is not None]
+    out.sort(key=lambda r: r["entryToStation"])
+    return out
+
+
+def parse_wagon_groups(log_path, trains, obts):
+    """One record per wagon group with the 12 columns for the Wagon Groups
+    sheet: ID, parent incoming train, length, destination, at arrival track,
+    PushOffDrive starts/ends, parent outbound train, OBTP starts/ends,
+    departure drive starts/ends.
+
+    Static fields (id, parentTrainId, length, destination) come from the entity
+    dict the C# logger writes (entities.wagonGroups[<id>]). The arrival-track
+    timestamp is inherited from the parent train's ArrivedArrivalTrack event —
+    a WG physically arrives on the arrival track when its parent train does,
+    so we re-use parse_train_timeline's arrivedTrack value here. The
+    PushOffDrive timestamps come from PushOffDrive ActivityEvents; the activity
+    covers a consecutive same-destination CUT of WGs (ActivityId has the form
+    Act_POD_<wg1+wg2+...>_<HHMMSS>_<destTrack>), so we split the combined
+    entityId on '+' and credit each WG individually. The OBT-side timestamps
+    are read off the matching OBT record produced by parse_obts_and_wgs."""
+    doc = _load_log(log_path)
+    wgs_meta = (doc.get("entities") or {}).get("wagonGroups") or {}
+
+    # Parent-train arrival lookup: trainId -> ArrivedArrivalTrack timestamp.
+    train_arrived = {t["trainId"]: t.get("arrivedTrack") for t in trains}
+
+    # OBT lookups: obtId -> full obt record (for OBTP/DEPD timestamps) and
+    # wgId -> obtId (for the parent-outbound-train column).
+    obt_by_id = {o["obtId"]: o for o in obts}
+    wg_to_obt = {}
+    for o in obts:
+        for wgid in o.get("wgIds", []):
+            wg_to_obt[wgid] = o["obtId"]
+
+    by_wg = {}
+
+    # Seed records from the entity dict so every declared WG shows up in the
+    # sheet, even those that for some reason produced no events at runtime.
+    for wgid, meta in wgs_meta.items():
+        parent = meta.get("parentTrainId") or None
+        by_wg[wgid] = {
+            "id": wgid,
+            "parentIncomingTrain": parent,
+            "length": meta.get("length"),
+            "destination": meta.get("destination"),
+            "atArrivalTrack": train_arrived.get(parent),
+        }
+
+    # PushOffDrive timestamps. We iterate the event stream once and split each
+    # PushOffDrive activity across its constituent WGs.
+    for ev in _iter_events(log_path):
+        if ev.get("type") != "ActivityEvent":
+            continue
+        if ev.get("activityType") != "PushOffDrive":
+            continue
+        status = ev.get("status", "")
+        if status not in ("Started", "Completed"):
+            continue
+        try:
+            ts = datetime.fromisoformat(ev["simTime"])
+        except (ValueError, KeyError):
+            continue
+        activity_id = ev.get("activityId", "")
+        parts = activity_id.split("_")
+        if len(parts) < 5:
+            continue
+        combined = parts[2]
+        for wgid in combined.split("+"):
+            entry = by_wg.setdefault(wgid, {"id": wgid})
+            if status == "Started" and "pushOffDriveStart" not in entry:
+                entry["pushOffDriveStart"] = ts
+            elif status == "Completed" and "pushOffDriveEnd" not in entry:
+                entry["pushOffDriveEnd"] = ts
+
+    # Stitch OBT-side fields onto each WG.
+    for wgid, rec in by_wg.items():
+        obtid = wg_to_obt.get(wgid)
+        rec["parentOutboundTrain"] = obtid
+        o = obt_by_id.get(obtid, {}) if obtid else {}
+        rec["obtpStart"] = o.get("obtpStart")
+        rec["obtpEnd"] = o.get("obtpEnd")
+        rec["depdStart"] = o.get("depdStart")
+        rec["depdEnd"] = o.get("depdEnd")
+
+    out = list(by_wg.values())
+    # Sort by parent inbound train, then WG id, so consecutive WGs of one
+    # train stay grouped together.
+    out.sort(key=lambda r: (r.get("parentIncomingTrain") or "", r.get("id") or ""))
+    return out
+
+
+def parse_outbound_trains(log_path):
+    """One record per outbound train with the 9 columns for the Outbound Trains
+    sheet: ID, destination, length, OBTP init/starts/ends, departure drive
+    init/starts/ends. Length + destination come from the entity dict; the six
+    lifecycle timestamps come from OBTP and DepartureDrive ActivityEvents."""
+    doc = _load_log(log_path)
+    obt_meta = (doc.get("entities") or {}).get("outboundTrains") or {}
+
+    by_obt = {}
+
+    # Seed records from the entity dict so every declared OBT shows up.
+    for obtid, meta in obt_meta.items():
+        by_obt[obtid] = {
+            "id": obtid,
+            "destination": meta.get("destination"),
+            "length": meta.get("length"),
+        }
+
+    for ev in _iter_events(log_path):
+        if ev.get("type") != "ActivityEvent":
+            continue
+        activity_type = ev.get("activityType", "")
+        if activity_type not in ("OutboundTrainPreparation", "DepartureDrive"):
+            continue
+        status = ev.get("status", "")
+        if status not in ("Submitted", "Started", "Completed"):
+            continue
+        try:
+            ts = datetime.fromisoformat(ev["simTime"])
+        except (ValueError, KeyError):
+            continue
+        # ActivityId: Act_<ABBR>_<obtId>_<HHMMSS>_<trackId>.
+        # The OBT id contains a hyphen ("OBT...-Vienna") but never an
+        # underscore, so parts[2] recovers it intact.
+        activity_id = ev.get("activityId", "")
+        parts = activity_id.split("_")
+        if len(parts) < 5:
+            continue
+        obtid = parts[2]
+        entry = by_obt.setdefault(obtid, {"id": obtid})
+
+        if activity_type == "OutboundTrainPreparation":
+            if status == "Submitted":
+                entry["obtpInit"] = ts
+            elif status == "Started":
+                entry["obtpStart"] = ts
+            elif status == "Completed":
+                entry["obtpEnd"] = ts
+        elif activity_type == "DepartureDrive":
+            if status == "Submitted":
+                entry["depdInit"] = ts
+            elif status == "Started":
+                entry["depdStart"] = ts
+            elif status == "Completed":
+                entry["depdEnd"] = ts
+
+    out = list(by_obt.values())
+    # Sort by OBTP init (earliest first); fall back to id for stable order
+    # when a record has no OBTP init (e.g. log truncated before Submitted).
+    out.sort(key=lambda r: (r.get("obtpInit") or datetime.max, r.get("id") or ""))
+    return out
+
+
 # ── Sheet styling helper ─────────────────────────────────────────────────────
 def _style_header_row(ws, row=1):
     for cell in ws[row]:
@@ -514,6 +751,160 @@ def build_process_durations_sheet(wb, activities):
     chart.height = 10
     chart.width = 18
     ws.add_chart(chart, "I2")
+    return ws
+
+
+def build_incoming_trains_sheet(wb, records):
+    """Per-train lifecycle sheet: one row per inbound train, ten columns
+    covering the full ID → length → entry → arrival → ITP → PushOff path.
+    Sits as the second tab (right after Definitions) so it's the first thing
+    you see when opening the workbook."""
+    ws = wb.create_sheet("Incoming Trains", 1)
+    headers = [
+        "ID", "Length (m)",
+        "Entry to station", "Arrival drive start", "At arrival track",
+        "ITP init", "ITP starts", "ITP ends",
+        "PushOff init", "PushOff starts", "PushOff ends",
+    ]
+    ws.append(headers)
+
+    for rec in records:
+        ws.append([
+            rec.get("id"),
+            rec.get("length"),
+            rec.get("entryToStation"),
+            rec.get("arrivalDriveStart"),
+            rec.get("atArrivalTrack"),
+            rec.get("itpInit"),
+            rec.get("itpStarts"),
+            rec.get("itpEnds"),
+            rec.get("pushOffInit"),
+            rec.get("pushOffStarts"),
+            rec.get("pushOffEnds"),
+        ])
+
+    _style_header_row(ws)
+    for r in range(2, ws.max_row + 1):
+        ws[f"B{r}"].number_format = "0.0"
+        for col in ("C", "D", "E", "F", "G", "H", "I", "J", "K"):
+            ws[f"{col}{r}"].number_format = "yyyy-mm-dd hh:mm:ss"
+
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
+        for cell in row:
+            cell.font = FONT
+
+    widths = {
+        "A": 8, "B": 11,
+        "C": 20, "D": 20, "E": 20,
+        "F": 20, "G": 20, "H": 20,
+        "I": 20, "J": 20, "K": 20,
+    }
+    for col, w in widths.items():
+        ws.column_dimensions[col].width = w
+
+    ws.freeze_panes = "C2"      # freeze ID + Length so they stay visible while scrolling timestamps
+    ws.auto_filter.ref = ws.dimensions
+    return ws
+
+
+def build_wagon_groups_sheet(wb, records):
+    """Per-WG lifecycle sheet: ID through OBT departure. Sits as tab #3,
+    after Definitions / Incoming Trains."""
+    ws = wb.create_sheet("Wagon Groups", 2)
+    headers = [
+        "ID", "Parent incoming train", "Length (m)", "Destination",
+        "At arrival track",
+        "PushOffDrive starts", "PushOffDrive ends",
+        "Parent outbound train",
+        "OBTP starts", "OBTP ends",
+        "Departure drive starts", "Departure drive ends",
+    ]
+    ws.append(headers)
+
+    for rec in records:
+        ws.append([
+            rec.get("id"),
+            rec.get("parentIncomingTrain"),
+            rec.get("length"),
+            rec.get("destination"),
+            rec.get("atArrivalTrack"),
+            rec.get("pushOffDriveStart"),
+            rec.get("pushOffDriveEnd"),
+            rec.get("parentOutboundTrain"),
+            rec.get("obtpStart"),
+            rec.get("obtpEnd"),
+            rec.get("depdStart"),
+            rec.get("depdEnd"),
+        ])
+
+    _style_header_row(ws)
+    for r in range(2, ws.max_row + 1):
+        ws[f"C{r}"].number_format = "0.0"
+        for col in ("E", "F", "G", "I", "J", "K", "L"):
+            ws[f"{col}{r}"].number_format = "yyyy-mm-dd hh:mm:ss"
+
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
+        for cell in row:
+            cell.font = FONT
+
+    widths = {
+        "A": 12, "B": 16, "C": 11, "D": 14,
+        "E": 20, "F": 20, "G": 20,
+        "H": 28,
+        "I": 20, "J": 20, "K": 20, "L": 20,
+    }
+    for col, w in widths.items():
+        ws.column_dimensions[col].width = w
+
+    ws.freeze_panes = "E2"      # freeze the four identity columns (ID, parent, length, destination)
+    ws.auto_filter.ref = ws.dimensions
+    return ws
+
+
+def build_outbound_trains_sheet(wb, records):
+    """Per-OBT lifecycle sheet: ID, destination, length, OBTP triplet,
+    DepartureDrive triplet. Sits as tab #4, after Wagon Groups."""
+    ws = wb.create_sheet("Outbound Trains", 3)
+    headers = [
+        "ID", "Destination", "Length (m)",
+        "OBTP init", "OBTP starts", "OBTP ends",
+        "Departure drive init", "Departure drive starts", "Departure drive ends",
+    ]
+    ws.append(headers)
+
+    for rec in records:
+        ws.append([
+            rec.get("id"),
+            rec.get("destination"),
+            rec.get("length"),
+            rec.get("obtpInit"),
+            rec.get("obtpStart"),
+            rec.get("obtpEnd"),
+            rec.get("depdInit"),
+            rec.get("depdStart"),
+            rec.get("depdEnd"),
+        ])
+
+    _style_header_row(ws)
+    for r in range(2, ws.max_row + 1):
+        ws[f"C{r}"].number_format = "0.0"
+        for col in ("D", "E", "F", "G", "H", "I"):
+            ws[f"{col}{r}"].number_format = "yyyy-mm-dd hh:mm:ss"
+
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
+        for cell in row:
+            cell.font = FONT
+
+    widths = {
+        "A": 28, "B": 12, "C": 11,
+        "D": 20, "E": 20, "F": 20,
+        "G": 22, "H": 22, "I": 22,
+    }
+    for col, w in widths.items():
+        ws.column_dimensions[col].width = w
+
+    ws.freeze_panes = "D2"      # freeze ID + Destination + Length
+    ws.auto_filter.ref = ws.dimensions
     return ws
 
 
@@ -909,15 +1300,24 @@ def main():
     trains = parse_train_timeline(LOG_PATH)
     obts, wgs = parse_obts_and_wgs(LOG_PATH)
     wg_yard = parse_wg_yard_times(LOG_PATH, obts)
+    incoming_trains = parse_incoming_trains(LOG_PATH)
+    wagon_groups = parse_wagon_groups(LOG_PATH, trains, obts)
+    outbound_trains = parse_outbound_trains(LOG_PATH)
     print(f"Parsed {len(activities)} activity instances, "
           f"{len(trains)} inbound trains, {len(obts)} OBTs, "
-          f"{len(wgs)} classified WGs, {len(wg_yard)} WG yard-time rows.")
+          f"{len(wgs)} classified WGs, {len(wg_yard)} WG yard-time rows, "
+          f"{len(incoming_trains)} incoming-train rows, "
+          f"{len(wagon_groups)} wagon-group rows, "
+          f"{len(outbound_trains)} outbound-train rows.")
     if not activities:
         sys.exit("No activities found — nothing to write.")
 
     wb = Workbook()
     wb.remove(wb.active)
     build_definitions_sheet(wb)
+    build_incoming_trains_sheet(wb, incoming_trains)
+    build_wagon_groups_sheet(wb, wagon_groups)
+    build_outbound_trains_sheet(wb, outbound_trains)
     build_throughput_sheet(wb, trains, obts)
     build_process_durations_sheet(wb, activities)
     build_train_timeline_sheet(wb, trains)
