@@ -1239,7 +1239,981 @@ This is the running narrative; new entries are appended as work continues.
   object and drop 'details' entirely. Touches only the logger and the
   three parse_* sites that consume length values today.
 
+[22] Per-entity structured analytics sheets; length fields on inbound/outbound
+  Three related changes, all aimed at making SimulationAnalytics.xlsm easier
+  to open cold without having to remember which sheet is the timeline and
+  which one is the formation breakdown.
+
+  22.1 Length added to the entity dicts in SimulationLog.json
+    Pre-change the only place a train's length surfaced in the log was the
+    Entry event's free-form details string (length=224|...). Outbound trains
+    had a totalLength on entities.outboundTrains[id] but inbound trains had
+    no length field at all on entities.inboundTrains[id]. Asymmetric, and
+    each consumer of inbound length had to substring-parse the Entry details.
+    Fix in Output/SimulationLogger.cs:
+      * WriteInboundMetadata now builds a wgId -> length lookup from
+        root.WagonGroups (Program.cs has already mutated WagonGroupDto.Length
+        to sum-of-wagon-lengths by the time this method runs), sums per
+        train, and writes the result as entities.inboundTrains[<id>].length.
+        Numerically identical to what ArrivalControlUnit.CreateTrainEntity
+        computes later when the Train entity is instantiated at arrival time.
+      * LogOutboundTrain renamed its JSON field from totalLength to length
+        for symmetric naming with the inbound dict. C# property
+        OutboundTrain.TotalLength is unchanged — only the serialized field
+        renamed. No live consumer was reading totalLength at the time of
+        the rename (analytics still pulls inbound length from the Entry
+        event; the visualizer ignores the entities dict).
+
+  22.2 Three new per-entity structured sheets in SimulationAnalytics.xlsm
+    Pre-change the workbook had Definitions then a jumble of analytical
+    sheets (Throughput, Process Durations, Train Timeline, OBT Formation,
+    WG Yard Times, four "raw" sheets). To open the workbook cold and answer
+    "what happened to train 12042?" required cross-referencing Train Timeline
+    against Trains (raw) against Activities (raw). The new sheets give one
+    row per entity with the full lifecycle on a single line.
+    Sheet ordering after the change:
+      tab 1: Definitions
+      tab 2: Incoming Trains       *** NEW ***
+      tab 3: Wagon Groups          *** NEW ***
+      tab 4: Outbound Trains       *** NEW ***
+      tab 5..: Throughput, Process Durations, Train Timeline, OBT Formation,
+              WG Yard Times, Activities (raw), Trains (raw), OBTs (raw),
+              WGs (raw)   [all unchanged]
+
+  22.3 Incoming Trains sheet — 11 columns
+    Columns (in order):
+      ID, Length (m),
+      Entry to station, Arrival drive start, At arrival track,
+      ITP init, ITP starts, ITP ends,
+      PushOff init, PushOff starts, PushOff ends.
+    Sources:
+      * ID, Length — entities.inboundTrains[<id>] (id + length).
+      * Entry to station, At arrival track — TrainEvent rows with action
+        Entry and ArrivedArrivalTrack respectively.
+      * Arrival drive start — ActivityEvent for activityType ArrivalDrive,
+        status Started. (ArrivalDrive end == "At arrival track" already,
+        so no separate "ends" column.)
+      * ITP init / starts / ends — ActivityEvent for activityType
+        IncomingTrainPreparation with status Submitted / Started / Completed.
+      * PushOff init / starts / ends — ActivityEvent for activityType
+        PushOff with status Submitted / Started / Completed.
+    Parser: parse_incoming_trains in Output/analytics.py.
+    Train id recovery: the activity id format Act_<ABBR>_<trainId>_<HHMMSS>_<trackId>
+    means parts[2] is the train id whenever we hit an ActivityEvent —
+    works for ARRD, ITP, PO equally.
+    Builder: build_incoming_trains_sheet in Output/analytics.py.
+    Freeze pane at column C so ID + Length stay visible while scrolling
+    the eight timestamp columns. Auto-filter on. Length formatted "0.0";
+    timestamps formatted "yyyy-mm-dd hh:mm:ss".
+
+  22.4 Wagon Groups sheet — 12 columns
+    Columns (in order):
+      ID, Parent incoming train, Length (m), Destination,
+      At arrival track,
+      PushOffDrive starts, PushOffDrive ends,
+      Parent outbound train,
+      OBTP starts, OBTP ends,
+      Departure drive starts, Departure drive ends.
+    Sources:
+      * ID, Parent incoming train, Length, Destination — entities.wagonGroups[<id>]
+        (id + parentTrainId + length + destination).
+      * At arrival track — inherited from the parent train's
+        ArrivedArrivalTrack event. (A WG physically arrives on the arrival
+        track when its parent train does, so we re-use parse_train_timeline's
+        arrivedTrack value.)
+      * PushOffDrive starts / ends — ActivityEvent for PushOffDrive. The
+        activity covers a consecutive same-destination CUT of WGs, with
+        activityId of the form Act_POD_<wg1+wg2+...>_<HHMMSS>_<destTrack>.
+        The parser splits parts[2] on '+' and credits each WG individually,
+        so siblings in the same cut get the same start/end timestamps.
+      * Parent outbound train — reuse of parse_obts_and_wgs's WG->OBT
+        match (the same track + time-window assignment already used by
+        every other OBT-related sheet).
+      * OBTP starts / ends, Departure drive starts / ends — read off the
+        matching OBT record from parse_obts_and_wgs.
+    Parser: parse_wagon_groups in Output/analytics.py.
+    Builder: build_wagon_groups_sheet in Output/analytics.py.
+    Sort: by parent inbound train then by WG id (so consecutive WGs of
+    one train stay grouped). Freeze pane at column E so the four identity
+    columns (ID, parent, length, destination) stay visible. Auto-filter on.
+
+  22.5 Outbound Trains sheet — 9 columns
+    Columns (in order):
+      ID, Destination, Length (m),
+      OBTP init, OBTP starts, OBTP ends,
+      Departure drive init, Departure drive starts, Departure drive ends.
+    Sources:
+      * ID, Destination, Length — entities.outboundTrains[<id>] (id +
+        destination + length).
+      * OBTP init / starts / ends — ActivityEvent for
+        OutboundTrainPreparation with status Submitted / Started / Completed.
+      * Departure drive init / starts / ends — ActivityEvent for
+        DepartureDrive with status Submitted / Started / Completed.
+    Parser: parse_outbound_trains in Output/analytics.py.
+    OBT id recovery: the activity id is
+    Act_<ABBR>_<obtId>_<HHMMSS>_<trackId>. The OBT id has the form
+    OBT<ddMMyyHHmmss>-<destination> — a hyphen but never an underscore —
+    so parts[2] recovers it intact in one shot.
+    Builder: build_outbound_trains_sheet in Output/analytics.py.
+    Sort: by OBTP init (earliest first); records with no OBTP init fall
+    back to id-sort so the order is stable. Freeze pane at column D
+    (ID + Destination + Length pinned). Auto-filter on.
+
+  22.6 What stayed the same and why
+    All the existing analytical sheets (Throughput, Process Durations,
+    Train Timeline, OBT Formation, WG Yard Times, the four "raw" sheets)
+    are kept unchanged. They serve a different purpose: aggregate stats
+    and timeline-style joins across the run. The new per-entity sheets
+    are entity-centric — "show me everything that happened to train X" —
+    so the two coexist rather than replace each other. Definitions and
+    the three new sheets together form an easy-to-browse front section;
+    the deeper analytical sheets stay at the back for when they're needed.
+
+  22.7 Files touched
+    Output/SimulationLogger.cs    - length added to inboundTrains dict;
+                                    outbound's totalLength renamed to length.
+    Output/analytics.py           - three new parse_* and three new build_*
+                                    functions; main() wires them as tabs 2-4.
+    Other files/Documentation.txt - this entry.
+
+  Verifying: re-run the sim, then python Output/analytics.py. The first
+  four tabs of SimulationAnalytics.xlsm should be Definitions / Incoming
+  Trains / Wagon Groups / Outbound Trains. For one inbound train of your
+  choice, walking left-to-right across the Incoming Trains row should
+  give a monotonically non-decreasing sequence of timestamps from Entry
+  through PushOff ends. Same monotonicity check applies to Wagon Groups
+  (At arrival track <= PushOffDrive starts <= PushOffDrive ends <=
+  OBTP starts <= OBTP ends <= Departure drive starts <= Departure drive
+  ends) and Outbound Trains (OBTP init <= OBTP starts <= OBTP ends <=
+  Departure drive init <= Departure drive starts <= Departure drive ends).
+
+  Follow-up (deferred): the existing Trains (raw), OBTs (raw), WGs (raw),
+  Train Timeline and WG Yard Times sheets all overlap partially with the
+  three new per-entity sheets. If the new sheets prove sufficient, the
+  raw + timeline sheets are candidates for retirement — but only after a
+  few weeks of using the workbook to confirm nothing in those sheets is
+  uniquely valuable.
+
+[23] Activities (raw) restructure + four cluttering sheets removed
+  Two related cleanups to the analytics workbook, both driven by usability
+  feedback after a few real runs ("the workbook has too many tabs and the
+  Activities sheet doesn't tell me what each activity was doing for").
+
+  23.1 Activities (raw) sheet — added InitializedAt + Entity / Length / From /
+       To / Drive length context columns
+    Pre-change the sheet had 8 columns: ActivityType, ActivityId, StartedAt,
+    CompletedAt, Duration (s/min/hh:mm:ss), Length (m). The ActivityId
+    string contained the entity id and the track id as underscore-separated
+    tokens, so any time you wanted to see "what entity was this for?" or
+    "what track was this on?" you had to manually parse the id. New layout
+    surfaces those fields as proper columns, plus the Submitted timestamp
+    that was already captured in the JSON but never reached the sheet:
+
+      A ActivityType   B ActivityId      C Entity         D Length (m)
+      E From           F To              G Drive length (m)
+      H InitializedAt  I StartedAt       J CompletedAt
+      K Duration (s)   L Duration (min)  M Duration (hh:mm:ss)
+
+    Source mapping:
+      * Entity        — Submitted event details, "entity=X". For most
+                        activities this is the entity id directly; for
+                        PushOffDrive it's "wg1+wg2+..." (the consecutive
+                        same-destination cut of WGs being pushed).
+      * Length (m)    — Submitted event details, "length=X". Same column as
+                        before, just moved from H to D. Header text kept
+                        identical so the VBA macro in
+                        Output/vba_modules/Module_PlotActivitiesByTrack.bas
+                        (which looks columns up by header name via
+                        FindHeaderColumn, not by column letter) still finds
+                        it without modification.
+      * From / To /
+        Drive length  — filled only for ArrivalDrive, DepartureDrive,
+                        PushOffDrive; blank for every other activity type.
+                          - ArrivalDrive: From = "Entry gate", To = arrival
+                            track id (from Submitted details location=),
+                            distance from ARRIVAL_DRIVE_DISTANCES.
+                          - DepartureDrive: From = class track id (from
+                            location=), To = "Exit gate", distance from
+                            DEPARTURE_DRIVE_DISTANCES.
+                          - PushOffDrive: From = parent train's arrival
+                            track, To = destination class track (from
+                            location=), distance = PUSH_ARRIVAL_LEG[from]
+                            + PUSH_CLASS_LEG[to].
+      * InitializedAt — Submitted event timestamp. Previously discarded by
+                        parse_activity_durations (only Started / Completed
+                        were promoted into the record).
+
+    Implementation notes:
+      * Static distance maps live near the top of Output/analytics.py, in
+        the section "── Driving-activity distance maps ──". Four maps total:
+        ARRIVAL_DRIVE_DISTANCES + ARRIVAL_DRIVE_FALLBACK,
+        DEPARTURE_DRIVE_DISTANCES + DEPARTURE_DRIVE_FALLBACK,
+        PUSH_ARRIVAL_LEG + PUSH_ARRIVAL_LEG_FALLBACK,
+        PUSH_CLASS_LEG + PUSH_CLASS_LEG_FALLBACK. Numbers ported verbatim
+        from the C# sources (ArrivalDriveActivity.cs,
+        DepartureDriveActivity.cs, PushOffActivity.cs). This is a deliberate
+        duplication: it keeps the Python analytics self-contained (no need
+        to re-run the C# sim to re-derive numbers) but means each map
+        change has to be made on both sides. Logged here so the duplication
+        is intentional rather than an oversight.
+      * PushOffDrive parent-train recovery: parse_activity_durations builds
+        a trainId -> arrival-track lookup from TrainEvent AssignedArrivalTrack
+        rows on its first pass. The PushOffDrive's Entity column is
+        "wg1+wg2+..."; we take the first WG that resolves, walk
+        entities.wagonGroups[wgId].parentTrainId to recover the train id,
+        and look up that train in the map to get the From track. Falls
+        back to "?" / fallback distance if any link of that chain misses.
+
+  23.2 Removed four cluttering sheets: Throughput, Process Durations, Train
+       Timeline, OBT Formation
+    These four sheets were aggregate / cross-cut analytics — counts, means,
+    durations grouped by activity type, train timeline breakdowns, OBT
+    formation breakdowns — and in practice they were never opened: every
+    real investigation went through one of the per-entity sheets (Incoming
+    Trains, Wagon Groups, Outbound Trains, the raw tables) instead.
+    Removed:
+      * build_throughput_sheet         (function definition + main() call)
+      * build_process_durations_sheet  (function definition + main() call)
+      * build_train_timeline_sheet     (function definition + main() call)
+      * build_obt_formation_sheet      (function definition + main() call)
+    Kept on purpose:
+      * The underlying parse_train_timeline, parse_obts_and_wgs and
+        parse_activity_durations functions stay — they're still consumed
+        by the surviving sheets (Trains/OBTs/WGs raw, Activities raw,
+        WG Yard Times, and the per-entity Incoming/Wagon/Outbound sheets).
+      * The console-preview block at the bottom of main() ("Process
+        durations (s):" / "Train timeline (s):" / "OBT / WG formation (s):"
+        tables printed to stdout) is left in place. It's invisible until
+        the user looks at the console and provides a quick mean/min/max
+        glance per phase without opening Excel. Easy to strip if it stops
+        being useful.
+
+  23.3 Files touched
+    Output/analytics.py            - distance maps added at top;
+                                     parse_activity_durations extended to
+                                     capture submittedAt + entityId +
+                                     location + from/to/distance for driving
+                                     activities; build_activities_raw_sheet
+                                     rewritten with 13-column layout; four
+                                     sheet-builder functions and their main()
+                                     call sites removed.
+    Other files/Documentation.txt  - this entry.
+
+  Verifying: re-run the sim, then python Output/analytics.py. The workbook
+  should now contain only nine sheets (Definitions, Incoming Trains, Wagon
+  Groups, Outbound Trains, Activities (raw), Trains (raw), OBTs (raw),
+  WGs (raw), WG Yard Times) — the four named in 23.2 should be gone. The
+  Activities (raw) sheet should show populated From / To / Drive length
+  cells for every ArrivalDrive / DepartureDrive / PushOffDrive row, and
+  blank cells in those columns for everything else. Spot-check a
+  PushOffDrive row: its From column should match the parent inbound
+  train's "At arrival track" column on the Incoming Trains sheet.
+
+  Follow-up (deferred): the static distance maps in analytics.py are a
+  copy of the same data in three C# files. A small follow-up would be
+  to either (a) emit the resolved distance into the activity Submitted
+  details from C# at log-write time and read it back in Python — single
+  source of truth, no duplication, but every consumer would have to
+  re-parse a longer details string; or (b) generate a small distances.json
+  alongside SimulationLog.json that analytics.py loads. Both options are
+  bigger than the duplication is currently worth; the maps change very
+  rarely.
+
 ================================================================================
+[24] Trains (raw) retired; timing / duration columns folded into the
+     three per-entity sheets
+  Closes the loop on the per-entity workbook structure: the legacy
+  Trains (raw) sheet's useful derived columns (Track, queue / wait /
+  duration breakdowns) now live on the per-entity sheets that already
+  carried the underlying timestamps. The raw sheet itself is gone.
+
+  24.1 Incoming Trains — added Track + 8 derived columns
+    The sheet expands from 11 to 20 columns. Identity block grows from
+    A-B (ID + Length) to A-C (ID + Length + Track). Track is the
+    assigned arrival track id, captured in parse_incoming_trains from
+    the TrainEvent AssignedArrivalTrack row's details field (a new
+    branch alongside Entry / ArrivedArrivalTrack). The eight new
+    derived columns sit at M-T:
+      M  Queue wait (s)              = (E - D) * 86400
+                                       Entry to station -> Arrival drive start
+      N  Arrival drive dur (s)       = (F - E) * 86400
+                                       Arrival drive start -> At arrival track
+      O  ITP wait (s)                = (H - G) * 86400
+                                       ITP init -> ITP starts (resource alloc + travel)
+      P  ITP duration (s)            = (I - H) * 86400
+      Q  PushOff wait (s)            = (K - J) * 86400
+                                       PushOff init -> PushOff starts (workers + passage)
+      R  PushOff duration (s)        = (L - K) * 86400
+      S  Total in arrival yard (s)   = (L - F) * 86400
+                                       At arrival track -> PushOff ends
+      T  Total in system (s)         = (L - D) * 86400
+                                       Entry -> PushOff ends
+    "Wait" columns measure the gap between request submission and
+    work actually commencing. "Duration" columns measure the work
+    itself. Queue wait is pure entry-queue time (legacy Trains (raw)
+    conflated that with the arrival drive because Arrival drive start
+    wasn't a separate column then). All eight are Excel formulas, so
+    edits to the date cells auto-propagate. Freeze pane shifts to D
+    (ID + Length + Track stay pinned).
+
+  24.2 Outbound Trains — added Track + 6 derived columns
+    The sheet expands from 9 to 16 columns. Identity block grows from
+    A-C (ID + Destination + Length) to A-D (... + Track). Track is the
+    classification track the OBT formed on, read from
+    entities.outboundTrains[id].trackId (the C# logger already writes
+    it; parse_outbound_trains just had to pull it). New derived columns
+    at K-P:
+      K  OBTP wait (s)               = (F - E) * 86400
+                                       OBTP init -> OBTP starts (workers + train loco)
+      L  OBTP duration (s)           = (G - F) * 86400
+      M  Pre-DEPD wait (s)           = (H - G) * 86400
+                                       OBTP ends -> DEPD init (usually ~0)
+      N  DEPD gate wait (s)          = (I - H) * 86400
+                                       DEPD init -> DEPD starts (exit gate wait)
+      O  DEPD duration (s)           = (J - I) * 86400
+      P  Total on classification track (s) = (J - E) * 86400
+                                       OBTP init -> DEPD ends
+    "OBTP init" is the right anchor for the total-on-classification-track
+    metric because CreateOutboundTrain in ClassificationCU runs
+    RequestOutboundTrainPreparation synchronously, so OBTP init ≈ the
+    moment the OBT first exists as an entity. "DEPD gate wait" is the
+    headline bottleneck metric given exitGateCount = 1: it captures the
+    period the OBT was ready to leave but stuck on the single exit gate.
+
+  24.3 Wagon Groups — added 2 yard-time columns
+    The sheet expands from 12 to 14 columns. Two new Excel-formula
+    columns at M-N:
+      M  Time in arrival yard (s)        = (G - E) * 86400
+                                           At arrival track -> PushOffDrive ends
+      N  Time in classification yard (s) = (L - G) * 86400
+                                           PushOffDrive ends -> Departure drive ends
+    PushOffDrive ends doubles as the WG's arrival-on-classification-track
+    moment, so it cleanly anchors both deltas.
+
+  24.4 Trains (raw) sheet removed
+    Every column it carried is now expressed (often more cleanly) on the
+    Incoming Trains sheet. Specifically:
+      * TrainId / Length / Track / lifecycle timestamps  -> Incoming Trains A-L
+      * Queue Wait / Pre-ITP Wait / ITP Duration /       -> Incoming Trains M-R
+        Pre-PushOff Wait / PushOff Duration
+      * Total in Arrival Yard / Total in System          -> Incoming Trains S-T
+    The hh:mm:ss / minute renderings of "Total in System" were dropped
+    on purpose — pretty-printing seconds in Excel is a one-second job
+    (custom format `[h]:mm:ss` on a copy of the column), and the
+    duplicate columns added clutter that competed with the actual data.
+    parse_train_timeline still exists; it's consumed by the console
+    preview block at the end of main() (Train timeline (s): table to
+    stdout) and could be retired separately if that block goes too.
+    Removed:
+      * build_trains_raw_sheet  (function definition + main() call)
+
+  24.5 Files touched
+    Output/analytics.py            - parse_incoming_trains gained an
+                                     AssignedArrivalTrack branch;
+                                     parse_outbound_trains pulls trackId
+                                     from the entity dict;
+                                     build_incoming_trains_sheet,
+                                     build_outbound_trains_sheet,
+                                     build_wagon_groups_sheet rewritten
+                                     with the expanded layouts; the
+                                     build_trains_raw_sheet function and
+                                     its main() call removed.
+    Other files/Documentation.txt  - this entry.
+
+  Sheet inventory after the change (8 tabs, in display order):
+    Definitions, Incoming Trains, Wagon Groups, Outbound Trains,
+    WG Yard Times, Activities (raw), OBTs (raw), WGs (raw).
+
+  Verifying: re-run the sim, then python Output/analytics.py. The
+  workbook should show 8 tabs, none called Trains (raw). Open Incoming
+  Trains, pick any train, walk M-T left-to-right: each "wait" column
+  should be the gap before the matching activity starts, each
+  "duration" column the activity's elapsed time, "Total in arrival
+  yard" should roughly equal arrival drive + ITP wait + ITP dur +
+  PushOff wait + PushOff dur, and "Total in system" should equal Queue
+  wait + Arrival drive dur + Total in arrival yard.
+
+[25] Supervisor deliverables: KPI consolidation, joint-driven ITP,
+     Drive Stats sheet, WG classification-dwell breakdown
+  Four deliverables from the supervisor meeting, all in one push because
+  they touch overlapping pieces of the analytics pipeline.
+
+  25.1 Definitions sheet rewritten to match the current 8-sheet workbook
+    The Definitions sheet had been stale since entry [23] removed
+    Throughput / Process Durations / Train Timeline / OBT Formation.
+    Rewritten to be the workbook's KPI dictionary:
+      * "Sheets overview" — what each of the 8 current tabs is for.
+      * "Incoming Trains KPIs" — every derived column M-T on the
+        Incoming Trains sheet (Queue wait, Arrival drive duration,
+        ITP wait/duration, PushOff wait/duration, Total in arrival
+        yard, Total in system), with the exact Excel formula
+        (= (Y − X) × 86400) and a plain-English definition.
+      * "Wagon Groups KPIs" — M (Time in arrival yard) and
+        N (Time in classification yard).
+      * "Outbound Trains KPIs" — K-P (OBTP wait/duration,
+        Pre-DEPD wait, DEPD gate wait, DEPD duration, Total on
+        classification track).
+      * "Activities (raw) reference" — what each column is and where
+        the static distance maps for the From/To/Drive-length columns
+        live (ported from C# Models/*.cs).
+      * "Activity type glossary" — ARRD / ITP / SEC / COP / PO / POD /
+        OBTP / DEPD.
+      * "WG → OBT matching" — the track + time-window heuristic.
+    Each row links to the responsible Python function so the doc and
+    code stay in lock-step.
+
+  25.2 ITP duration formula now driven by separation joints
+    Old formula (length × constant × worker_multiplier):
+      duration_s = trainLength × 7 × averageWorkerMultiplier
+    This was purely length-driven, so a 200 m train going to one
+    destination took the same ~23 minutes as a 200 m train sorted
+    into 5 destinations — which doesn't match reality. Workers in
+    real life prepare each separation point (loosen couplings,
+    brake lines) before push-off, so the number of separation joints
+    is the main driver of work time.
+    New formula:
+      effective_joints = max(separation_joints, 1)
+      duration_s = effective_joints
+                   × BASE_SECONDS_PER_JOINT      (= 120 s)
+                   × (trainLength / REF_LENGTH_M) (= length / 100)
+                   × averageWorkerMultiplier
+    A separation joint = (number of consecutive same-destination
+    cuts produced by sorting) − 1. So a train all going to one
+    destination has 0 joints (floored to 1 — even a single-destination
+    train needs the loco-decouple + brake-check work that takes
+    roughly one joint's time). A train sorted into 3 cuts has
+    2 joints. Sample durations with the chosen constants:
+      0 joints / 100 m / mult 1.0 →   2.0 min  (1 × 120 × 1.0 × 1.0)
+      0 joints / 200 m / mult 1.0 →   4.0 min  (1 × 120 × 2.0 × 1.0)
+      1 joint  / 100 m / mult 1.0 →   2.0 min  (1 × 120 × 1.0 × 1.0)
+      2 joints / 200 m / mult 1.0 →   8.0 min  (2 × 120 × 2.0 × 1.0)
+      3 joints / 250 m / mult 1.0 →  15.0 min  (3 × 120 × 2.5 × 1.0)
+      4 joints / 300 m / mult 1.0 →  24.0 min  (4 × 120 × 3.0 × 1.0)
+    BASE_SECONDS_PER_JOINT and REF_LENGTH_M are named constants in
+    Models/ManipulationActivity.cs — tune either to recalibrate
+    without changing formula shape.
+
+    Implementation:
+      * Control/ArrivalControlUnit.cs gained ComputeSeparationJoints(train)
+        — a single fold over the train's WG list counting consecutive
+        same-destination transitions. Called right after RunSortingMethod
+        (the cuts are determined by sort output). Result stored per
+        train id in a new _trainSeparationJoints dict; pulled out in
+        RequestTrainPreparation and passed as a new optional
+        constructor parameter to ManipulationActivity.
+      * Models/ManipulationActivity.cs grew a SeparationJoints property
+        and the new BASE_SECONDS_PER_JOINT / REF_LENGTH_M constants.
+        Its constructor passes "joints=N" through to the base Activity
+        constructor's new optional extraDetails parameter, so the
+        Submitted event in the JSON log carries the joint count
+        (visible in Activities (raw) as part of the details column —
+        not yet a dedicated column, follow-up below).
+      * Models/Activity.cs: CalculateDuration is now virtual, and the
+        base constructor accepts an optional extraDetails string that
+        gets appended to the Submitted-event details (separator is ";").
+      * ManipulationActivity.CalculateDuration overrides the base for
+        ActivityType == "IncomingTrainPreparation", applying the
+        joint-driven formula. Every other manipulation type
+        (Securing, Coupling, Uncoupling, PushOff) falls through to
+        base.CalculateDuration unchanged.
+
+    Joint visibility in analytics: Output/analytics.py
+    parse_activity_durations doesn't yet promote "joints" to a
+    top-level field, so it currently lives in the Submitted-event
+    details string (e.g. "entity=12001;length=224.0;...;joints=3").
+    Promoting it to a named column on Activities (raw) is a small
+    follow-up if the supervisor wants to see it without parsing.
+
+  25.3 New "Drive Stats" sheet (tab #5, after Outbound Trains)
+    Aggregates the three driving activity types (ArrivalDrive,
+    DepartureDrive, PushOffDrive) by (ActivityType × From → To) — so
+    e.g. "ArrivalDrive on track 703" gets one row with count + mean,
+    min, max for distance, duration, and derived speed, and
+    "PushOffDrive from 703 to 615" gets another. Column layout:
+      A Activity type      B From          C To            D Count
+      E-G Mean / Min / Max Dist (m)
+      H-J Mean / Min / Max Duration (s)
+      K-M Mean / Min / Max Speed (km/h)
+      N   Speed std (km/h)
+    Speed (km/h) is computed per-instance as
+    distance_m / duration_s × 3.6, then averaged — so the mean isn't
+    biased by mean(distance) / mean(duration).
+    Parser: parse_drive_stats(activities) in Output/analytics.py;
+    consumes the activities list from parse_activity_durations
+    (which already attaches fromLocation / toLocation / driveLength
+    via the static distance maps).
+    Builder: build_drive_stats_sheet at tab position 4.
+    Freeze pane at column E (ID columns A-D stay visible while
+    scrolling stats), auto-filter on, distances and durations
+    formatted "0.00", speeds "0.0".
+
+  25.4 Wagon Groups: classification-dwell phase breakdown
+    Three new columns at the end of the Wagon Groups sheet, aimed at
+    the user's own investigation of long classification-yard dwells.
+      O OBTP init (raw timestamp; anchors column P)
+      P Sibling wait (s)            = (O − G) × 86400
+                                      OBTP_init − PushOffDriveEnds
+      Q Post-OBTP wait + DEPD (s)   = (L − J) × 86400
+                                      DepartureDriveEnds − OBTP_ends
+    Interpretation:
+      * Column N (existing) is the total classification-yard time.
+      * Column P is the time the WG sat waiting for sibling WGs to
+        accumulate so the OBT could form. This is the natural suspect
+        for long dwells (inbound train carrying the next sibling hadn't
+        arrived yet). If P is the dominant share of N, the dwell is
+        legitimate sim logic.
+      * Column Q is the time from OBT committed to physically gone
+        (exit-gate wait + DEPD drive). If Q is unexpectedly large for
+        an otherwise short-sibling-wait WG, that's an exit-gate
+        contention issue rather than a bug.
+      * The middle slice (OBTP wait + OBTP duration) isn't broken out
+        as its own column; it equals N − P − Q.
+    Implementation:
+      * parse_wagon_groups now takes outbound_trains as a 4th
+        optional param. The obtpInit values come from
+        parse_outbound_trains output (which captures Submitted
+        ActivityEvents); parse_obts_and_wgs only sees OBTPStarted
+        train events, so it can't supply obtpInit.
+      * main() reordered to call parse_outbound_trains BEFORE
+        parse_wagon_groups so the data flow lines up.
+      * The two yard-time formula columns (M, N) are unchanged in
+        position; the three new diagnostic columns are appended at
+        the right edge to avoid shifting any existing letter
+        references.
+
+  25.5 Files touched
+    Control/ArrivalControlUnit.cs   - ComputeSeparationJoints helper +
+                                      _trainSeparationJoints dict +
+                                      pass-through to ManipulationActivity.
+    Models/Activity.cs              - CalculateDuration now virtual;
+                                      base constructor accepts extraDetails.
+    Models/ManipulationActivity.cs  - SeparationJoints property; new
+                                      ITP-specific CalculateDuration
+                                      override; BASE_SECONDS_PER_JOINT /
+                                      REF_LENGTH_M constants.
+    Output/analytics.py             - Definitions sheet rewritten;
+                                      parse_drive_stats + build_drive_stats_sheet
+                                      added; parse_wagon_groups extended
+                                      (takes outbound_trains, stitches
+                                      obtpInit); build_wagon_groups_sheet
+                                      grew 3 dwell-breakdown columns.
+    Other files/Documentation.txt   - this entry.
+
+  Sheet inventory after the change (9 tabs, in display order):
+    Definitions, Incoming Trains, Wagon Groups, Outbound Trains,
+    Drive Stats, WG Yard Times, Activities (raw), OBTs (raw), WGs (raw).
+
+  Verifying:
+    * dotnet build the C# side. Re-run the sim.
+    * Console output around each train arrival should now print a
+      "train X has N separation joint(s)" line.
+    * In SimulationLog.json, ITP activity Submitted events should
+      have a "joints=N" suffix on the details field.
+    * In SimulationAnalytics.xlsm:
+        - Definitions tab: matches current 8-sheet workbook.
+        - Incoming Trains "ITP duration (s)" column: should now scale
+          roughly with the joint count for the train, not just length.
+        - Drive Stats tab: should show one row per (type × from × to)
+          combo with sensible km/h speeds (PushOffDrive ~15 km/h,
+          ARRD/DEPD ~20 km/h).
+        - Wagon Groups: columns N, P, Q should roughly satisfy
+          P + (something) + Q ≈ N for every row.
+
+  Follow-up (deferred):
+    * Promote "joints" from the Submitted-event details string to a
+      dedicated column on Activities (raw). Cheap parser change, but
+      the data is already accessible via Find-in-cell on the details
+      column for now.
+    * The supervisor mentioned "averages or something to present" for
+      drive stats — Drive Stats currently shows per-track-pair rows.
+      An aggregate per-type row at the top of each section
+      (ArrivalDrive OVERALL, PushOffDrive OVERALL, DepartureDrive
+      OVERALL) is an easy next step if he wants a single-glance number.
+
+[26] Universal cosmetic layout + VBA Drive Length vs Duration chart
+  Two small-but-spread cosmetic / presentation changes that touch every
+  sheet in the workbook plus add one new VBA plot module.
+
+  26.1 Universal cosmetic layout helper
+    Pre-change each build_*_sheet had its own column-width dict, its own
+    alignment loop, and the header used left-aligned text with default
+    row height. The result felt inconsistent — header heights varied,
+    timestamp columns were 19-22 wide on some sheets and 14 on others,
+    etc. The supervisor's pass-over wanted a tighter uniform look.
+    New rule: every sheet shares ONE layout function.
+      * _style_header_row updated: row 1 height = 45 pt (3× the default
+        ~15 pt), font kept as the existing FONT_HEADER white-on-navy,
+        alignment = centered both axes + wrap_text on. Long header
+        labels like "Total on classification track (s)" now wrap onto
+        two/three lines instead of clipping at the narrower column
+        widths.
+      * New _apply_universal_layout(ws, timestamp_cols) helper. Walks
+        every data cell (rows 2..end, all columns) and sets alignment
+        to centered both axes (no wrap). Walks every column and sets
+        width to 19.0 if its column letter is in timestamp_cols,
+        otherwise 8.2.
+      * Every build_*_sheet now ends with a single
+        _apply_universal_layout(ws, timestamp_cols=[...]) call, with
+        the per-sheet timestamp column letters baked in:
+            Incoming Trains          D E F G H I J K L
+            Wagon Groups             E F G I J K L O
+            Outbound Trains          E F G H I J
+            Activities (raw)         H I J
+            OBTs (raw)               E F G H I J
+            WGs (raw)                C E F
+            WG Yard Times            C D E F H I J
+            Definitions              (none)
+            Drive Stats              (none)
+        The previous per-sheet "widths = {...}" / explicit
+        ws.column_dimensions[X].width = N blocks are removed.
+
+    Known trade-off — long-id columns now clip:
+      Outbound Trains.ID = OBT060125080530-Vienna at 8.2 width
+      (~60 px) shows as "OBT06012..." with no wrap on data cells. The
+      uniform-grid look was the explicit supervisor preference; if
+      individual columns annoy in practice the workaround is to add
+      that column's letter to the sheet's timestamp_cols list, which
+      pumps it to 19.0 without needing any other change. Header text
+      wraps regardless because of _style_header_row's wrap_text=True.
+
+  26.2 New VBA module: Drive Length vs Duration scatter chart
+    New file Output/vba_modules/Module_PlotDriveActivities.bas.
+    Produces one scatter chart on the existing "Activity Charts
+    (by length)" sheet (created by Module_PlotActivitiesByTrack's
+    PlotActivitiesByLengthGroup, so the new chart sits alongside the
+    8 length-bin charts already there).
+
+    Plot:
+      X axis  Drive length (m)   (from Activities (raw) column G)
+      Y axis  Duration (min)     (from Activities (raw) column L)
+      Three coloured series:
+        ArrivalDrive    -> blue   (46, 134, 222)
+        PushOffDrive    -> orange (252, 162, 17)
+        DepartureDrive  -> green  (46, 204, 113)
+      Per-point persistent data label:
+        "<entityId> (<entityLen>m)" — size-7 grey text positioned
+        above each marker.
+    Hover behaviour:
+      Excel's built-in scatter hover already shows
+      "<series name>, (X, Y)" automatically when the user mouses over
+      a marker — so on hover you get e.g.
+        "PushOffDrive, (412, 2.5)".
+      Combined with the persistent data labels, that gives the
+      "entity id, entity length, drive length, drive duration,
+      activity type" combo the supervisor asked for, without needing
+      a chart event handler (Excel doesn't expose programmable hover
+      tooltips for scatter points).
+
+    Entry points (both runnable from Alt+F8):
+      * PlotDriveLengthVsDuration         — interactive, ends with a
+        completion MsgBox showing per-series point counts.
+      * PlotDriveLengthVsDurationSilent   — no dialog; for the .vbs
+        post-processor pipeline.
+
+    Wired into the silent driver: Module_PlotActivitiesByTrack's
+    PlotAllSilent now also runs PlotDriveLengthVsDurationSilent via
+    Application.Run "Module_PlotDriveActivities.<...>". Wrapped in
+    On Error Resume Next so a missing or not-yet-imported
+    Module_PlotDriveActivities doesn't break the rest of the
+    post-processor.
+
+    Implementation notes:
+      * Required column lookups by name via the existing
+        FindHeader / FindHeaderColumn pattern: ActivityType,
+        ActivityId, Entity, Length (m), Drive length (m),
+        Duration (min). If any of the required three (ActivityType,
+        Drive length, Duration) is missing, the macro shows an error
+        and exits.
+      * Per-series staging columns (X / Y / label) live on the chart
+        sheet at columns AA through AI. Hidden after staging so the
+        user doesn't see them. Cleared and rewritten on each run, so
+        the macro is re-runnable without manual cleanup.
+      * Chart placement: top=1950, width=900, height=520. The
+        existing 8 length-bin charts use width=600, height=460,
+        gap=20, cols=2, so they occupy rows 0..3 of a 4-row grid
+        (top = 10..1850 in steps of 480). Putting the drive chart
+        at top=1950 puts it cleanly below them, no overlap.
+      * File is pure ASCII — VBA imports .bas as Windows-1252, so
+        non-ASCII characters get mangled. The same caveat is noted
+        at the top of Module_PlotActivitiesByTrack.bas.
+
+  26.3 Files touched
+    Output/analytics.py                              - _style_header_row
+                                                       rewritten; new
+                                                       _apply_universal_layout
+                                                       helper; every
+                                                       build_*_sheet now
+                                                       ends with a single
+                                                       helper call instead
+                                                       of a per-sheet
+                                                       widths block.
+    Output/vba_modules/Module_PlotDriveActivities.bas - NEW FILE.
+                                                       PlotDriveLengthVsDuration
+                                                       and silent variant.
+    Output/vba_modules/Module_PlotActivitiesByTrack.bas - PlotAllSilent
+                                                       extended to call
+                                                       the new silent
+                                                       entry point.
+    Other files/Documentation.txt                    - this entry.
+
+  Verifying:
+    * Re-run the sim, then python Output/analytics.py. On Windows the
+      .vbs post-processor will re-import the new .bas (and the
+      updated PlotAllSilent) and re-run PlotAllSilent, generating
+      both the existing 8 length-bin charts AND the new drive-length-
+      vs-duration chart on "Activity Charts (by length)".
+    * Open the workbook. On every sheet the header row should look
+      noticeably taller and wrap any long header text; data cells
+      should be centered; column widths should be 19 (timestamps)
+      or 8.2 (everything else).
+    * Open "Activity Charts (by length)" and scroll down past the 8
+      length-bin charts: the new "Drive activities: drive length vs
+      duration" chart should sit below them with the three coloured
+      series legend at the bottom and small ID labels next to each
+      marker. Hover any marker to see Excel's automatic series-name
+      + (X, Y) tooltip.
+
+  Follow-up (deferred):
+    * If 8.2 width is too tight on the long-id columns (Outbound
+      Trains.ID, Activities (raw).ActivityId, Wagon Groups.Parent
+      outbound train), promote those letters into the per-sheet
+      timestamp_cols list — 1-line change per sheet builder, no
+      formula impact.
+    * The drive-length-vs-duration chart's persistent data labels
+      can clutter when point density is high. A small "show / hide
+      labels" companion macro would let the user toggle them via
+      Alt+F8 rather than going through Excel's chart-elements panel.
+
+[27] Workbook-wide hh:mm:ss + VBA chart fixes + Number of separation
+     joints + unified Activity Charts sheet
+  Cluster of related polish changes from a back-and-forth review pass.
+  All affect the analytics workbook (no C# changes).
+
+  27.1 All durations standardised to hh:mm:ss
+    Pre-change duration columns were a mix:
+      Activities (raw)          three columns: (s), (min), (hh:mm:ss)
+      Incoming Trains M-T       seconds, format "0.00"
+      Outbound Trains K-P       seconds, format "0.00"
+      Wagon Groups M/N/P/Q      seconds, format "0.00"
+      Drive Stats H/I/J         seconds, format "0.00"
+      OBTs (raw) K-N            seconds + a redundant hh:mm:ss view col
+      WGs (raw) G/H             seconds + a redundant hh:mm:ss view col
+      WG Yard Times K/L/M/N     seconds + a redundant hh:mm:ss view
+    Confusing -- some sheets needed mental division by 60 for minutes,
+    some needed division by 86400 for hh:mm:ss, the eye drifted to the
+    wrong column.
+    New rule: every duration in the workbook is rendered in hh:mm:ss.
+      * Formula columns: dropped the "* 86400" so the (Y - X) date
+        subtraction stays in fraction-of-a-day, then formatted the cell
+        as "[h]:mm:ss" (the [h] brackets let it exceed 24h cleanly).
+      * Pre-computed columns (Drive Stats means/mins/maxes,
+        Activities (raw) duration): divided the raw seconds value by
+        86400 in the builder before writing, then formatted as
+        "[h]:mm:ss". Numerically identical to the formula columns.
+      * Activities (raw) consolidated to ONE duration column at K --
+        "Duration (hh:mm:ss)". The legacy (s) and (min) columns are
+        gone.
+      * Redundant "view" columns on OBTs (raw), WGs (raw), WG Yard
+        Times (the ones that recomputed seconds/86400 for display) are
+        gone -- the underlying column is already hh:mm:ss now.
+      * Header text suffix everywhere is "(hh:mm:ss)". Single source
+        of truth for what each cell means.
+      * Definitions sheet updated: "Duration (hh:mm:ss)" KPI replaces
+        the old "Duration (s)" entry, formula references unchanged.
+
+    VBA macros affected:
+      * Module_PlotActivitiesByTrack looks up the duration column by
+        header name (FindHeaderColumn). Header lookup chain now tries
+        "Duration (hh:mm:ss)" first, falling back to "Duration (min)"
+        / "Duration (s)" for back-compat with older workbooks. Y axis
+        title changed to "Duration (hh:mm:ss)", and y-axis
+        TickLabels.NumberFormat set to "[h]:mm:ss" so the axis
+        renders as time values.
+      * Module_PlotDriveActivities: same header-lookup chain, same
+        Y-axis format.
+
+  27.2 VBA Drive scatter -- blank-chart bug fix
+    PlotDriveLengthVsDuration v1 produced a blank chart box. Two root
+    causes:
+      * Marker face colour was set via Format.Fill.ForeColor.RGB,
+        which only colours the marker border on XY scatter in many
+        Excel versions. The MarkerBackgroundColor / MarkerForegroundColor
+        legacy properties (used by Module_PlotActivitiesByTrack since
+        the start) reliably colour the FACE. Switched.
+      * ChartType = xlXYScatter was set AFTER calling NewSeries on the
+        chart. ChartObjects.Add starts the chart at xlColumnClustered;
+        NewSeries on that adds a COLUMN series, which then throws
+        "Run-time error 1004: this property is not valid for the
+        current chart type" on s.MarkerStyle. Fixed by setting
+        ChartType FIRST, before clearing default series and adding
+        new ones.
+      * Switched s.XValues / s.Values from Range references to plain
+        VBA arrays -- the proven pattern from Module_PlotActivitiesByTrack
+        BuildChart. Range refs don't paint reliably on XY scatter.
+
+  27.3 Hover-tooltip attempt; reverted to clean chart with no labels
+    Tried a WithEvents class module (cls_DriveChartEvents.cls) that
+    hooked the chart's MouseMove to show a single point's data label
+    on hover (tooltip-style yellow callout) and hide it on the way
+    out. Worked but required:
+      * A class module imported via the .vbs post-processor (run_analytics_post.vbs
+        had to accept .cls files alongside .bas).
+      * A module-level mDriveEvents reference held alive for the
+        workbook session.
+      * Auto_Open in the parent module to re-wire events after each
+        workbook reopen.
+    The user decided the complexity wasn't worth the polish -- Excel's
+    built-in scatter hover already shows "<series name>, (X, Y)" on
+    any marker without code. Reverted:
+      * cls_DriveChartEvents.cls deleted.
+      * Auto_Open, InitDriveChartEvents, mDriveEvents removed from
+        Module_PlotDriveActivities.
+      * run_analytics_post.vbs back to .bas-only import.
+      * AddDriveSeries keeps s.HasDataLabels = False so the chart
+        stays visually clean. Identification on hover relies on
+        Excel's default tooltip.
+
+  27.4 Activities (raw) -- "Number of separation joints" column
+    New 12th column ("L") on Activities (raw):
+      A ActivityType   B ActivityId      C Entity         D Length (m)
+      E From           F To              G Drive length (m)
+      H InitializedAt  I StartedAt       J CompletedAt
+      K Duration (hh:mm:ss)
+      L Number of separation joints     *** NEW ***
+    Populated ONLY for activityType == "IncomingTrainPreparation";
+    blank for every other row. Integer-formatted ("0").
+    Source: parse_activity_durations now also captures "joints=N" out
+    of the Submitted-event details string (the C# ManipulationActivity
+    constructor adds this via the Activity base-class extraDetails
+    parameter, only for ITP). For non-ITP submissions the details
+    don't carry "joints=" so entry["separationJoints"] stays unset,
+    and the builder writes a blank cell.
+
+  27.5 Single unified "Activity Charts" sheet
+    Pre-change the workbook had two parallel chart sheets:
+      "Activity Charts (by track)"   from PlotActivitiesByTrack
+      "Activity Charts (by length)"  from PlotActivitiesByLengthGroup
+    Each held 8 charts (one per activity-type prefix), so 16 charts
+    spread across two sheets, with the choice of grouping per-sheet
+    not per-activity-type. Most charts were redundant: e.g.
+    ArrivalDrive on the "by length" sheet didn't tell the user
+    anything because arrival-drive duration is distance-driven, not
+    length-driven.
+    New layout: ONE sheet called "Activity Charts", 8 charts total,
+    with each activity type getting the grouping mode that matches
+    its dominant duration driver:
+      ArrivalDrive               Track
+      PushOffDrive               Track
+      DepartureDrive             Track
+      IncomingTrainPreparation   Joints   (was Length; see 27.6)
+      PushOff (parent)           Length
+      Securing                   Length
+      Coupling                   Length
+      OutboundTrainPreparation   Length
+    The Drive Length vs Duration scatter from Module_PlotDriveActivities
+    sits below the 8 main charts on the same sheet at top=1950 (the
+    8 main charts occupy a 4-row x 2-col grid at top=10..1850).
+    Implementation:
+      * Module_PlotActivitiesByTrack.bas rewritten. Public entry
+        points PlotActivitiesByTrack / PlotActivitiesByLengthGroup
+        are gone, replaced by PlotActivityCharts and
+        PlotActivityChartsSilent. The internal driver BuildAllCharts
+        takes a per-activity-type mode from a richer prefixes array
+        (prefix, friendly name, group mode).
+      * BuildChart sub gained a joints array parameter and a new
+        "joints" branch that buckets points by integer joint count
+        with labels like "0 joints", "1 joint", "2 joints", "3 joints".
+      * BuildAllCharts also deletes any prior "Activity Charts (by
+        track)" / "Activity Charts (by length)" sheets, so opening
+        an older workbook re-converges to the single new sheet
+        without manual cleanup.
+      * Module_PlotDriveActivities target sheet changed from
+        "Activity Charts (by length)" to "Activity Charts".
+      * PlotAllSilent (used by run_analytics_post.vbs) shrinks to a
+        single BuildAllCharts True call followed by the drive-scatter
+        silent variant -- 16 chart builds collapse to 9.
+
+  27.6 ITP chart colour-coded by separation joints (was: length)
+    With the joint-driven ITP duration formula from entry [25], the
+    by-length grouping became misleading: same-length trains with
+    different sort patterns (different joint counts) showed wildly
+    different durations and weren't visually clustered.
+    New: ITP chart colours markers by the integer joint count read
+    from Activities (raw)!L ("Number of separation joints"). Sample
+    expected output for a run:
+      Series "0 joints"  (single-destination trains)
+      Series "1 joint"
+      Series "2 joints"
+      Series "3 joints"
+      ...
+    Each series is one bucket; legend on the right shows the joint
+    counts in ascending order. The Y axis (Duration) clusters
+    visibly per bucket because the formula
+    `joints * 120 * (length/100) * workerMult` makes joint count the
+    primary driver. Y values within a bucket spread by length and
+    worker speed.
+    Mode-specific chart title suffix:
+      "<friendly> - Duration (hh:mm:ss) vs StartedAt, by separation joints"
+    so the chart text makes the grouping explicit.
+
+  27.7 Files touched
+    Output/analytics.py
+      - hh:mm:ss conversion across every duration column in every
+        sheet builder; redundant view columns dropped; Definitions
+        KPI entry updated.
+      - parse_activity_durations also captures joints=N from
+        Submitted-event details.
+      - build_activities_raw_sheet adds column L "Number of
+        separation joints" (ITP rows only).
+    Output/vba_modules/Module_PlotActivitiesByTrack.bas
+      - Public entry points renamed/simplified
+        (PlotActivityCharts / PlotActivityChartsSilent /
+        PlotAllSilent).
+      - BuildAllCharts replaces PlotActivities; per-type mode in
+        prefixes array; reads Number of separation joints column;
+        BuildChart gains joints array + "joints" group mode.
+      - Y axis formatted as "[h]:mm:ss".
+    Output/vba_modules/Module_PlotDriveActivities.bas
+      - Marker colours via MarkerBackgroundColor /
+        MarkerForegroundColor.
+      - ChartType = xlXYScatter set BEFORE NewSeries calls.
+      - Persistent data labels removed.
+      - Target sheet -> "Activity Charts".
+      - Hover-tooltip class scaffolding added and then reverted.
+    Output/vba_modules/cls_DriveChartEvents.cls
+      - Briefly added; then deleted (see 27.3).
+    Output/run_analytics_post.vbs
+      - Briefly extended to import .cls files; then reverted to
+        .bas-only.
+    Other files/Documentation.txt
+      - this entry.
+
+  Verifying:
+    * Re-run the sim, then python Output/analytics.py.
+    * Open SimulationAnalytics.xlsm. Every duration cell should
+      display hh:mm:ss (or [h]:mm:ss for values >= 24h).
+    * Activities (raw)!L should be populated for IncomingTrainPreparation
+      rows with the integer joint count, and blank for every other
+      activity type.
+    * Single new tab "Activity Charts" should hold 8 per-activity
+      scatters + the drive-length-vs-duration scatter at the bottom.
+      Old "Activity Charts (by track)" / "Activity Charts (by length)"
+      tabs should be gone.
+    * IncomingTrainPreparation chart legend should read "0 joints",
+      "1 joint", "2 joints", ... -- each series should look like a
+      tight horizontal band (since joints is the primary duration
+      driver).
+    * Hover any marker -> Excel's built-in tooltip shows
+      "<series name>, (X, Y)" automatically.
+
+  Follow-up (deferred):
+    * Joints column on Activities (raw) is informational only -- the
+      eight per-type charts use it for the ITP grouping but no other
+      sheet currently surfaces it. Easy add if needed.
+    * Drive Length vs Duration scatter still uses Excel's default
+      hover; if richer per-point labels are wanted later, the
+      WithEvents class approach from 27.3 is the proven path.
+
 14. FILE / MODULE INDEX
 ================================================================================
 

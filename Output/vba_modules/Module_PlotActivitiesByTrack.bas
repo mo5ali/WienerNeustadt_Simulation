@@ -4,56 +4,67 @@ Option Explicit
 ' ---------------------------------------------------------------------------
 ' Activity scatter charts from the "Activities (raw)" sheet.
 '
-' Two entry points (both runnable via Alt+F8):
-'   PlotActivitiesByTrack        - one chart per activity type, points
-'                                  coloured by destination track.
-'   PlotActivitiesByLengthGroup  - one chart per activity type, points
-'                                  coloured by entity-length bucket (5 equal
-'                                  width bins over each chart's own range).
+' All charts land on a single sheet "Activity Charts" -- one chart per
+' activity type, plus the Drive Length vs Duration scatter contributed by
+' Module_PlotDriveActivities.
 '
 ' Each chart:
 '   X axis: StartedAt   (real Excel date serial -> time axis)
-'   Y axis: Duration (min)
+'   Y axis: Duration (hh:mm:ss)
 '
-' Which colouring is meaningful depends on what drives the duration:
-'   - ArrivalDrive duration is driven by per-track distance -> colour by TRACK
-'     makes same-track points cluster at the same Y.
-'   - ITP / Securing / Coupling / OBTP durations are driven by entity LENGTH
-'     -> colour by LENGTH bucket shows the length->duration relationship.
-'   - PushOffDrive / DepartureDrive are fixed -> flat regardless of colour.
+' Marker colour-coding per activity type, chosen so the dominant duration
+' driver is visible at a glance:
+'
+'   ActivityType                 Group by    Why
+'   ---------------------------  ----------  ----------------------------
+'   ArrivalDrive                 Track       distance-driven (per-track)
+'   PushOffDrive                 Track       distance-driven
+'   DepartureDrive               Track       distance-driven
+'   IncomingTrainPreparation     Joints      separation-joint-count-driven
+'                                            (NEW, supersedes length grouping)
+'   PushOff (parent)             Length      length-driven envelope
+'   Securing                     Length      length-driven
+'   Coupling                     Length      length-driven
+'   OutboundTrainPreparation     Length      length-driven
 '
 ' Track id = the last underscore-segment of the ActivityId, e.g.
 '   Act_ARRD_12001_050000_703              -> "703"
 '   Act_OBTP_OBT010125102335-Graz_..._615  -> "615"
+'
+' Entry points (Alt+F8):
+'   PlotActivityCharts        - prompts on completion.
+'   PlotActivityChartsSilent  - silent variant.
+'   PlotAllSilent             - silent driver used by run_analytics_post.vbs;
+'                               builds these charts AND the drive scatter.
 '
 ' NOTE: keep this file PURE ASCII. VBA imports .bas as Windows-1252, so
 ' non-ASCII characters get mangled into garbage on import.
 ' ---------------------------------------------------------------------------
 
 Private Const N_LENGTH_BINS As Long = 5
+Private Const CHARTS_SHEET As String = "Activity Charts"
 
-' IMPORTANT: these public entry points MUST be parameterless. A Sub with any
-' argument -- even an Optional one -- is hidden from the Alt+F8 "Macros"
-' dialog. Keeping them argument-free is what makes them runnable manually.
-
-Public Sub PlotActivitiesByTrack()
-    PlotActivities "track", False
+Public Sub PlotActivityCharts()
+    BuildAllCharts False
 End Sub
 
-Public Sub PlotActivitiesByLengthGroup()
-    PlotActivities "length", False
+Public Sub PlotActivityChartsSilent()
+    BuildAllCharts True
 End Sub
 
-' Silent driver used by run_analytics_post.vbs: builds BOTH chart sheets with
-' no end-of-run MsgBox (a modal dialog would block the hidden Excel COM
-' instance forever and hang the sim run). Also parameterless so the .vbs can
-' invoke it by bare name and so it still shows in Alt+F8 if you want it.
+' Silent driver invoked by run_analytics_post.vbs. Builds the per-activity
+' charts plus the Drive Length vs Duration scatter from
+' Module_PlotDriveActivities, all on the same "Activity Charts" sheet.
+' Wrapped in On Error so a missing Module_PlotDriveActivities doesn't
+' break the whole post-processor.
 Public Sub PlotAllSilent()
-    PlotActivities "track", True
-    PlotActivities "length", True
+    BuildAllCharts True
+    On Error Resume Next
+    Application.Run "Module_PlotDriveActivities.PlotDriveLengthVsDurationSilent"
+    On Error GoTo 0
 End Sub
 
-Private Sub PlotActivities(ByVal groupMode As String, ByVal silent As Boolean)
+Private Sub BuildAllCharts(ByVal silent As Boolean)
     Dim wsData As Worksheet
     On Error Resume Next
     Set wsData = ThisWorkbook.Worksheets("Activities (raw)")
@@ -63,20 +74,21 @@ Private Sub PlotActivities(ByVal groupMode As String, ByVal silent As Boolean)
         Exit Sub
     End If
 
-    Dim colId As Long, colStart As Long, colDurMin As Long, colLen As Long
-    colId     = FindHeaderColumn(wsData, "ActivityId")
-    colStart  = FindHeaderColumn(wsData, "StartedAt")
-    colDurMin = FindHeaderColumn(wsData, "Duration (min)")
+    Dim colId As Long, colStart As Long, colDur As Long
+    Dim colLen As Long, colJoints As Long
+    colId    = FindHeaderColumn(wsData, "ActivityId")
+    colStart = FindHeaderColumn(wsData, "StartedAt")
+    ' Duration column is "Duration (hh:mm:ss)" (fraction-of-day) on the
+    ' current workbook. Falls back to older "Duration (min)" / "Duration (s)"
+    ' headers if someone opens an older workbook.
+    colDur = FindHeaderColumn(wsData, "Duration (hh:mm:ss)")
+    If colDur = 0 Then colDur = FindHeaderColumn(wsData, "Duration (min)")
+    If colDur = 0 Then colDur = FindHeaderColumn(wsData, "Duration (s)")
     colLen    = FindHeaderColumn(wsData, "Length (m)")
-    If colId = 0 Or colStart = 0 Or colDurMin = 0 Then
+    colJoints = FindHeaderColumn(wsData, "Number of separation joints")
+    If colId = 0 Or colStart = 0 Or colDur = 0 Then
         If Not silent Then MsgBox _
-            "Missing required column(s): ActivityId, StartedAt, Duration (min).", _
-            vbCritical
-        Exit Sub
-    End If
-    If groupMode = "length" And colLen = 0 Then
-        If Not silent Then MsgBox _
-            "No 'Length (m)' column found - re-run analytics.py to add it.", _
+            "Missing required column(s): ActivityId, StartedAt, Duration.", _
             vbCritical
         Exit Sub
     End If
@@ -85,42 +97,47 @@ Private Sub PlotActivities(ByVal groupMode As String, ByVal silent As Boolean)
     lastRow = wsData.Cells(wsData.Rows.Count, colId).End(xlUp).Row
     If lastRow < 2 Then Exit Sub
 
-    Dim ids() As Variant, starts() As Variant, durs() As Variant, lens() As Variant
-    ids    = wsData.Range(wsData.Cells(2, colId),     wsData.Cells(lastRow, colId)).Value2
-    starts = wsData.Range(wsData.Cells(2, colStart),  wsData.Cells(lastRow, colStart)).Value2
-    durs   = wsData.Range(wsData.Cells(2, colDurMin), wsData.Cells(lastRow, colDurMin)).Value2
+    Dim ids() As Variant, starts() As Variant, durs() As Variant
+    Dim lens() As Variant, joints() As Variant
+    ids    = wsData.Range(wsData.Cells(2, colId),    wsData.Cells(lastRow, colId)).Value2
+    starts = wsData.Range(wsData.Cells(2, colStart), wsData.Cells(lastRow, colStart)).Value2
+    durs   = wsData.Range(wsData.Cells(2, colDur),   wsData.Cells(lastRow, colDur)).Value2
     If colLen > 0 Then
         lens = wsData.Range(wsData.Cells(2, colLen), wsData.Cells(lastRow, colLen)).Value2
     Else
-        lens = durs   ' unused in track mode; keep shapes aligned
+        lens = durs   ' unused outside "length" mode; keep shapes aligned
     End If
-
-    Dim sheetName As String
-    If groupMode = "length" Then
-        sheetName = "Activity Charts (by length)"
+    If colJoints > 0 Then
+        joints = wsData.Range(wsData.Cells(2, colJoints), wsData.Cells(lastRow, colJoints)).Value2
     Else
-        sheetName = "Activity Charts (by track)"
+        joints = durs   ' unused outside "joints" mode; keep shapes aligned
     End If
 
-    Dim wsOut As Worksheet
+    ' Replace any prior copy of the unified charts sheet, plus tidy up
+    ' the legacy split sheets so old workbooks converge to the new layout.
     Application.DisplayAlerts = False
     On Error Resume Next
-    ThisWorkbook.Worksheets(sheetName).Delete
+    ThisWorkbook.Worksheets(CHARTS_SHEET).Delete
+    ThisWorkbook.Worksheets("Activity Charts (by track)").Delete
+    ThisWorkbook.Worksheets("Activity Charts (by length)").Delete
     On Error GoTo 0
     Application.DisplayAlerts = True
-    Set wsOut = ThisWorkbook.Worksheets.Add(After:=wsData)
-    wsOut.Name = sheetName
 
+    Dim wsOut As Worksheet
+    Set wsOut = ThisWorkbook.Worksheets.Add(After:=wsData)
+    wsOut.Name = CHARTS_SHEET
+
+    ' Per-activity-type prefix, friendly name, and group mode.
     Dim prefixes As Variant
     prefixes = Array( _
-        Array("Act_ARRD_", "ArrivalDrive"), _
-        Array("Act_ITP_",  "IncomingTrainPreparation"), _
-        Array("Act_PO_",   "PushOff (parent)"), _
-        Array("Act_POD_",  "PushOffDrive"), _
-        Array("Act_SEC_",  "Securing"), _
-        Array("Act_COP_",  "Coupling"), _
-        Array("Act_OBTP_", "OutboundTrainPreparation"), _
-        Array("Act_DEPD_", "DepartureDrive") _
+        Array("Act_ARRD_", "ArrivalDrive",             "track"), _
+        Array("Act_ITP_",  "IncomingTrainPreparation", "joints"), _
+        Array("Act_PO_",   "PushOff (parent)",         "length"), _
+        Array("Act_POD_",  "PushOffDrive",             "track"), _
+        Array("Act_SEC_",  "Securing",                 "length"), _
+        Array("Act_COP_",  "Coupling",                 "length"), _
+        Array("Act_OBTP_", "OutboundTrainPreparation", "length"), _
+        Array("Act_DEPD_", "DepartureDrive",           "track") _
     )
 
     Const CHART_W As Long = 600
@@ -137,8 +154,10 @@ Private Sub PlotActivities(ByVal groupMode As String, ByVal silent As Boolean)
         Dim cLeft As Single, cTop As Single
         cLeft = 10 + cIdx * (CHART_W + CHART_GAP)
         cTop = 10 + rIdx * (CHART_H + CHART_GAP)
-        BuildChart wsOut, CStr(prefixes(i)(0)), CStr(prefixes(i)(1)), groupMode, _
-                   ids, starts, durs, lens, cLeft, cTop, CHART_W, CHART_H
+        BuildChart wsOut, _
+                   CStr(prefixes(i)(0)), CStr(prefixes(i)(1)), CStr(prefixes(i)(2)), _
+                   ids, starts, durs, lens, joints, _
+                   cLeft, cTop, CHART_W, CHART_H
     Next i
     Application.ScreenUpdating = True
 
@@ -146,18 +165,19 @@ Private Sub PlotActivities(ByVal groupMode As String, ByVal silent As Boolean)
         wsOut.Activate
         wsOut.Cells(1, 1).Select
         MsgBox "Created " & (UBound(prefixes) + 1) & " charts on '" & _
-               sheetName & "'.", vbInformation
+               CHARTS_SHEET & "'.", vbInformation
     End If
 End Sub
 
 Private Sub BuildChart(wsOut As Worksheet, prefix As String, friendly As String, _
     groupMode As String, _
-    ids() As Variant, starts() As Variant, durs() As Variant, lens() As Variant, _
+    ids() As Variant, starts() As Variant, durs() As Variant, _
+    lens() As Variant, joints() As Variant, _
     chartLeft As Single, chartTop As Single, chartW As Long, chartH As Long)
 
     Dim n As Long: n = UBound(ids, 1)
 
-    ' Pass 1: collect matching rows; in length mode find min/max length.
+    ' Pass 1: collect matching rows; in length mode also find min/max.
     Dim matched As Collection: Set matched = New Collection
     Dim minLen As Double, maxLen As Double, haveLen As Boolean
     minLen = 1E+30: maxLen = -1E+30: haveLen = False
@@ -192,7 +212,22 @@ Private Sub BuildChart(wsOut As Worksheet, prefix As String, friendly As String,
             ord = LengthBinIndex(lens(r, 1), minLen, maxLen)
             key = Format(ord, "00")           ' numeric-sortable key
             lbl = LengthBinLabel(ord, minLen, maxLen)
+        ElseIf groupMode = "joints" Then
+            ' Group directly by joint count. ITP rows carry an integer in
+            ' the joints column; non-ITP rows have blank cells and end up
+            ' in the "(no joints)" bucket (which shouldn't happen since we
+            ' only use this mode for ITP, but stays defensive).
+            If IsNumeric(joints(r, 1)) Then
+                ord = CLng(joints(r, 1))
+                key = Format(ord, "00")
+                lbl = ord & " joint"
+                If ord <> 1 Then lbl = lbl & "s"
+            Else
+                key = "99"
+                lbl = "(no joints)"
+            End If
         Else
+            ' Track mode (default).
             key = ExtractTrack(actId)
             lbl = "Track " & key
         End If
@@ -207,11 +242,15 @@ Private Sub BuildChart(wsOut As Worksheet, prefix As String, friendly As String,
     Set cht = wsOut.ChartObjects.Add(Left:=chartLeft, Top:=chartTop, _
                                       Width:=chartW, Height:=chartH)
     Dim modeLbl As String
-    If groupMode = "length" Then modeLbl = "by length" Else modeLbl = "by track"
+    Select Case groupMode
+        Case "length": modeLbl = "by length"
+        Case "joints": modeLbl = "by separation joints"
+        Case Else:     modeLbl = "by track"
+    End Select
     With cht.Chart
         .ChartType = xlXYScatter
         .HasTitle = True
-        .ChartTitle.Text = friendly & " - Duration (min) vs StartedAt, " & modeLbl
+        .ChartTitle.Text = friendly & " - Duration (hh:mm:ss) vs StartedAt, " & modeLbl
         .HasLegend = True
         .Legend.Position = xlLegendPositionRight
         Do While .SeriesCollection.Count > 0
@@ -262,7 +301,8 @@ Private Sub BuildChart(wsOut As Worksheet, prefix As String, friendly As String,
     End With
     With cht.Chart.Axes(xlValue)
         .HasTitle = True
-        .AxisTitle.Text = "Duration (min)"
+        .AxisTitle.Text = "Duration (hh:mm:ss)"
+        .TickLabels.NumberFormat = "[h]:mm:ss"
         .HasMajorGridlines = True
         .MajorGridlines.Format.Line.ForeColor.RGB = RGB(220, 220, 220)
     End With

@@ -52,7 +52,7 @@ namespace WienerNeustadtSimulation.Models
         public Action<Activity>? OnReadyToCommence { get; set; }
         public Action<Activity>? OnCompleted { get; set; }
 
-        protected Activity(string activityType, string entityId, double entityLength, string location, string area, string controlUnit, DateTime requestedAt)
+        protected Activity(string activityType, string entityId, double entityLength, string location, string area, string controlUnit, DateTime requestedAt, string? extraDetails = null)
         {
             ActivityType = activityType;
             EntityId = entityId;
@@ -80,13 +80,18 @@ namespace WienerNeustadtSimulation.Models
 
             // Canonical activity lifecycle log: every activity emits Submitted at creation,
             // then Started via MarkCommenced() and Completed via MarkCompleted().
-            // This is the single source of truth for "three timestamps per activity" in the CSV.
+            // This is the single source of truth for "three timestamps per activity" in the log.
+            // Subclasses may inject extra key=value pairs via the optional extraDetails
+            // constructor argument — used by ITP to carry the separation-joint count.
+            var details = $"entity={entityId};length={entityLength:F1};location={location};cu={controlUnit}";
+            if (!string.IsNullOrEmpty(extraDetails))
+                details += ";" + extraDetails;
             SimulationLogger.Instance.LogActivityEvent(
                 ActivityId,
                 ActivityType,
                 requestedAt,
                 status: "Submitted",
-                details: $"entity={entityId};length={entityLength:F1};location={location};cu={controlUnit}"
+                details: details
             );
         }
 
@@ -173,8 +178,12 @@ namespace WienerNeustadtSimulation.Models
             };
         }
 
-        // Calculate duration with worker modifiers
-        public TimeSpan CalculateDuration(Dictionary<string, double> workerMultipliers)
+        // Calculate duration with worker modifiers.
+        // Virtual so subclasses can substitute a different formula —
+        // see ManipulationActivity's override for IncomingTrainPreparation,
+        // which uses the separation-joint-driven model instead of the
+        // length × base-seconds-per-meter model used by every other activity.
+        public virtual TimeSpan CalculateDuration(Dictionary<string, double> workerMultipliers)
         {
             var modifiers = new List<double>();
             foreach (var workerId in AllocatedWorkerIds)

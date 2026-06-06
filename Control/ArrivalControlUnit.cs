@@ -27,6 +27,15 @@ namespace WienerNeustadtSimulation.Control
 
         private readonly Dictionary<string, Dictionary<string, Track>> _trainWagonGroupMaps;
 
+        // Number of separation joints per inbound train, computed once after
+        // RunSortingMethod and consumed by RequestTrainPreparation when it
+        // constructs the ITP activity. A "joint" is a coupling/decoupling
+        // point between two consecutive same-destination cuts — so a train
+        // sorted into 3 cuts (e.g. Vienna|Vienna|Graz|Graz|Linz) has
+        // 3 cuts − 1 = 2 joints. Captures the worker effort of preparing
+        // the train for sorting (more cuts = more places to detach).
+        private readonly Dictionary<string, int> _trainSeparationJoints = new();
+
         public ArrivalControlUnit(
             SimulationEngine engine,
             ClassificationControlUnit classificationControl,
@@ -133,6 +142,9 @@ namespace WienerNeustadtSimulation.Control
                         SimulationLogger.Instance.LogTrainEvent(train.ID, "ArrivedArrivalTrack", _engine.Now, assignedTrack.RealLifeID);
                         var wagonGroupToTrackMap = RunSortingMethod(train);
                         _trainWagonGroupMaps[train.ID] = wagonGroupToTrackMap;
+                        int joints = ComputeSeparationJoints(train);
+                        _trainSeparationJoints[train.ID] = joints;
+                        Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: train {train.ID} has {joints} separation joint(s) (drives ITP duration)");
                         RequestTrainPreparation(train, assignedTrack);
                     },
                     $"ArrivalDriveComplete-{train.ID}"
@@ -260,6 +272,32 @@ namespace WienerNeustadtSimulation.Control
             return freshTrack;
         }
 
+        // Number of separation joints required during ITP, equal to (number
+        // of consecutive same-destination WG cuts) − 1. A train all going to
+        // one destination has 1 cut and 0 joints; alternating destinations
+        // produce one joint per transition. Workers in real life prepare
+        // each joint (loosen couplings, brake lines) before push-off, so
+        // joints drive ITP work time — see ManipulationActivity duration
+        // formula for ITP. WGs with no resolvable destination are skipped
+        // here, mirroring how RunSortingMethod treats them.
+        private int ComputeSeparationJoints(Train train)
+        {
+            int cuts = 0;
+            string? lastDest = null;
+            foreach (var wgId in train.WagonGroupIds)
+            {
+                if (!_wagonGroupData.TryGetValue(wgId, out var wg) || wg == null) continue;
+                var dest = wg.Destination;
+                if (string.IsNullOrEmpty(dest)) continue;
+                if (dest != lastDest)
+                {
+                    cuts++;
+                    lastDest = dest;
+                }
+            }
+            return Math.Max(0, cuts - 1);
+        }
+
         private Dictionary<string, Track> RunSortingMethod(Train train)
         {
             var wagonGroupToTrackMap = new Dictionary<string, Track>();
@@ -340,6 +378,7 @@ namespace WienerNeustadtSimulation.Control
 
         private void RequestTrainPreparation(Train train, Track arrivalTrack)
         {
+            int joints = _trainSeparationJoints.TryGetValue(train.ID, out var j) ? j : 0;
             var prepActivity = new ManipulationActivity(
                 activityType: "IncomingTrainPreparation",
                 entityId: train.ID,
@@ -347,7 +386,8 @@ namespace WienerNeustadtSimulation.Control
                 location: arrivalTrack.RealLifeID,
                 area: arrivalTrack.Area,
                 controlUnit: "ArrivalCU",
-                requestedAt: _engine.Now
+                requestedAt: _engine.Now,
+                separationJoints: joints
             );
 
             var resourceRequest = new ResourceRequest(
