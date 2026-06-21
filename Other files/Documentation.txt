@@ -2475,6 +2475,148 @@ This is the running narrative; new entries are appended as work continues.
   250 WGs, 78 OBTs): all KPI formulas resolve, sample WG idle time
   0:15:17 (plausible), no leftover references to the removed columns.
 
+[30] Wagon Groups "Classification context" column + analytics output moved
+     into the repo
+  Two smaller changes that preceded the cut fix in [31].
+
+  30.1 Classification context narrative column (Wagon Groups sheet)
+    New right-edge column Q "Classification context": one plain-language
+    sentence per WG describing its life on the classification track -- how
+    it joined (secured first, or coupled to the standing rake), the wait
+    before each later cut got coupled, then the OBTP window and departure,
+    e.g. "WG 1204804 entered track and got coupled to cut 1204203+1204204,
+    OBTP started on 13:48:13 finished on 14:32:13 and then left at
+    14:33:31". Built entirely in parse_wagon_groups (no new log fields):
+    it groups a WG's cohort by the cut that shares each SEC/COP event,
+    orders the cuts by SEC/COP completion, and renders wait gaps as
+    H:MM:SS (can exceed 24h) and OBTP/departure as HH:MM:SS clock times. A
+    matching Definitions-sheet row was added; column widened to 100 and
+    left-aligned with wrap.
+
+  30.2 Analytics workbook written into Output/ (repo-visible)
+    OUT_PATH in analytics.py moved from the git-ignored build tree
+    (bin/Debug/net8.0/OutputFiles/) into the tracked Output/ folder
+    (= SCRIPT_DIR), so SimulationAnalytics.xlsx/.xlsm appear in the repo /
+    on GitHub. The INPUT log is still read from the build tree where the
+    C# sim writes SimulationLog.json. run_analytics_post.vbs updated to
+    match (produces/overwrites the .xlsm in Output/, deletes the
+    intermediate .xlsx there).
+
+  30.3 Files touched
+    Output/analytics.py            - OUT_PATH; parse_wagon_groups context
+                                     narrative; build_wagon_groups_sheet
+                                     column Q + width/align; Definitions row.
+    Output/run_analytics_post.vbs  - xlsx/xlsm paths -> Output/.
+    Other files/Documentation.txt  - this entry.
+
+[31] Cut (group of wagon groups / WGG) handled as ONE unit on the
+     classification track -- spurious internal-coupling fix
+  Problem caught from the Classification context column. Two wagon groups
+  (1204203, 1204204) that were adjacent in the same inbound train (12042),
+  shared a destination (Ljubljana), and were therefore pushed together in
+  ONE PushOffDrive, were nonetheless given two separate classification
+  activities on the destination track 625: a Securing for 1204203 (first
+  onto the empty track) and a Coupling for 1204204 (second).
+
+  31.1 Root cause
+    "Cut" defined: a maximal run of CONSECUTIVE same-destination wagon
+    groups within an inbound train -- a group of wagon groups (WGG). The
+    sort leaves a separation joint only BETWEEN cuts (so the ITP joint
+    count is already correct), and PushOff pushes each cut as a single
+    PushOffDrive (entity "wg1+wg2+..."). The members of a cut are never
+    uncoupled from one another, so they are already coupled when they
+    reach the classification track.
+    But ClassificationCU had no concept of a cut. PushOffActivity.
+    OnPushCompleted called HandleWagonGroupArrival once per member WG, and
+    ClassificationCU decided Securing-vs-Coupling per WG ("is the track
+    empty?"). For a 2-WG cut landing on an empty track that produced
+    SEC(first) + COP(second) -- inventing an internal coupling between two
+    groups that were already coupled. Side effects: an extra Coupling per
+    multi-WG cut, inflated coupling counts and worker-time, and -- because
+    SEC and COP run in parallel (the within-track gate only orders the
+    STARTS) with different lengths/durations -- the two members finished
+    at different times, giving them different classification timestamps and
+    a confusing order in the context column (the shorter Coupling completed
+    before the longer Securing).
+
+  31.2 Solution
+    A cut is now handled as a single unit on the classification track:
+      * PushOffActivity.OnPushCompleted builds all of the cut's WagonGroup
+        entities (still logging EntityCreated per WG for the visualizer)
+        and hands the whole cut to the new
+        ClassificationControlUnit.HandleWagonGroupCutArrival(
+        List<WagonGroup>, Track, time) in ONE call.
+      * ClassificationCU runs ONE classification activity per cut: a
+        Securing if the track was empty when the cut arrived, else a
+        Coupling-to-the-standing-rake. The decision is captured at arrival
+        (TrackWasEmpty on the request) so a within-track deferral cannot
+        flip it. The activity entity id is the "+"-joined cut id
+        (Act_SEC_1204203+1204204_...) and its length is the cut total.
+        Per-WG WagonGroupEvents (SecuringRequested/Started/Secured,
+        Coupling...) are still emitted for EACH member so the visualizer
+        lights up the whole cut, and all members share the single
+        activity's completion timestamp.
+      * Per-track bookkeeping (pending-SEC/COP count, within-track FIFO
+        gate, deferred queue) is now keyed per CUT, not per WG. The OBT
+        completion check still waits for the pending count to hit zero.
+    Renames inside ClassificationCU: HandleWagonGroupArrival ->
+    HandleWagonGroupCutArrival; HandleWagonGroupPreparation ->
+    HandleWagonGroupCutPreparation; CommenceAndScheduleActivity ->
+    CommenceAndScheduleCutActivity; CompleteActivity -> CompleteCutActivity
+    (with an idempotency guard); nested WagonGroupPreparationRequest ->
+    WagonGroupCutPreparationRequest (carries the cut list, CombinedId,
+    TotalLength, TrackWasEmpty).
+
+  31.3 Downstream consumers
+    * analytics.py parse_wagon_groups: SEC/COP entity is now split on '+'
+      (as PushOffDrive already was), crediting every member WG with the
+      shared completion time + type and recording the cut membership. The
+      Classification context narrative was rewritten to be cut-aware: WGs
+      in one cut report "got secured/coupled" together, note they were
+      "already coupled ... from the inbound train", share one timestamp,
+      and are never shown coupling to one another. Backward compatible:
+      pre-cut logs have single-id SEC/COP entities, which split() returns
+      as one-element cuts.
+    * SimulationVisualizer.html findWagonGroupsForActivity: splits a
+      "+"-joined SEC/COP entity so the running-activity badge lights up
+      exactly the cut's members instead of the whole track.
+
+  31.4 Effect on KPIs (expected, after re-running the sim)
+    Fewer Coupling activities (only genuine cut-to-rake couplings remain);
+    Securing now scales with cut length. Members of a cut get identical
+    classification timestamps, so the Wagon Groups "Idle time on
+    classification track" and "Time in classification yard" columns become
+    consistent within a cut. Coupling duration is still length-based on the
+    cut total -- a calibration choice that could be revisited (a single
+    cut-to-rake coupling is arguably one interface operation, not length-
+    proportional).
+
+  31.5 Files touched
+    Models/PushOffActivity.cs            - OnPushCompleted builds the cut and
+                                           calls HandleWagonGroupCutArrival.
+    Control/ClassificationControlUnit.cs - cut-based arrival / preparation /
+                                           commence / complete; per-cut gate
+                                           and pending count; cut request class.
+    Output/analytics.py                  - SEC/COP split on '+'; cut-aware
+                                           Classification context narrative.
+    Output/SimulationVisualizer.html     - SEC/COP badge fan-out splits on '+'.
+    Other files/Documentation.txt        - this entry.
+
+  31.6 Verifying
+    * dotnet build (Windows; no .NET in the sandbox where this was written).
+      Re-run the sim to regenerate SimulationLog.json, then
+      python Output/analytics.py.
+    * In the log, each cut should have ONE Securing or Coupling
+      ActivityEvent with a "+"-joined entity (e.g. Act_SEC_1204203+1204204_
+      ...), not one SEC + one COP per member.
+    * Wagon Groups sheet: 1204203 and 1204204 share the same SEC/COP end,
+      and the Classification context reads "... got secured ... (already
+      coupled to WG ... from the inbound train) ...", with no coupling
+      between them.
+    * analytics verified in-process against a synthetic new-format log
+      (combined SEC entity) and confirmed backward-compatible with the
+      existing old-format SimulationLog.json.
+
 
 14. FILE / MODULE INDEX
 ================================================================================

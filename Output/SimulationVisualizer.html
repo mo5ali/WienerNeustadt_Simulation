@@ -2014,6 +2014,16 @@
             const entityId = parts[2];
             const location = parts[parts.length - 1];
 
+            // SEC/COP now target a whole cut (consecutive same-destination WGs
+            // pushed together): entityId is "wg1+wg2+...". Light up exactly the
+            // placed members of the cut rather than falling through to the
+            // whole-track scan (which would stamp bystander WGs from earlier
+            // cuts on the same track).
+            if (entityId.indexOf('+') !== -1) {
+                const members = entityId.split('+').filter(id => placedWagonGroups[id]);
+                if (members.length > 0) return members;
+            }
+
             if (placedWagonGroups[entityId]) return [entityId];
             return findWagonGroupsOnTrack(location);
         }

@@ -573,19 +573,19 @@ def parse_wagon_groups(log_path, trains, obts):
                     entry["pushOffDriveEnd"] = ts
 
         elif activity_type in ("Securing", "Coupling") and status == "Completed":
-            # ActivityId = Act_SEC_<wgId>_<HHMMSS>_<trackId> or
-            # Act_COP_<wgId>_<HHMMSS>_<trackId>. Each SEC/COP activity is
-            # per-WG so there's no "+" splitting. Whichever fires (SEC for
-            # the first WG on a track, COP for the rest), the timestamp
-            # marks the end of the WG's hands-on prep period; from here
-            # until OBTP starts, the WG sits idle.
-            wgid = parts[2]
-            entry = by_wg.setdefault(wgid, {"id": wgid})
-            entry["secCopEnd"] = ts
-            # Remember whether this WG was the first on the track (Securing)
-            # or joined an existing rake (Coupling); drives the narrative
-            # prefix in the Classification context column.
-            entry["secCopType"] = activity_type
+            # SEC/COP now target a whole CUT (consecutive same-destination WGs
+            # pushed together as one PushOffDrive). ActivityId is
+            # Act_SEC_<wg1+wg2+...>_<HHMMSS>_<trackId> or Act_COP_<...>.
+            # Credit every member WG with the shared completion time + type,
+            # and record the cut membership so the narrative can group by cut.
+            # Pre-cut-model logs carry a single id here; split() then yields a
+            # one-element list, so this stays backward compatible.
+            members = parts[2].split("+")
+            for wgid in members:
+                entry = by_wg.setdefault(wgid, {"id": wgid})
+                entry["secCopEnd"] = ts
+                entry["secCopType"] = activity_type
+                entry["cutMembers"] = members
 
     # Stitch OBT-side fields onto each WG.
     for wgid, rec in by_wg.items():
@@ -599,11 +599,12 @@ def parse_wagon_groups(log_path, trains, obts):
 
     # -- Classification context narrative --------------------------------
     # One plain-language sentence per WG describing its life on the
-    # classification track: how it joined (secured first, or coupled to the
-    # sibling already there), the wait before each subsequent sibling got
-    # coupled, then the OBTP window and the departure. Siblings are ordered
-    # by SEC/COP completion. Wait gaps render as H:MM:SS (can exceed 24h);
-    # OBTP/departure render as HH:MM:SS clock times.
+    # classification track. WGs that arrived as one CUT (consecutive same-
+    # destination groups pushed together) share a single Securing or Coupling
+    # and are NEVER coupled to one another -- the sentence says so and gives
+    # them the same classification timestamp. The "siblings" referenced are
+    # CUTS, ordered by SEC/COP completion. Wait gaps render as H:MM:SS (can
+    # exceed 24h); OBTP / departure render as HH:MM:SS clock times.
     def _ctx_dur(delta):
         total = int(round(delta.total_seconds()))
         if total < 0:
@@ -616,32 +617,60 @@ def parse_wagon_groups(log_path, trains, obts):
     def _ctx_clock(dt):
         return dt.strftime("%H:%M:%S") if dt else "?"
 
+    def _ctx_ref(members):
+        # Name a cut in the sentence: a lone WG by id, a multi-WG cut as the
+        # "+"-joined combo.
+        return (f"WG {members[0]}" if len(members) == 1
+                else f"cut {'+'.join(members)}")
+
     by_obt_group = defaultdict(list)
     for rec in by_wg.values():
         obtid = rec.get("parentOutboundTrain")
         if obtid:
             by_obt_group[obtid].append(rec)
 
-    for obtid, sibs in by_obt_group.items():
-        # Order siblings by SEC/COP completion; any missing it sink to the end.
-        sibs.sort(key=lambda r: (r.get("secCopEnd") is None,
-                                 r.get("secCopEnd") or datetime.max))
-        for i, rec in enumerate(sibs):
+    for obtid, member_recs in by_obt_group.items():
+        # Collapse this OBT's WGs into cuts (one SEC/COP each), keyed by the
+        # frozen cut-membership list, then order the cuts by completion time.
+        cuts = {}
+        for rec in member_recs:
+            cm = rec.get("cutMembers")
+            if not cm or rec.get("secCopEnd") is None:
+                continue
+            key = tuple(cm)
+            if key not in cuts:
+                cuts[key] = {"members": list(cm),
+                             "type": rec.get("secCopType"),
+                             "end": rec.get("secCopEnd")}
+        ordered = sorted(cuts.values(), key=lambda c: c["end"])
+        idx_of = {}
+        for i, c in enumerate(ordered):
+            for m in c["members"]:
+                idx_of[m] = i
+
+        for rec in member_recs:
             wg_i = rec.get("id")
-            ctype = rec.get("secCopType")
-            if ctype == "Coupling" and i > 0:
-                sentence = (f"WG {wg_i} entered track got coupled to "
-                            f"WG {sibs[i-1].get('id')}")
-            elif ctype == "Coupling":
-                sentence = f"WG {wg_i} entered track got coupled"
+            i = idx_of.get(wg_i)
+            if i is None:
+                continue  # no SEC/COP captured for this WG -> leave blank
+            cut = ordered[i]
+            mates = [m for m in cut["members"] if m != wg_i]
+            head = f"WG {wg_i}"
+            if mates:
+                head += (" (already coupled to "
+                         + ", ".join(f"WG {m}" for m in mates)
+                         + " from the inbound train)")
+            if cut["type"] == "Coupling" and i > 0:
+                sentence = head + (" entered track and got coupled to "
+                                   + _ctx_ref(ordered[i-1]["members"]))
+            elif cut["type"] == "Coupling":
+                sentence = head + " entered track and got coupled"
             else:
-                sentence = f"WG {wg_i} entered track got secured"
-            for j in range(i + 1, len(sibs)):
-                prev_end = sibs[j-1].get("secCopEnd")
-                this_end = sibs[j].get("secCopEnd")
-                wait = _ctx_dur(this_end - prev_end) if (prev_end and this_end) else "?"
+                sentence = head + " entered track and got secured"
+            for j in range(i + 1, len(ordered)):
+                wait = _ctx_dur(ordered[j]["end"] - ordered[j-1]["end"])
                 sentence += (f" then waited {wait} for "
-                             f"WG {sibs[j].get('id')} to get coupled")
+                             f"{_ctx_ref(ordered[j]['members'])} to get coupled")
             sentence += (f", OBTP started on {_ctx_clock(rec.get('obtpStart'))}"
                          f" finished on {_ctx_clock(rec.get('obtpEnd'))}"
                          f" and then left at {_ctx_clock(rec.get('depdEnd'))}")

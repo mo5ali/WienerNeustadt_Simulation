@@ -21,7 +21,7 @@ namespace WienerNeustadtSimulation.Control
         private readonly Dictionary<string, List<WagonGroup>> _wagonGroupsByTrack = new();
         private readonly Dictionary<string, OutboundTrain> _trainsByTrack = new();
 
-        private readonly Queue<WagonGroupPreparationRequest> _preparationRequests = new();
+        private readonly Queue<WagonGroupCutPreparationRequest> _preparationRequests = new();
         private readonly Queue<CompletionCheckRequest> _completionCheckRequests = new();
         private readonly Queue<TrainDepartureRequest> _departureRequests = new();
 
@@ -33,22 +33,23 @@ namespace WienerNeustadtSimulation.Control
         // preserving arrival order regardless of resource availability or worker
         // travel-time variance.
         private readonly Dictionary<string, bool> _hasLiveSecCopByTrack = new();
-        private readonly Dictionary<string, Queue<WagonGroupPreparationRequest>> _deferredPrepsByTrack = new();
+        private readonly Dictionary<string, Queue<WagonGroupCutPreparationRequest>> _deferredPrepsByTrack = new();
 
         // Tracks for which DestinationCommittedToOutbound has already been
-        // fired (early, on threshold-crossing in HandleWagonGroupArrival, or
+        // fired (early, on threshold-crossing in HandleWagonGroupCutArrival, or
         // late, in CreateOutboundTrain). Prevents double-firing the event
         // for the same track and lets CreateOutboundTrain skip its own emit
         // when the early signal already fired.
         private readonly HashSet<string> _committedTracks = new();
 
         // Number of SEC/COP activities still pending or running per track —
-        // i.e. WGs that have arrived but not yet finished their per-WG prep.
-        // Incremented in HandleWagonGroupArrival, decremented in
-        // CompleteActivity. HandleCompletionCheck only allows OBT creation
-        // when this count hits zero so an OBT can never include a WG whose
-        // SEC/COP is still in flight (the bug that caused 1100402's badge
-        // to flip from "Coupling" back to "Waiting" mid-OBTP).
+        // now counted per CUT (a cut = one PushOffDrive's worth of consecutive
+        // same-destination WGs), not per WG, since each cut produces exactly
+        // one Securing or Coupling. Incremented in HandleWagonGroupCutArrival,
+        // decremented in CompleteCutActivity. HandleCompletionCheck only allows
+        // OBT creation when this count hits zero so an OBT can never include a
+        // cut whose SEC/COP is still in flight (the bug that caused 1100402's
+        // badge to flip from "Coupling" back to "Waiting" mid-OBTP).
         private readonly Dictionary<string, int> _pendingSecCopCountByTrack = new();
 
         // Fired the moment an OutboundTrain is created on a classification track —
@@ -75,18 +76,32 @@ namespace WienerNeustadtSimulation.Control
 
         // ─── Request queue structures ──────────────────────────────────────────
 
-        public class WagonGroupPreparationRequest
+        // One classification request per CUT (a group of consecutive same-
+        // destination wagon groups pushed together in one PushOffDrive). The
+        // whole cut is secured or coupled as a single unit.
+        public class WagonGroupCutPreparationRequest
         {
-            public WagonGroup WagonGroup { get; set; }
-            public Track Track { get; set; }  // ADD: Track reference
+            public List<WagonGroup> Cut { get; set; }
+            public Track Track { get; set; }
             public DateTime RequestedAt { get; set; }
 
-            public WagonGroupPreparationRequest(WagonGroup wagonGroup, Track track, DateTime requestedAt)
+            // True if the destination track held no wagon groups at the moment
+            // this cut arrived → the cut gets Secured. False → it Couples to the
+            // standing rake. Captured at arrival time (before the cut's WGs are
+            // added to the track) so deferral can't change the decision.
+            public bool TrackWasEmpty { get; set; }
+
+            public WagonGroupCutPreparationRequest(List<WagonGroup> cut, Track track, DateTime requestedAt)
             {
-                WagonGroup = wagonGroup;
-                Track = track;  // ADD
+                Cut = cut;
+                Track = track;
                 RequestedAt = requestedAt;
             }
+
+            // Combined entity id, e.g. "1204203+1204204" (matches the
+            // PushOffDrive convention so downstream parsers split on '+').
+            public string CombinedId => string.Join("+", Cut.Select(w => w.Id));
+            public double TotalLength => Cut.Sum(w => w.Length);
         }
 
         public class CompletionCheckRequest
@@ -115,40 +130,46 @@ namespace WienerNeustadtSimulation.Control
 
         // ─── Wagon Group Arrival ────────────────────────────────────────────────
 
-        public void HandleWagonGroupArrival(WagonGroup wagonGroup, Track classificationTrack, DateTime time)
+        public void HandleWagonGroupCutArrival(List<WagonGroup> cut, Track classificationTrack, DateTime time)
         {
             var trackId = classificationTrack.RealLifeID;
 
             if (!_wagonGroupsByTrack.ContainsKey(trackId))
                 _wagonGroupsByTrack[trackId] = new List<WagonGroup>();
 
-            _wagonGroupsByTrack[trackId].Add(wagonGroup);
-            _wagonGroupTracks[wagonGroup.Id] = classificationTrack;  // Track the wagon group's track
+            // Decide SEC vs COP for the WHOLE cut up-front: was the track empty
+            // (no WGs from earlier cuts/cycles) at the instant this cut arrived?
+            // Captured before we add the cut's own WGs below, and carried on the
+            // request so a deferral can't flip the decision.
+            bool trackWasEmpty = _wagonGroupsByTrack[trackId].Count == 0;
 
-            // Every arrival schedules a SEC or COP (immediately or via the
-            // deferred queue). Bump the per-track pending counter so the
-            // completion check can refuse to mint an OBT until every WG on
-            // the track has finished its prep.
+            foreach (var wagonGroup in cut)
+            {
+                _wagonGroupsByTrack[trackId].Add(wagonGroup);
+                _wagonGroupTracks[wagonGroup.Id] = classificationTrack;
+                // Per-WG arrival event kept so the visualizer/analytics still see
+                // each wagon group land on the track individually.
+                SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "ArrivedClassificationTrack", time, trackId);
+            }
+
+            var combinedId = string.Join("+", cut.Select(w => w.Id));
+            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: cut [{combinedId}] ({cut.Count} WG) arrived at track {trackId}");
+
+            // One pending SEC/COP per CUT — the completion check waits on this
+            // hitting zero before minting the OBT.
             _pendingSecCopCountByTrack[trackId] =
                 (_pendingSecCopCountByTrack.TryGetValue(trackId, out var c) ? c : 0) + 1;
 
-            // ONLY show the newly arrived WG, not all WGs on the track
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: WG {wagonGroup.Id} arrived at track {trackId}");
-            SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "ArrivedClassificationTrack", time, trackId);
-
-            // EARLY commit: the moment this WG's arrival pushes the track over
+            // EARLY commit: the moment this cut's arrival pushes the track over
             // MIN_TRAIN_LENGTH, fire DestinationCommittedToOutbound so ArrivalCU
-            // releases the destination → track binding NOW. Without this, the
-            // event fires only after SEC/COP completes (in CreateOutboundTrain),
-            // and any PushOff that resolves its destination in that window
-            // would still be routed onto this track. CreateOutboundTrain still
-            // builds the actual OBT later, but it skips the duplicate emit.
+            // releases the destination → track binding NOW. (Logic unchanged from
+            // before; just driven by the cut's total contribution.)
             if (!_committedTracks.Contains(trackId))
             {
                 double totalLengthOnTrack = _wagonGroupsByTrack[trackId].Sum(wg => wg.Length);
                 if (totalLengthOnTrack >= MIN_TRAIN_LENGTH)
                 {
-                    var destination = wagonGroup.Destination;
+                    var destination = cut[0].Destination;
                     _committedTracks.Add(trackId);
                     Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} crossed train-length threshold ({totalLengthOnTrack:F0}m >= {MIN_TRAIN_LENGTH:F0}m) — committing destination '{destination}' to outbound (early, before SEC/COP completes)");
                     SimulationLogger.Instance.LogTrainEvent(trackId, "DestinationCommittedEarly", time, $"{destination}|{totalLengthOnTrack:F0}m");
@@ -156,18 +177,21 @@ namespace WienerNeustadtSimulation.Control
                 }
             }
 
-            var prep = new WagonGroupPreparationRequest(wagonGroup, classificationTrack, time);
+            var prep = new WagonGroupCutPreparationRequest(cut, classificationTrack, time)
+            {
+                TrackWasEmpty = trackWasEmpty
+            };
 
             // Within-track FIFO gate: if there's already a SEC/COP submitted for
-            // this track that hasn't started yet, defer this WG until that one
+            // this track that hasn't started yet, defer this cut until that one
             // commences. Otherwise mark the track as having a live request and
             // submit immediately.
             if (_hasLiveSecCopByTrack.TryGetValue(trackId, out var hasLive) && hasLive)
             {
                 if (!_deferredPrepsByTrack.ContainsKey(trackId))
-                    _deferredPrepsByTrack[trackId] = new Queue<WagonGroupPreparationRequest>();
+                    _deferredPrepsByTrack[trackId] = new Queue<WagonGroupCutPreparationRequest>();
                 _deferredPrepsByTrack[trackId].Enqueue(prep);
-                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: WG {wagonGroup.Id} deferred on track {trackId} — waiting for the earlier WG's SEC/COP to start");
+                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: cut [{combinedId}] deferred on track {trackId} — waiting for the earlier cut's SEC/COP to start");
                 return;
             }
 
@@ -178,25 +202,31 @@ namespace WienerNeustadtSimulation.Control
 
         // ─── Wagon Group Preparation ────────────────��──────────────────────────
 
-        private void HandleWagonGroupPreparation(WagonGroupPreparationRequest request, DateTime time)
+        private void HandleWagonGroupCutPreparation(WagonGroupCutPreparationRequest request, DateTime time)
         {
-            var wagonGroup = request.WagonGroup;
+            var cut = request.Cut;
             var track = request.Track;
             var trackId = track.RealLifeID;
+            var combinedId = request.CombinedId;
+            var totalLength = request.TotalLength;
 
             Activity activity;
 
-            bool isTrackEmpty = !_wagonGroupsByTrack.ContainsKey(trackId) || _wagonGroupsByTrack[trackId].Count == 1;
-
-            if (isTrackEmpty)
+            // SEC if the track was empty when the cut arrived (first cut on the
+            // track this cycle); COP if the cut joins a standing rake. Either way
+            // ONE activity for the whole cut — the wagon groups inside the cut are
+            // already coupled to one another from the inbound train, so no
+            // internal coupling is modelled.
+            if (request.TrackWasEmpty)
             {
-                var activityIdPreview = $"Act_SEC_{wagonGroup.Id}_{time:HHmmss}_{trackId}";
-                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} is EMPTY → initialize {activityIdPreview}");
-                SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "SecuringRequested", time);
+                var activityIdPreview = $"Act_SEC_{combinedId}_{time:HHmmss}_{trackId}";
+                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} is EMPTY → securing cut {activityIdPreview}");
+                foreach (var wg in cut)
+                    SimulationLogger.Instance.LogWagonGroupEvent(wg.Id, "SecuringRequested", time);
 
                 activity = new SecuringActivity(
-                    wagonGroup.Id,
-                    wagonGroup.Length,
+                    combinedId,
+                    totalLength,
                     trackId,
                     "Classification",
                     "ClassificationCU",
@@ -205,16 +235,14 @@ namespace WienerNeustadtSimulation.Control
             }
             else
             {
-                var existingTrain = _trainsByTrack.ContainsKey(trackId) ? _trainsByTrack[trackId] : null;
-                string couplingToId = existingTrain?.Id ?? "existing-wgs";
-
-                var activityIdPreview = $"Act_COP_{wagonGroup.Id}_{time:HHmmss}_{trackId}";
-                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} has WGs → initialize {activityIdPreview}");
-                SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "CouplingRequested", time);
+                var activityIdPreview = $"Act_COP_{combinedId}_{time:HHmmss}_{trackId}";
+                Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: track {trackId} has WGs → coupling cut {activityIdPreview} to standing rake");
+                foreach (var wg in cut)
+                    SimulationLogger.Instance.LogWagonGroupEvent(wg.Id, "CouplingRequested", time);
 
                 activity = new CouplingActivity(
-                    wagonGroup.Id,
-                    wagonGroup.Length,
+                    combinedId,
+                    totalLength,
                     "existing-wgs",  // couplingToTrainId parameter
                     trackId,
                     "Classification",
@@ -224,8 +252,7 @@ namespace WienerNeustadtSimulation.Control
                 );
             }
 
-            activity.OnReadyToCommence = (act) => CommenceAndScheduleActivity(wagonGroup, trackId, act);
-            activity.OnCompleted = (act) => CompleteActivity(wagonGroup, trackId, act);
+            activity.OnReadyToCommence = (act) => CommenceAndScheduleCutActivity(cut, trackId, act);
 
             _resourceControl.SubmitRequest(new ResourceRequest(
                 activity,
@@ -236,7 +263,7 @@ namespace WienerNeustadtSimulation.Control
             ));
         }
 
-        private void CommenceAndScheduleActivity(WagonGroup wagonGroup, string trackId, Activity activity)
+        private void CommenceAndScheduleCutActivity(List<WagonGroup> cut, string trackId, Activity activity)
         {
             var workers = _resourceControl.GetWorkersByIds(activity.AllocatedWorkerIds);
             var workerMultipliers = workers
@@ -249,22 +276,22 @@ namespace WienerNeustadtSimulation.Control
             var duration = activity.CalculateDuration(workerMultipliers);
 
             // Sets CommencedAt and emits the canonical ActivityEvent Started row.
-            // (Previously CommencedAt was never being set on Coupling / Securing.)
             activity.MarkCommenced(_engine.Now);
 
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: Commence '{activity.ActivityId}' [length={activity.EntityLength:F0}m base={activity.BaseSecondsPerMeter:F0}s/m avgMult={activity.AverageWorkerMultiplier:F0} -> duration={duration.TotalSeconds:F0}s]");
-            SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, activity.ActivityType + "Started", _engine.Now);
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: Commence '{activity.ActivityId}' [length={activity.EntityLength:F0}m base={activity.BaseSecondsPerMeter:F0}s/m avgMult={activity.AverageWorkerMultiplier:F2} -> duration={duration.TotalSeconds:F0}s]");
+            // One Started badge per member WG so the visualizer lights up the
+            // whole cut.
+            foreach (var wg in cut)
+                SimulationLogger.Instance.LogWagonGroupEvent(wg.Id, activity.ActivityType + "Started", _engine.Now);
 
             // Within-track FIFO gate release: this SEC/COP has now Started, so
-            // any WG that arrived behind it on the same track can be released
-            // for its own SEC/COP submission. We release one at a time — that
-            // newly-released WG will hold the gate until IT starts, etc.
+            // the next cut waiting on the same track can be submitted.
             ReleaseNextDeferredPreparation(trackId, _engine.Now);
 
             _engine.Schedule(
                 _engine.Now.Add(duration),
-                () => CompleteActivity(wagonGroup, trackId, activity),
-                $"Complete{activity.ActivityType}-{wagonGroup.Id}"
+                () => CompleteCutActivity(cut, trackId, activity),
+                $"Complete{activity.ActivityType}-{string.Join("+", cut.Select(w => w.Id))}"
             );
         }
 
@@ -280,32 +307,39 @@ namespace WienerNeustadtSimulation.Control
                 return;
 
             var nextPrep = queue.Dequeue();
-            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: deferred WG {nextPrep.WagonGroup.Id} on track {trackId} now released for SEC/COP");
+            Console.WriteLine($"{time:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: deferred cut [{nextPrep.CombinedId}] on track {trackId} now released for SEC/COP");
 
             _hasLiveSecCopByTrack[trackId] = true;
             _preparationRequests.Enqueue(nextPrep);
             ProcessRequests(time);
         }
 
-        private void CompleteActivity(WagonGroup wagonGroup, string trackId, Activity activity)
+        private void CompleteCutActivity(List<WagonGroup> cut, string trackId, Activity activity)
         {
+            // Idempotent guard: only the scheduled callback drives completion,
+            // but guard anyway so a stray second call can't double-decrement the
+            // pending counter or double-release resources.
+            if (activity.CompletedAt.HasValue) return;
             activity.MarkCompleted(_engine.Now);
 
+            var combinedId = string.Join("+", cut.Select(w => w.Id));
             if (activity is SecuringActivity)
             {
-                SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "Secured", _engine.Now);
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: DONE '{activity.ActivityId}' - {wagonGroup.Id} is SECURED");
+                foreach (var wg in cut)
+                    SimulationLogger.Instance.LogWagonGroupEvent(wg.Id, "Secured", _engine.Now);
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: DONE '{activity.ActivityId}' - cut [{combinedId}] is SECURED");
             }
             else if (activity is CouplingActivity)
             {
-                SimulationLogger.Instance.LogWagonGroupEvent(wagonGroup.Id, "Coupled", _engine.Now);
-                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: DONE '{activity.ActivityId}' - {wagonGroup.Id} is COUPLED");
+                foreach (var wg in cut)
+                    SimulationLogger.Instance.LogWagonGroupEvent(wg.Id, "Coupled", _engine.Now);
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ClassifCU: DONE '{activity.ActivityId}' - cut [{combinedId}] is COUPLED");
             }
 
-            // Pair with the increment in HandleWagonGroupArrival: this WG's
-            // prep is done, so the per-track pending count drops by one.
-            // Once it hits zero AND the threshold is met, HandleCompletionCheck
-            // can mint the OBT.
+            // Pair with the increment in HandleWagonGroupCutArrival: this cut's
+            // prep is done, so the per-track pending count drops by one. Once it
+            // hits zero AND the threshold is met, HandleCompletionCheck can mint
+            // the OBT.
             if (_pendingSecCopCountByTrack.TryGetValue(trackId, out var pending) && pending > 0)
                 _pendingSecCopCountByTrack[trackId] = pending - 1;
 
@@ -374,7 +408,7 @@ namespace WienerNeustadtSimulation.Control
             // gets sorted to a different (still-free) classification track,
             // instead of piling onto this one mid-OBTP.
             //
-            // Skipped if HandleWagonGroupArrival already fired the event when
+            // Skipped if HandleWagonGroupCutArrival already fired the event when
             // the threshold was first crossed (the common path). Only fires
             // here for tracks that somehow reach OBT creation without ever
             // having gone through the threshold-cross signal — defensive.
@@ -546,7 +580,7 @@ namespace WienerNeustadtSimulation.Control
             while (_preparationRequests.Count > 0)
             {
                 var request = _preparationRequests.Dequeue();
-                HandleWagonGroupPreparation(request, time);
+                HandleWagonGroupCutPreparation(request, time);
             }
 
             while (_completionCheckRequests.Count > 0)

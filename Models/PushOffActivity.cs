@@ -209,6 +209,15 @@ namespace WienerNeustadtSimulation.Models
         {
             driveActivity.MarkCompleted(_engine.Now);
 
+            // This sub-drive pushed ONE cut — a maximal run of consecutive
+            // same-destination wagon groups (a "group of wagon groups" / WGG)
+            // that were never uncoupled from one another in the inbound train.
+            // Build all the WagonGroup entities for the cut, then hand the whole
+            // cut to ClassificationCU as a single unit, so it gets ONE Securing
+            // (empty track) or ONE Coupling-to-the-standing-rake (occupied track)
+            // instead of a spurious per-member SEC/COP chain. See [30] in
+            // Other files/Documentation.txt.
+            var cutWagonGroups = new List<WagonGroup>();
             foreach (var wgId in group.WagonGroupIds)
             {
                 if (!_wagonGroupData.ContainsKey(wgId))
@@ -232,10 +241,15 @@ namespace WienerNeustadtSimulation.Models
 
                 group.DestinationTrack.CurrentOccupancies.Add(wgId);
 
+                // Keep the per-WG EntityCreated event so the visualizer still
+                // draws each wagon group standalone on the track.
                 SimulationLogger.Instance.LogWagonGroupEvent(wgId, "EntityCreated", _engine.Now, group.DestinationTrack.RealLifeID);
 
-                _classificationControl.HandleWagonGroupArrival(wagonGroup, group.DestinationTrack, _engine.Now);
+                cutWagonGroups.Add(wagonGroup);
             }
+
+            if (cutWagonGroups.Count > 0)
+                _classificationControl.HandleWagonGroupCutArrival(cutWagonGroups, group.DestinationTrack, _engine.Now);
 
             _completedPushes++;
             ExecuteNextPush();
