@@ -578,6 +578,10 @@ def parse_wagon_groups(log_path, trains, obts):
             wgid = parts[2]
             entry = by_wg.setdefault(wgid, {"id": wgid})
             entry["secCopEnd"] = ts
+            # Remember whether this WG was the first on the track (Securing)
+            # or joined an existing rake (Coupling); drives the narrative
+            # prefix in the Classification context column.
+            entry["secCopType"] = activity_type
 
     # Stitch OBT-side fields onto each WG.
     for wgid, rec in by_wg.items():
@@ -588,6 +592,56 @@ def parse_wagon_groups(log_path, trains, obts):
         rec["obtpEnd"] = o.get("obtpEnd")
         rec["depdStart"] = o.get("depdStart")
         rec["depdEnd"] = o.get("depdEnd")
+
+    # -- Classification context narrative --------------------------------
+    # One plain-language sentence per WG describing its life on the
+    # classification track: how it joined (secured first, or coupled to the
+    # sibling already there), the wait before each subsequent sibling got
+    # coupled, then the OBTP window and the departure. Siblings are ordered
+    # by SEC/COP completion. Wait gaps render as H:MM:SS (can exceed 24h);
+    # OBTP/departure render as HH:MM:SS clock times.
+    def _ctx_dur(delta):
+        total = int(round(delta.total_seconds()))
+        if total < 0:
+            total = 0
+        h = total // 3600
+        m = (total % 3600) // 60
+        s = total % 60
+        return f"{h}:{m:02d}:{s:02d}"
+
+    def _ctx_clock(dt):
+        return dt.strftime("%H:%M:%S") if dt else "?"
+
+    by_obt_group = defaultdict(list)
+    for rec in by_wg.values():
+        obtid = rec.get("parentOutboundTrain")
+        if obtid:
+            by_obt_group[obtid].append(rec)
+
+    for obtid, sibs in by_obt_group.items():
+        # Order siblings by SEC/COP completion; any missing it sink to the end.
+        sibs.sort(key=lambda r: (r.get("secCopEnd") is None,
+                                 r.get("secCopEnd") or datetime.max))
+        for i, rec in enumerate(sibs):
+            wg_i = rec.get("id")
+            ctype = rec.get("secCopType")
+            if ctype == "Coupling" and i > 0:
+                sentence = (f"WG {wg_i} entered track got coupled to "
+                            f"WG {sibs[i-1].get('id')}")
+            elif ctype == "Coupling":
+                sentence = f"WG {wg_i} entered track got coupled"
+            else:
+                sentence = f"WG {wg_i} entered track got secured"
+            for j in range(i + 1, len(sibs)):
+                prev_end = sibs[j-1].get("secCopEnd")
+                this_end = sibs[j].get("secCopEnd")
+                wait = _ctx_dur(this_end - prev_end) if (prev_end and this_end) else "?"
+                sentence += (f" then waited {wait} for "
+                             f"WG {sibs[j].get('id')} to get coupled")
+            sentence += (f", OBTP started on {_ctx_clock(rec.get('obtpStart'))}"
+                         f" finished on {_ctx_clock(rec.get('obtpEnd'))}"
+                         f" and then left at {_ctx_clock(rec.get('depdEnd'))}")
+            rec["classificationContext"] = sentence
 
     out = list(by_wg.values())
     # Sort by parent inbound train, then WG id, so consecutive WGs of one
@@ -1009,6 +1063,12 @@ def build_definitions_sheet(wb):
          "prep is done but before OBT-wide work begins.",
          "Wagon Groups!P = (I − O)  "
          "= OBTP_Starts − SEC/COP_End"),
+        ("Classification context",
+         "Plain-language narrative of the WG's time on the classification "
+         "track: how it joined (secured first, or coupled to the sibling "
+         "already there), the wait before each later sibling coupled, the "
+         "OBTP window, and departure.",
+         "Wagon Groups!Q; built in parse_wagon_groups."),
 
         ("— Outbound Trains KPIs —", "", ""),
         ("OBTP wait (hh:mm:ss)",
@@ -1233,8 +1293,8 @@ def build_incoming_trains_sheet(wb, records):
 
 
 def build_wagon_groups_sheet(wb, records):
-    """Per-WG lifecycle sheet. 16 columns: identity (A-D), full timestamp
-    lifecycle (E-L), KPI columns (M-P).
+    """Per-WG lifecycle sheet. 17 columns: identity (A-D), full timestamp
+    lifecycle (E-L), KPI columns (M-P), and a plain-language narrative (Q).
 
     Column layout:
       A ID                B Parent incoming train       C Length (m)   D Destination
@@ -1264,6 +1324,7 @@ def build_wagon_groups_sheet(wb, records):
         "Time in arrival yard (hh:mm:ss)", "Time in classification yard (hh:mm:ss)",
         "SEC/COP end",
         "Idle time on classification track (hh:mm:ss)",
+        "Classification context",
     ]
     ws.append(headers)
     for rec in records:
@@ -1283,6 +1344,7 @@ def build_wagon_groups_sheet(wb, records):
             None, None,             # M, N filled by formulas below
             rec.get("secCopEnd"),   # O
             None,                   # P filled by formula below
+            rec.get("classificationContext"),   # Q narrative
         ])
 
     for r in range(2, ws.max_row + 1):
@@ -1304,6 +1366,13 @@ def build_wagon_groups_sheet(wb, records):
             cell.font = FONT
 
     _apply_universal_layout(ws, timestamp_cols=["E", "F", "G", "I", "J", "K", "L", "O"])
+    # Classification context (Q) is a long sentence: widen it and switch to
+    # left alignment with wrap so it reads naturally instead of being
+    # centered in an 8.2-wide column.
+    ws.column_dimensions["Q"].width = 100
+    for r in range(2, ws.max_row + 1):
+        ws[f"Q{r}"].alignment = Alignment(horizontal="left", vertical="center",
+                                          wrap_text=True)
     ws.freeze_panes = "E2"
     ws.auto_filter.ref = ws.dimensions
     return ws
