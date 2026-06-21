@@ -61,6 +61,7 @@ Public Sub PlotAllSilent()
     BuildAllCharts True
     On Error Resume Next
     Application.Run "Module_PlotDriveActivities.PlotDriveLengthVsDurationSilent"
+    Application.Run "Module_PlotKPIs.PlotKPISummariesSilent"
     On Error GoTo 0
 End Sub
 

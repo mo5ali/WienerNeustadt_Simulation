@@ -499,7 +499,7 @@ def parse_incoming_trains(log_path):
     return out
 
 
-def parse_wagon_groups(log_path, trains, obts, outbound_trains=None):
+def parse_wagon_groups(log_path, trains, obts):
     """One record per wagon group with the 12 columns for the Wagon Groups
     sheet: ID, parent incoming train, length, destination, at arrival track,
     PushOffDrive starts/ends, parent outbound train, OBTP starts/ends,
@@ -514,10 +514,7 @@ def parse_wagon_groups(log_path, trains, obts, outbound_trains=None):
     covers a consecutive same-destination CUT of WGs (ActivityId has the form
     Act_POD_<wg1+wg2+...>_<HHMMSS>_<destTrack>), so we split the combined
     entityId on '+' and credit each WG individually. The OBT-side timestamps
-    are read off the matching OBT record produced by parse_obts_and_wgs.
-    obtpInit is stitched in from parse_outbound_trains output (passed as
-    `outbound_trains`); it isn't captured by parse_obts_and_wgs because
-    that path keys off OBTPStarted train events, not Submitted activity events."""
+    are read off the matching OBT record produced by parse_obts_and_wgs."""
     doc = _load_log(log_path)
     wgs_meta = (doc.get("entities") or {}).get("wagonGroups") or {}
 
@@ -527,9 +524,6 @@ def parse_wagon_groups(log_path, trains, obts, outbound_trains=None):
     # OBT lookups: obtId -> full obt record (for OBTP/DEPD timestamps) and
     # wgId -> obtId (for the parent-outbound-train column).
     obt_by_id = {o["obtId"]: o for o in obts}
-    # obtpInit comes from parse_outbound_trains (ActivityEvent Submitted),
-    # not from parse_obts_and_wgs which only reads OBTPStarted train events.
-    obt_init_by_id = {o["id"]: o.get("obtpInit") for o in (outbound_trains or [])}
     wg_to_obt = {}
     for o in obts:
         for wgid in o.get("wgIds", []):
@@ -594,10 +588,6 @@ def parse_wagon_groups(log_path, trains, obts, outbound_trains=None):
         rec["obtpEnd"] = o.get("obtpEnd")
         rec["depdStart"] = o.get("depdStart")
         rec["depdEnd"] = o.get("depdEnd")
-        # obtpInit anchors the "Sibling wait" diagnostic column on the
-        # Wagon Groups sheet (PushOffDriveEnds -> OBTP init = time waiting
-        # for sibling WGs to accumulate so the OBT can be formed).
-        rec["obtpInit"] = obt_init_by_id.get(obtid) if obtid else None
 
     out = list(by_wg.values())
     # Sort by parent inbound train, then WG id, so consecutive WGs of one
@@ -765,6 +755,163 @@ def _apply_universal_layout(ws, timestamp_cols=()):
 
 
 # ── Sheet builders ────────────────────────────────────────────────────────────
+def build_overview_sheet(wb, trains, obts, wgs, activities):
+    """One-glance Overview sheet. Sits as tab #2 (right after Definitions).
+
+    Top block: Run summary (counts + simulation duration).
+    Next three blocks: KPI averages per category (Incoming Trains,
+    Wagon Groups, Outbound Trains). Each KPI is a row with Excel
+    AVERAGE/MIN/MAX/MEDIAN formulas referencing the source per-entity
+    sheet, so editing data on those sheets auto-recomputes Overview.
+
+    All durations rendered as [h]:mm:ss; sim duration computed in
+    Python (min/max of timestamps) and written as a fraction-of-day."""
+    ws = wb.create_sheet("Overview", 1)
+
+    # ── Title ─────────────────────────────────────────────────────────
+    ws.append(["Wiener Neustadt Shunting Yard — Overview"])
+    ws.append([])
+
+    # ── Run summary block ────────────────────────────────────────────
+    ws.append(["— Run summary —", "Value"])
+
+    # Counts via COUNTA on identity columns of the per-entity sheets
+    # (minus the header row).
+    ws.append(["Inbound trains processed",
+               "=COUNTA('Incoming Trains'!A:A)-1"])
+    ws.append(["OBTs created",
+               "=COUNTA('Outbound Trains'!A:A)-1"])
+    ws.append(["WGs classified",
+               "=COUNTA('Wagon Groups'!A:A)-1"])
+    ws.append(["Activity instances logged",
+               "=COUNTA('Activities (raw)'!A:A)-1"])
+
+    # Sim duration: min Entry-to-station -> max DEPD-ends.
+    sim_start = None
+    sim_end = None
+    for t in trains:
+        e = t.get("entry")
+        if e is not None:
+            if sim_start is None or e < sim_start: sim_start = e
+            if sim_end is None or e > sim_end: sim_end = e
+        po = t.get("pushOffEnd")
+        if po is not None and (sim_end is None or po > sim_end): sim_end = po
+    for o in obts:
+        d = o.get("depdEnd")
+        if d is not None and (sim_end is None or d > sim_end): sim_end = d
+
+    sim_duration_frac = None
+    if sim_start is not None and sim_end is not None:
+        sim_duration_frac = (sim_end - sim_start).total_seconds() / 86400.0
+
+    ws.append(["Sim duration (hh:mm:ss)", sim_duration_frac])
+
+    # ── Incoming Trains KPIs (means + spread, all hh:mm:ss) ──────────
+    ws.append([])
+    ws.append(["— Incoming Trains KPIs (per-train averages) —",
+               "Mean", "Min", "Max", "Median"])
+
+    # Each tuple: (display name, column letter on 'Incoming Trains').
+    INCOMING_KPIS = [
+        ("Entry Queue wait",                 "M"),
+        ("Arrival drive duration",           "N"),
+        ("ITP wait",                         "O"),
+        ("ITP duration",                     "P"),
+        ("PushOff wait",                     "Q"),
+        ("PushOff duration",                 "R"),
+        ("Total in arrival yard",            "S"),
+        ("Total in system",                  "T"),
+    ]
+    for label, col in INCOMING_KPIS:
+        ws.append([
+            label,
+            f"=IFERROR(AVERAGE('Incoming Trains'!{col}:{col}),0)",
+            f"=IFERROR(MIN('Incoming Trains'!{col}:{col}),0)",
+            f"=IFERROR(MAX('Incoming Trains'!{col}:{col}),0)",
+            f"=IFERROR(MEDIAN('Incoming Trains'!{col}:{col}),0)",
+        ])
+
+    # ── Wagon Groups KPIs ────────────────────────────────────────────
+    ws.append([])
+    ws.append(["— Wagon Groups KPIs (per-WG averages) —",
+               "Mean", "Min", "Max", "Median"])
+    WG_KPIS = [
+        ("Time in arrival yard",                  "M"),
+        ("Time in classification yard",           "N"),
+        ("Idle time on classification track",     "P"),
+    ]
+    for label, col in WG_KPIS:
+        ws.append([
+            label,
+            f"=IFERROR(AVERAGE('Wagon Groups'!{col}:{col}),0)",
+            f"=IFERROR(MIN('Wagon Groups'!{col}:{col}),0)",
+            f"=IFERROR(MAX('Wagon Groups'!{col}:{col}),0)",
+            f"=IFERROR(MEDIAN('Wagon Groups'!{col}:{col}),0)",
+        ])
+
+    # ── Outbound Trains KPIs ─────────────────────────────────────────
+    ws.append([])
+    ws.append(["— Outbound Trains KPIs (per-OBT averages) —",
+               "Mean", "Min", "Max", "Median"])
+    OUTBOUND_KPIS = [
+        ("OBTP wait",                       "K"),
+        ("OBTP duration",                   "L"),
+        ("DEPD gate wait",                  "M"),
+        ("DEPD duration",                   "N"),
+        ("Total on classification track",   "O"),
+    ]
+    for label, col in OUTBOUND_KPIS:
+        ws.append([
+            label,
+            f"=IFERROR(AVERAGE('Outbound Trains'!{col}:{col}),0)",
+            f"=IFERROR(MIN('Outbound Trains'!{col}:{col}),0)",
+            f"=IFERROR(MAX('Outbound Trains'!{col}:{col}),0)",
+            f"=IFERROR(MEDIAN('Outbound Trains'!{col}:{col}),0)",
+        ])
+
+    # ── Styling pass ─────────────────────────────────────────────────
+    # Walk every populated row, classify it (title / section header /
+    # data row / blank), and format accordingly. Done in one sweep so
+    # the rules stay co-located.
+    for r in range(1, ws.max_row + 1):
+        first = ws.cell(row=r, column=1).value
+        if not first:
+            continue
+        text = str(first)
+        if r == 1:
+            # Title row -- bold, larger.
+            ws.cell(row=r, column=1).font = Font(name="Arial", size=14, bold=True)
+        elif text.startswith("—"):
+            # Section header row -- bold for label + value-column subheaders.
+            for c in range(1, 6):
+                cell = ws.cell(row=r, column=c)
+                if cell.value is not None:
+                    cell.font = FONT_BOLD
+        else:
+            # Data row -- normal font + [h]:mm:ss formatting on numeric columns.
+            ws.cell(row=r, column=1).font = FONT
+            for c in range(2, 6):
+                cell = ws.cell(row=r, column=c)
+                if cell.value is None:
+                    continue
+                cell.font = FONT
+                # Counts (Inbound trains processed, OBTs created, WGs
+                # classified, Activity instances logged) are pure integer
+                # formulas -- detect by the surrounding label.
+                if text in ("Inbound trains processed", "OBTs created",
+                            "WGs classified", "Activity instances logged"):
+                    cell.number_format = "0"
+                else:
+                    cell.number_format = "[h]:mm:ss"
+
+    # Column widths: A is wide for KPI names, B-E narrow for values.
+    ws.column_dimensions["A"].width = 44
+    for col in ("B", "C", "D", "E"):
+        ws.column_dimensions[col].width = 14
+    ws.freeze_panes = "B2"
+    return ws
+
+
 def build_definitions_sheet(wb):
     """KPI dictionary. Lists every metric the workbook surfaces, what it
     means in one sentence, and the exact formula (in terms of either
@@ -803,91 +950,91 @@ def build_definitions_sheet(wb):
          "built by build_obts_raw_sheet / build_wgs_raw_sheet."),
 
         ("— Incoming Trains KPIs —", "", ""),
-        ("Queue wait (hh:mm:ss)",
+        ("Entry Queue wait (hh:mm:ss)",
          "Time the train sat in the entry queue waiting for an arrival "
          "track to free up. Pure queue time — does NOT include the drive.",
-         "Incoming Trains!M = (E − D) × 86400  "
+         "Incoming Trains!M = (E − D)  "
          "= ArrivalDriveStart − EntryToStation"),
         ("Arrival drive duration (hh:mm:ss)",
          "Time the train spent physically driving from the entry gate to "
          "its assigned arrival track.",
-         "Incoming Trains!N = (F − E) × 86400  "
+         "Incoming Trains!N = (F − E)  "
          "= AtArrivalTrack − ArrivalDriveStart"),
         ("ITP wait (hh:mm:ss)",
          "Time between ITP being submitted to ResourceCU and the work "
          "actually commencing. Captures worker + shunt-loco allocation "
          "+ travel-to-site time.",
-         "Incoming Trains!O = (H − G) × 86400  "
+         "Incoming Trains!O = (H − G)  "
          "= ITP_Starts − ITP_Init"),
         ("ITP duration (hh:mm:ss)",
          "Time the ITP work itself ran, once resources arrived.",
-         "Incoming Trains!P = (I − H) × 86400  "
+         "Incoming Trains!P = (I − H)  "
          "= ITP_Ends − ITP_Starts"),
         ("PushOff wait (hh:mm:ss)",
          "Time between PushOff being submitted and the work actually "
          "commencing. Captures worker re-allocation + passage-track wait.",
-         "Incoming Trains!Q = (K − J) × 86400  "
+         "Incoming Trains!Q = (K − J)  "
          "= PushOff_Starts − PushOff_Init"),
         ("PushOff duration (hh:mm:ss)",
          "Time the entire PushOff envelope ran (all sub-drives + "
          "loco pull-backs between them).",
-         "Incoming Trains!R = (L − K) × 86400  "
+         "Incoming Trains!R = (L − K)  "
          "= PushOff_Ends − PushOff_Starts"),
         ("Total in arrival yard (hh:mm:ss)",
          "Total time the inbound train physically occupied an arrival "
          "track (from arrival to last WG pushed off).",
-         "Incoming Trains!S = (L − F) × 86400  "
+         "Incoming Trains!S = (L − F)  "
          "= PushOff_Ends − AtArrivalTrack"),
         ("Total in system (hh:mm:ss)",
          "End-to-end inbound time: from entry-queue arrival until "
          "PushOff completed.",
-         "Incoming Trains!T = (L − D) × 86400  "
+         "Incoming Trains!T = (L − D)  "
          "= PushOff_Ends − EntryToStation"),
 
         ("— Wagon Groups KPIs —", "", ""),
         ("Time in arrival yard (hh:mm:ss)",
          "Time the WG was on the arrival track as part of its parent "
          "train, from arrival to being pushed off.",
-         "Wagon Groups!M = (G − E) × 86400  "
+         "Wagon Groups!M = (G − E)  "
          "= PushOffDriveEnds − AtArrivalTrack"),
         ("Time in classification yard (hh:mm:ss)",
          "Time the WG sat on its classification track, from arriving "
          "there (= PushOffDrive ends) until the parent OBT physically "
          "departed.",
-         "Wagon Groups!N = (L − G) × 86400  "
+         "Wagon Groups!N = (L − G)  "
          "= DepartureDriveEnds − PushOffDriveEnds"),
+        ("Idle time on classification track (hh:mm:ss)",
+         "Time the WG waits after getting coupled or secured until the "
+         "OBTP activity starts — the 'doing nothing' window after its own "
+         "prep is done but before OBT-wide work begins.",
+         "Wagon Groups!P = (I − O)  "
+         "= OBTP_Starts − SEC/COP_End"),
 
         ("— Outbound Trains KPIs —", "", ""),
         ("OBTP wait (hh:mm:ss)",
          "Time between OBTP being submitted and actually starting. "
          "Captures worker + train-loco allocation + travel.",
-         "Outbound Trains!K = (F − E) × 86400  "
+         "Outbound Trains!K = (F − E)  "
          "= OBTP_Starts − OBTP_Init"),
         ("OBTP duration (hh:mm:ss)",
          "Time the OBTP work itself ran.",
-         "Outbound Trains!L = (G − F) × 86400  "
+         "Outbound Trains!L = (G − F)  "
          "= OBTP_Ends − OBTP_Starts"),
-        ("Pre-DEPD wait (hh:mm:ss)",
-         "Gap between OBTP finishing and DEPD being submitted. Almost "
-         "always ~0 because ClassificationCU.CompleteOutboundTrainPreparation "
-         "fires RequestDepartureDrive synchronously.",
-         "Outbound Trains!M = (H − G) × 86400  "
-         "= DEPD_Init − OBTP_Ends"),
         ("DEPD gate wait (hh:mm:ss)",
          "Time the OBT was ready to depart (DEPD submitted) but stuck "
          "waiting for the single exit-gate resource. Headline bottleneck "
          "metric given exitGateCount = 1.",
-         "Outbound Trains!N = (I − H) × 86400  "
+         "Outbound Trains!M = (I − H)  "
          "= DEPD_Starts − DEPD_Init"),
         ("DEPD duration (hh:mm:ss)",
          "Time the train spent physically driving from its classification "
          "track to the exit gate.",
-         "Outbound Trains!O = (J − I) × 86400  "
+         "Outbound Trains!N = (J − I)  "
          "= DEPD_Ends − DEPD_Starts"),
         ("Total on classification track (hh:mm:ss)",
          "End-to-end outbound time, from OBT-creation moment (≈ OBTP init) "
          "until DEPD completes.",
-         "Outbound Trains!P = (J − E) × 86400  "
+         "Outbound Trains!O = (J − E)  "
          "= DEPD_Ends − OBTP_Init"),
 
         ("— Activities (raw) reference —", "", ""),
@@ -1031,7 +1178,7 @@ def build_incoming_trains_sheet(wb, records):
         "Entry to station", "Arrival drive start", "At arrival track",
         "ITP init", "ITP starts", "ITP ends",
         "PushOff init", "PushOff starts", "PushOff ends",
-        "Queue wait (hh:mm:ss)", "Arrival drive dur (hh:mm:ss)",
+        "Entry Queue wait (hh:mm:ss)", "Arrival drive dur (hh:mm:ss)",
         "ITP wait (hh:mm:ss)", "ITP duration (hh:mm:ss)",
         "PushOff wait (hh:mm:ss)", "PushOff duration (hh:mm:ss)",
         "Total in arrival yard (hh:mm:ss)", "Total in system (hh:mm:ss)",
@@ -1086,9 +1233,8 @@ def build_incoming_trains_sheet(wb, records):
 
 
 def build_wagon_groups_sheet(wb, records):
-    """Per-WG lifecycle sheet. 17 columns: identity (A-D), full timestamp
-    lifecycle (E-L), yard-time deltas (M-N), classification-dwell
-    diagnostic columns (O-Q).
+    """Per-WG lifecycle sheet. 16 columns: identity (A-D), full timestamp
+    lifecycle (E-L), KPI columns (M-P).
 
     Column layout:
       A ID                B Parent incoming train       C Length (m)   D Destination
@@ -1096,18 +1242,17 @@ def build_wagon_groups_sheet(wb, records):
       H Parent outbound train
       I OBTP starts       J OBTP ends
       K Departure drive starts                          L Departure drive ends
-      M Time in arrival yard (s)        = (G - E) * 86400
-      N Time in classification yard (s) = (L - G) * 86400
-      O OBTP init                                       (raw timestamp, anchors P)
-      P Sibling wait (s)                = (O - G) * 86400
-        Time the WG sat on its classification track waiting for sibling WGs
-        to accumulate so the OBT could be formed. Main suspect for long
-        classification-yard dwells — if P is the dominant share of N,
-        the dwell is legitimate sim logic (waiting for an inbound train
-        carrying the next sibling WG to arrive); if it isn't, hunt the bug.
-      Q Post-OBTP wait + DEPD (s)       = (L - J) * 86400
-        Everything from OBTP done to physically gone (DEPD exit-gate wait
-        + DEPD drive itself)."""
+      M Time in arrival yard (hh:mm:ss)         = G - E
+        Time the WG was on the arrival track as part of its parent train,
+        from arrival to being pushed off.
+      N Time in classification yard (hh:mm:ss)  = L - G
+        Time the WG sat on its classification track, from arriving there
+        (= PushOffDrive ends) until the parent OBT physically departed.
+      O SEC/COP end                             (raw timestamp, anchors P)
+      P Idle time on classification track (hh:mm:ss) = I - O
+        Time the WG waits after getting coupled or secured until the OBTP
+        activity starts -- the "doing nothing" window after its own prep
+        is done but before OBT-wide work begins."""
     ws = wb.create_sheet("Wagon Groups", 2)
     headers = [
         "ID", "Parent incoming train", "Length (m)", "Destination",
@@ -1117,8 +1262,6 @@ def build_wagon_groups_sheet(wb, records):
         "OBTP starts", "OBTP ends",
         "Departure drive starts", "Departure drive ends",
         "Time in arrival yard (hh:mm:ss)", "Time in classification yard (hh:mm:ss)",
-        "OBTP init",
-        "Sibling wait (hh:mm:ss)", "Post-OBTP wait + DEPD (hh:mm:ss)",
         "SEC/COP end",
         "Idle time on classification track (hh:mm:ss)",
     ]
@@ -1138,25 +1281,21 @@ def build_wagon_groups_sheet(wb, records):
             rec.get("depdStart"),
             rec.get("depdEnd"),
             None, None,             # M, N filled by formulas below
-            rec.get("obtpInit"),    # O
-            None, None,             # P, Q filled by formulas below
-            rec.get("secCopEnd"),   # R
-            None,                   # S filled by formula below
+            rec.get("secCopEnd"),   # O
+            None,                   # P filled by formula below
         ])
 
     for r in range(2, ws.max_row + 1):
         ws[f"C{r}"].number_format = "0.0"
-        for col in ("E", "F", "G", "I", "J", "K", "L", "O", "R"):
+        for col in ("E", "F", "G", "I", "J", "K", "L", "O"):
             ws[f"{col}{r}"].number_format = "yyyy-mm-dd hh:mm:ss"
         ws[f"M{r}"] = f'=IF(AND(ISNUMBER(E{r}),ISNUMBER(G{r})),(G{r}-E{r}),"")'
         ws[f"N{r}"] = f'=IF(AND(ISNUMBER(G{r}),ISNUMBER(L{r})),(L{r}-G{r}),"")'
-        ws[f"P{r}"] = f'=IF(AND(ISNUMBER(G{r}),ISNUMBER(O{r})),(O{r}-G{r}),"")'
-        ws[f"Q{r}"] = f'=IF(AND(ISNUMBER(J{r}),ISNUMBER(L{r})),(L{r}-J{r}),"")'
-        # Idle time on classification track = OBTP starts (I) - SEC/COP end (R).
+        # Idle time on classification track = OBTP starts (I) - SEC/COP end (O).
         # The actual "doing nothing" period for the WG between its hands-on
         # prep finishing and OBTP commencing.
-        ws[f"S{r}"] = f'=IF(AND(ISNUMBER(I{r}),ISNUMBER(R{r})),(I{r}-R{r}),"")'
-        for col in ("M", "N", "P", "Q", "S"):
+        ws[f"P{r}"] = f'=IF(AND(ISNUMBER(I{r}),ISNUMBER(O{r})),(I{r}-O{r}),"")'
+        for col in ("M", "N", "P"):
             ws[f"{col}{r}"].number_format = "[h]:mm:ss"
 
     _style_header_row(ws)
@@ -1164,7 +1303,7 @@ def build_wagon_groups_sheet(wb, records):
         for cell in row:
             cell.font = FONT
 
-    _apply_universal_layout(ws, timestamp_cols=["E", "F", "G", "I", "J", "K", "L", "O", "R"])
+    _apply_universal_layout(ws, timestamp_cols=["E", "F", "G", "I", "J", "K", "L", "O"])
     ws.freeze_panes = "E2"
     ws.auto_filter.ref = ws.dimensions
     return ws
@@ -1172,23 +1311,22 @@ def build_wagon_groups_sheet(wb, records):
 
 def build_outbound_trains_sheet(wb, records):
     """Per-OBT lifecycle sheet. Identity (A-D), full timestamp lifecycle
-    (E-J) and Excel-formula duration / wait columns (K-P) derived from
-    those timestamps.
+    (E-J) and Excel-formula KPI columns (K-O) derived from those
+    timestamps.
 
     Column layout:
       A ID            B Destination          C Length (m)       D Track
       E OBTP init     F OBTP starts          G OBTP ends
       H DEPD init     I DEPD starts          J DEPD ends
-      K OBTP wait (s)              = (F - E) * 86400
-      L OBTP duration (s)          = (G - F) * 86400
-      M Pre-DEPD wait (s)          = (H - G) * 86400
-      N DEPD gate wait (s)         = (I - H) * 86400
-      O DEPD duration (s)          = (J - I) * 86400
-      P Total on classification track (s) = (J - E) * 86400
+      K OBTP wait (hh:mm:ss)                      = F - E
+      L OBTP duration (hh:mm:ss)                  = G - F
+      M DEPD gate wait (hh:mm:ss)                 = I - H
+      N DEPD duration (hh:mm:ss)                  = J - I
+      O Total on classification track (hh:mm:ss)  = J - E
 
-    "OBTP init" anchors the "Total on classification track" calculation —
+    "OBTP init" anchors the "Total on classification track" calculation --
     in this simulation CreateOutboundTrain runs RequestOutboundTrainPreparation
-    synchronously, so OBTP init ≈ the moment the OBT first exists as an
+    synchronously, so OBTP init ~ the moment the OBT first exists as an
     entity. "DEPD gate wait" captures the period the train was ready to
     depart but blocked on the single exit-gate resource."""
     ws = wb.create_sheet("Outbound Trains", 3)
@@ -1197,7 +1335,7 @@ def build_outbound_trains_sheet(wb, records):
         "OBTP init", "OBTP starts", "OBTP ends",
         "Departure drive init", "Departure drive starts", "Departure drive ends",
         "OBTP wait (hh:mm:ss)", "OBTP duration (hh:mm:ss)",
-        "Pre-DEPD wait (hh:mm:ss)", "DEPD gate wait (hh:mm:ss)", "DEPD duration (hh:mm:ss)",
+        "DEPD gate wait (hh:mm:ss)", "DEPD duration (hh:mm:ss)",
         "Total on classification track (hh:mm:ss)",
     ]
     ws.append(headers)
@@ -1220,14 +1358,13 @@ def build_outbound_trains_sheet(wb, records):
         # 6 timestamp columns E..J
         for col in ("E", "F", "G", "H", "I", "J"):
             ws[f"{col}{r}"].number_format = "yyyy-mm-dd hh:mm:ss"
-        # Excel-formula duration / wait columns K..P
+        # Excel-formula KPI columns K..O
         ws[f"K{r}"] = f'=IF(AND(ISNUMBER(E{r}),ISNUMBER(F{r})),(F{r}-E{r}),"")'  # OBTP wait
         ws[f"L{r}"] = f'=IF(AND(ISNUMBER(F{r}),ISNUMBER(G{r})),(G{r}-F{r}),"")'  # OBTP duration
-        ws[f"M{r}"] = f'=IF(AND(ISNUMBER(G{r}),ISNUMBER(H{r})),(H{r}-G{r}),"")'  # Pre-DEPD wait
-        ws[f"N{r}"] = f'=IF(AND(ISNUMBER(H{r}),ISNUMBER(I{r})),(I{r}-H{r}),"")'  # DEPD gate wait
-        ws[f"O{r}"] = f'=IF(AND(ISNUMBER(I{r}),ISNUMBER(J{r})),(J{r}-I{r}),"")'  # DEPD duration
-        ws[f"P{r}"] = f'=IF(AND(ISNUMBER(E{r}),ISNUMBER(J{r})),(J{r}-E{r}),"")'  # Total on classif track
-        for col in ("K", "L", "M", "N", "O", "P"):
+        ws[f"M{r}"] = f'=IF(AND(ISNUMBER(H{r}),ISNUMBER(I{r})),(I{r}-H{r}),"")'  # DEPD gate wait
+        ws[f"N{r}"] = f'=IF(AND(ISNUMBER(I{r}),ISNUMBER(J{r})),(J{r}-I{r}),"")'  # DEPD duration
+        ws[f"O{r}"] = f'=IF(AND(ISNUMBER(E{r}),ISNUMBER(J{r})),(J{r}-E{r}),"")'  # Total on classif track
+        for col in ("K", "L", "M", "N", "O"):
             ws[f"{col}{r}"].number_format = "[h]:mm:ss"
 
     _style_header_row(ws)
@@ -1464,7 +1601,7 @@ def main():
     wg_yard = parse_wg_yard_times(LOG_PATH, obts)
     incoming_trains = parse_incoming_trains(LOG_PATH)
     outbound_trains = parse_outbound_trains(LOG_PATH)
-    wagon_groups = parse_wagon_groups(LOG_PATH, trains, obts, outbound_trains)
+    wagon_groups = parse_wagon_groups(LOG_PATH, trains, obts)
     drive_stats = parse_drive_stats(activities)
     print(f"Parsed {len(activities)} activity instances, "
           f"{len(trains)} inbound trains, {len(obts)} OBTs, "
@@ -1482,6 +1619,10 @@ def main():
     build_wagon_groups_sheet(wb, wagon_groups)
     build_outbound_trains_sheet(wb, outbound_trains)
     build_drive_stats_sheet(wb, drive_stats)
+    # Overview is built LAST among the front tabs so its create_sheet
+    # ("Overview", 1) lands cleanly between Definitions and Incoming
+    # Trains, instead of being bumped rightward by later inserts.
+    build_overview_sheet(wb, trains, obts, wgs, activities)
     build_wg_yard_times_sheet(wb, wg_yard)
     build_activities_raw_sheet(wb, activities)
     build_obts_raw_sheet(wb, obts)

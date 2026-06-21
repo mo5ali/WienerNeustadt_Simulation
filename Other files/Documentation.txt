@@ -2214,6 +2214,268 @@ This is the running narrative; new entries are appended as work continues.
       hover; if richer per-point labels are wanted later, the
       WithEvents class approach from 27.3 is the proven path.
 
+[28] Overview sheet (run-summary + KPI averages) + KPI bar charts +
+     WG idle-time KPI on the classification track
+  Two related deliverables for the supervisor email + dashboard:
+  consolidate every defined KPI's per-entity values into an "Overview"
+  sheet showing means / mins / maxes / medians, and visualise them as
+  bar charts on the existing Activity Charts sheet. Also adds one new
+  KPI on Wagon Groups ("Idle time on classification track") that
+  isolates the pure "doing nothing" period from the broader Time-in-
+  classification-yard window.
+
+  28.1 New "Idle time on classification track" KPI
+    Pre-change Wagon Groups had two diagnostic columns for classification
+    dwell:
+      P  Sibling wait               (OBTP_init - PushOffDriveEnds)
+      Q  Post-OBTP wait + DEPD      (DepartureDriveEnds - OBTPEnds)
+    Both included some "active" time -- Sibling wait includes the
+    WG's own SEC/COP work period (which runs immediately after
+    PushOffDrive ends), and the "OBTP + DEPD" middle slice
+    (OBTPEnds - OBTPStarts inside Sibling wait) wasn't separated out.
+    New column R captures SEC/COP completion per WG and column S
+    derives the actual idle window:
+      R  SEC/COP end                 (raw timestamp from the WG's own
+                                      Securing- or Coupling- ActivityEvent
+                                      Completed event; whichever fires)
+      S  Idle time on classification track (hh:mm:ss)
+                                    = OBTPStarts - SEC/COP end
+                                    = the "doing nothing" window
+                                      after the WG's own prep is done
+                                      but before OBT-wide work begins
+    Parser change: parse_wagon_groups now walks every ActivityEvent
+    (not just PushOffDrive). For activityType in ("Securing", "Coupling")
+    with status Completed, it parses the WG id from parts[2] of the
+    activity id (Act_SEC_<wgId>_HHMMSS_track or
+    Act_COP_<wgId>_HHMMSS_track) and stores the timestamp as
+    rec["secCopEnd"].
+    Sheet change: build_wagon_groups_sheet grew from 17 to 19 columns,
+    with the new R (SEC/COP end, datetime format) and S (idle time,
+    [h]:mm:ss format) at the right edge -- letter references in all
+    existing formulas (M, N, P, Q) are unaffected.
+    Definitions sheet: new "Idle time on classification track (hh:mm:ss)"
+    KPI row added under the Wagon Groups KPIs block, formula reads
+    "Wagon Groups!S = I - R = OBTP_Starts - (SEC or COP end)".
+
+  28.2 New "Overview" sheet -- tab #2, right after Definitions
+    One-screen run summary of every defined KPI plus top-level
+    counts. Layout:
+
+      Row 1   Title: "Wiener Neustadt Shunting Yard -- Overview"
+      Row 3   "-- Run summary --" header
+      Row 4-7  Counts: Inbound trains processed, OBTs created,
+                       WGs classified, Activity instances logged
+                       (all COUNTA-based formulas)
+      Row 8   Sim duration (computed in Python from min Entry /
+              max DEPD end / max PushOff end across trains+obts;
+              written as fraction-of-day, formatted [h]:mm:ss)
+
+      Row 10  "-- Incoming Trains KPIs --" header + column subheaders
+                                            (Mean | Min | Max | Median)
+      Rows 11-18  8 KPI rows referencing Incoming Trains!M..T:
+                    Queue wait                       (M)
+                    Arrival drive duration           (N)
+                    ITP wait                         (O)
+                    ITP duration                     (P)
+                    PushOff wait                     (Q)
+                    PushOff duration                 (R)
+                    Total in arrival yard            (S)
+                    Total in system                  (T)
+
+      Row 20  "-- Wagon Groups KPIs --" header + subheaders
+      Rows 21-25  5 KPI rows referencing Wagon Groups columns:
+                    Time in arrival yard             (M)
+                    Time in classification yard      (N)
+                    Sibling wait                     (P)
+                    Post-OBTP wait + DEPD            (Q)
+                    Idle time on classification track (S)
+
+      Row 27  "-- Outbound Trains KPIs --" header + subheaders
+      Rows 28-33  6 KPI rows referencing Outbound Trains!K..P:
+                    OBTP wait                        (K)
+                    OBTP duration                    (L)
+                    Pre-DEPD wait                    (M)
+                    DEPD gate wait                   (N)
+                    DEPD duration                    (O)
+                    Total on classification track    (P)
+
+    Every value cell is a live Excel formula:
+      =IFERROR(AVERAGE('Incoming Trains'!M:M),0)
+      =IFERROR(MIN('Incoming Trains'!M:M),0)
+      =IFERROR(MAX('Incoming Trains'!M:M),0)
+      =IFERROR(MEDIAN('Incoming Trains'!M:M),0)
+    Whole-column references (M:M) let AVERAGE etc. ignore the header
+    (text) and blank cells automatically. IFERROR catches the
+    AVERAGE/MEDIAN divide-by-zero that happens when there's no data.
+    All value cells formatted as "[h]:mm:ss" so the user reads a
+    consistent hh:mm:ss across the entire Overview block -- matches
+    the workbook-wide hh:mm:ss convention from entry [27].
+
+    Counts (rows 4-7) keep number format "0" (integers).
+
+    Styling:
+      * Title row (1): Arial 14 bold.
+      * Section headers (start with "--"): FONT_BOLD on the label and
+        each value-column subheader.
+      * Data rows: FONT on label + value cells.
+      * Column widths: A = 44 (long KPI labels read clearly); B-E = 14.
+      * Freeze pane at B2 so column A (KPI name) stays visible while
+        scrolling.
+
+    Implementation:
+      * New function build_overview_sheet(wb, trains, obts, wgs,
+        activities) in Output/analytics.py.
+      * main() calls it AFTER all the other structured front sheets
+        but with create_sheet index 1, so it lands cleanly at tab #2
+        instead of being bumped rightward by later inserts.
+
+  28.3 KPI bar charts on the Activity Charts sheet (VBA)
+    New module Output/vba_modules/Module_PlotKPIs.bas with two entry
+    points:
+      PlotKPISummaries        - prompts on completion
+      PlotKPISummariesSilent  - silent variant for the .vbs path
+    The silent variant is hooked into Module_PlotActivitiesByTrack's
+    PlotAllSilent, so the .vbs post-processor produces the KPI bars
+    alongside the per-activity-type charts and the drive scatter.
+
+    Three horizontal bar charts (xlBarClustered):
+      KPIIncoming      8 bars  Mean Incoming Trains KPIs
+      KPIWagonGroups   5 bars  Mean Wagon Groups KPIs
+      KPIOutbound      6 bars  Mean Outbound Trains KPIs
+
+    Each chart pulls its category labels from Overview!A<first>:A<last>
+    and the bar values from Overview!B<first>:B<last> (the Mean
+    column). Value axis (the X axis on a horizontal bar chart) tick
+    labels formatted "[h]:mm:ss" so the time values read naturally.
+    Per-bar data labels also formatted "[h]:mm:ss" -- showing exact
+    durations on each bar without needing to read the axis.
+    ReversePlotOrder = True puts the KPIs in the same order top-down
+    as they appear on the Overview sheet.
+
+    Placement: below Module_PlotDriveActivities's drive scatter (which
+    sits at top=1950, height=520, so its bottom edge is ~2470).
+    KPI charts start at top=2520 in a 2-column grid:
+      Row 1: KPIIncoming (left)  +  KPIWagonGroups (right)
+      Row 2: KPIOutbound (left, full width row -- only one chart)
+
+  28.4 Files touched
+    Output/analytics.py
+      - parse_wagon_groups extended to capture SEC/COP completion per WG.
+      - build_wagon_groups_sheet: 2 new columns (R, S) at the right edge.
+      - New build_overview_sheet (the whole sheet).
+      - main() wires the new builder.
+      - Definitions sheet gains the Idle-time KPI row.
+    Output/vba_modules/Module_PlotKPIs.bas
+      - NEW FILE. Three bar charts plus the wiring.
+    Output/vba_modules/Module_PlotActivitiesByTrack.bas
+      - PlotAllSilent extended to call Module_PlotKPIs.PlotKPISummariesSilent.
+    Other files/Documentation.txt
+      - this entry.
+
+  Verifying:
+    * Re-run the sim, then python Output/analytics.py.
+    * Open SimulationAnalytics.xlsm. Tab #2 should be "Overview", with
+      the title, run-summary counts, sim duration, and the three KPI
+      blocks (Incoming / Wagon Groups / Outbound) -- every value in
+      hh:mm:ss format.
+    * Edit any cell on Incoming Trains M..T; the matching Overview
+      row should auto-update because of the live formula references.
+    * Open the Activity Charts sheet, scroll down past the drive
+      scatter; three KPI bar charts should sit in the 2-col layout
+      with hh:mm:ss-formatted data labels and axis tick labels.
+
+  Follow-up (deferred):
+    * Charts currently visualise only the Mean column. If the
+      supervisor wants min/max whiskers, the same Overview rows can
+      drive an error-bar chart variant -- one extra VBA pass.
+    * Counts could be visualised too (e.g. a small "Trains in vs
+      OBTs out" stacked bar). Skipped for now to keep the chart sheet
+      uncluttered.
+
+[29] KPI set aligned to the supervisor-approved definition list
+  The user fixed the canonical KPI list (June 2026). The workbook carried
+  three extra diagnostic KPIs beyond that list; they are now removed so
+  the sheets, the Overview, the Definitions sheet and the KPI bar charts
+  all express exactly the approved set. One rename for clarity.
+
+  29.1 The approved KPI list (16 KPIs)
+    Incoming Trains (8): Entry Queue wait (M = E-D), Arrival drive
+      duration (N = F-E), ITP wait (O = H-G), ITP duration (P = I-H),
+      PushOff wait (Q = K-J), PushOff duration (R = L-K), Total in
+      arrival yard (S = L-F), Total in system (T = L-D).
+    Wagon Groups (3): Time in arrival yard (M = G-E), Time in
+      classification yard (N = L-G), Idle time on classification track
+      (P = I-O = OBTP_Starts - SEC/COP_End).
+    Outbound Trains (5): OBTP wait (K = F-E), OBTP duration (L = G-F),
+      DEPD gate wait (M = I-H), DEPD duration (N = J-I), Total on
+      classification track (O = J-E).
+    All source timestamps were already captured per entry [22]-[28];
+    no new data had to be pulled from SimulationLog.json.
+
+  29.2 Removed KPIs / columns
+    * Wagon Groups: "OBTP init" (old O), "Sibling wait" (old P = O-G)
+      and "Post-OBTP wait + DEPD" (old Q = L-J) columns removed. The
+      sheet shrinks 19 -> 16 columns; "SEC/COP end" moves R -> O and
+      "Idle time on classification track" moves S -> P (formula now
+      I - O, same semantics: OBTP starts - own SEC/COP completion).
+      parse_wagon_groups dropped its outbound_trains parameter and the
+      obtpInit stitching - both existed only to feed the removed
+      Sibling-wait column. main() call updated to match.
+    * Outbound Trains: "Pre-DEPD wait" (old M = H-G) column removed
+      (it is ~0 by construction - CompleteOutboundTrainPreparation
+      calls RequestDepartureDrive synchronously). The sheet shrinks
+      16 -> 15 columns; DEPD gate wait N -> M, DEPD duration O -> N,
+      Total on classification track P -> O.
+
+  29.3 Rename
+    "Queue wait" -> "Entry Queue wait" (Incoming Trains!M header,
+    Overview row label, Definitions row). Same formula (E - D =
+    ArrivalDriveStart - EntryToStation, pure entry-queue time).
+
+  29.4 Overview restructure
+    KPI blocks now mirror 29.1 exactly. Row layout (consumed by
+    Module_PlotKPIs.bas constants - keep in sync):
+      rows 11-18  Incoming Trains KPIs   (8 rows, unchanged)
+      rows 21-23  Wagon Groups KPIs      (3 rows, was 21-25)
+      rows 26-30  Outbound Trains KPIs   (5 rows, was 28-33)
+    Mean / Min / Max / Median per KPI retained (live whole-column
+    IFERROR(AVERAGE/MIN/MAX/MEDIAN(...)) formulas, [h]:mm:ss).
+
+  29.5 Definitions sheet sync
+    * "Entry Queue wait" rename applied.
+    * "Idle time on classification track" KPI row ADDED - entry [28]
+      claimed it but the row had never actually landed in
+      build_definitions_sheet (doc/code drift, now fixed).
+    * "Pre-DEPD wait" row removed; Outbound column letters updated
+      (gate wait M, duration N, total O).
+    * Stale "x 86400" factors stripped from all formula texts - the
+      sheet formulas stopped multiplying by 86400 in entry [27] when
+      everything moved to native [h]:mm:ss date-fraction arithmetic.
+
+  29.6 VBA: Module_PlotKPIs.bas
+    WG_LAST_ROW 25 -> 23, OUT_FIRST_ROW 28 -> 26, OUT_LAST_ROW 33 -> 30
+    (and header comment updated: 3 WG bars, 5 Outbound bars). Chart
+    placement and formatting unchanged.
+
+  29.7 Files touched
+    Output/analytics.py                  - parse_wagon_groups slimmed;
+                                           build_wagon_groups_sheet and
+                                           build_outbound_trains_sheet
+                                           rebuilt; Overview KPI blocks;
+                                           Definitions rows; header rename.
+    Output/vba_modules/Module_PlotKPIs.bas - Overview row constants.
+    Other files/Documentation.txt        - this entry.
+
+  Verifying: python Output/analytics.py after a sim run. Wagon Groups
+  should show 16 columns ending "SEC/COP end" / "Idle time on
+  classification track (hh:mm:ss)"; Outbound Trains 15 columns with no
+  Pre-DEPD wait; Overview rows 21-23 / 26-30 hold the WG / OBT blocks;
+  the three KPI bar charts on Activity Charts pick up the new ranges.
+  Verified in-process against the current SimulationLog.json (77 trains,
+  250 WGs, 78 OBTs): all KPI formulas resolve, sample WG idle time
+  0:15:17 (plausible), no leftover references to the removed columns.
+
+
 14. FILE / MODULE INDEX
 ================================================================================
 
