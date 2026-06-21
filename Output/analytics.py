@@ -41,10 +41,14 @@ except ImportError:
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+# Input log: the C# sim writes SimulationLog.json into the build tree
+# (bin/Debug/net8.0/OutputFiles), so we read it from there.
 LOG_PATH = os.path.join(REPO_ROOT, "bin", "Debug", "net8.0", "OutputFiles",
                         "SimulationLog.json")
-OUT_PATH = os.path.join(REPO_ROOT, "bin", "Debug", "net8.0", "OutputFiles",
-                        "SimulationAnalytics.xlsx")
+# Output workbook: written into the repo's Output/ folder (= SCRIPT_DIR,
+# where this script lives). That folder is tracked in git, so the workbook
+# is visible on GitHub / in the repo, unlike the git-ignored bin/Debug tree.
+OUT_PATH = os.path.join(SCRIPT_DIR, "SimulationAnalytics.xlsx")
 
 FONT = Font(name="Arial", size=10)
 FONT_BOLD = Font(name="Arial", size=10, bold=True)

@@ -27,8 +27,11 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 
 scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
 repoRoot  = fso.GetParentFolderName(scriptDir)
-xlsxPath  = fso.BuildPath(repoRoot, "bin\Debug\net8.0\OutputFiles\SimulationAnalytics.xlsx")
-xlsmPath  = fso.BuildPath(repoRoot, "bin\Debug\net8.0\OutputFiles\SimulationAnalytics.xlsm")
+' Workbook lives in the Output\ folder (= scriptDir) so it is tracked in
+' git and visible in the repo, matching OUT_PATH in analytics.py. (Was
+' previously the git-ignored bin\Debug\net8.0\OutputFiles build tree.)
+xlsxPath  = fso.BuildPath(scriptDir, "SimulationAnalytics.xlsx")
+xlsmPath  = fso.BuildPath(scriptDir, "SimulationAnalytics.xlsm")
 vbaDir    = fso.BuildPath(scriptDir, "vba_modules")
 
 If Not fso.FileExists(xlsxPath) Then
