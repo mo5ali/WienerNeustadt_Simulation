@@ -2697,6 +2697,61 @@ This is the running narrative; new entries are appended as work continues.
     * analytics.py needs NO change -- ITP duration and push speed are
       engine-computed and read straight from SimulationLog.json.
 
+[33] Arrival-track wait: real-clock Thread.Sleep replaced with sim-time
+     rescheduling (DES correctness fix)
+  ArrivalControlUnit.HandleTrainArrival assigned an arrival track in a
+  busy-wait: while (assignedTrack == null) { ...scan tracks...;
+  Thread.Sleep(30000); }. Thread.Sleep blocks the REAL wall clock inside a
+  single-threaded DES event handler -- so if every suitable arrival track
+  is occupied when a train arrives, the handler sleeps the engine thread
+  forever: nothing else can run, including the PushOff completion that
+  would free a track, and the whole simulation freezes. It only worked
+  because the current test schedule never actually contends for arrival
+  tracks; any denser / higher-utilisation scenario would deadlock.
+
+  33.1 Fix
+    * HandleTrainArrival now delegates to TryAssignArrivalTrack(train),
+      which makes ONE assignment attempt. On success it reserves the track,
+      removes the train from the entry queue, and starts the arrival drive
+      (StartArrivalDrive -- the old drive / sort / ITP-request tail extracted
+      verbatim). On failure it logs the wait once and RE-SCHEDULES itself on
+      the engine at Now + ARRIVAL_TRACK_RETRY_SECONDS (30 s of SIM time),
+      never blocking. The poll advances in sim time, so it is deterministic
+      and lets the freed-track event run first.
+    * Capacity guard: if NO arrival track is even long enough for the train
+      (a data/capacity error, not a transient wait), it is logged as a
+      TrainEvent "ArrivalTrackUnavailable" (mirroring the existing
+      "ClassificationTrackUnavailable") and abandoned, instead of
+      rescheduling forever -- which would keep the engine's event list
+      non-empty and stop the run from ever terminating.
+    * RemoveFromEntryQueue filters the specific train out of _entryQueue
+      (assignment order can differ from arrival order when trains need
+      different track lengths), replacing the old blind Dequeue.
+
+  33.2 Behaviour
+    Unchanged on the current scenario -- there is no arrival-track
+    contention, so the reschedule path is never taken and every train is
+    assigned a track on the first attempt exactly as before. The change only
+    matters once trains actually compete for arrival tracks. An event-driven
+    alternative (re-run assignment from RequestPushOff's track-release site
+    instead of polling) is noted in the code comment.
+
+  33.3 Files touched
+    Control/ArrivalControlUnit.cs - HandleTrainArrival split into
+                                    TryAssignArrivalTrack / StartArrivalDrive /
+                                    RemoveFromEntryQueue; Thread.Sleep removed;
+                                    capacity guard + ARRIVAL_TRACK_RETRY_SECONDS.
+    Other files/Documentation.txt - this entry.
+
+  33.4 Verifying
+    * dotnet build (Windows; no .NET in the dev sandbox). Current scenario:
+      identical output (the reschedule path is not exercised).
+    * To exercise it, tighten the inbound schedule or reduce the arrival-track
+      count so trains contend, then confirm the sim still COMPLETES (no
+      freeze), prints "no arrival track currently available ... waiting
+      (re-checking every 30s sim time)", and assigns each waiting train when
+      a track frees.
+
 
 14. FILE / MODULE INDEX
 ================================================================================

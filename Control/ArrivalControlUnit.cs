@@ -74,44 +74,97 @@ namespace WienerNeustadtSimulation.Control
                 details: BuildTrainDetails(trainDto, _wagonGroupData)
 );
 
-            var firstTrain = _entryQueue.Peek();
-            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: handling train {firstTrain.ID} of length {firstTrain.Length} meters");
+            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: handling train {train.ID} of length {train.Length} meters");
+
+            TryAssignArrivalTrack(train, alreadyWaiting: false);
+        }
+
+        // Sim-time poll interval used when a train can't yet be given a free
+        // arrival track. We re-attempt assignment on the engine Now + this many
+        // seconds later, instead of blocking — see TryAssignArrivalTrack.
+        private const int ARRIVAL_TRACK_RETRY_SECONDS = 30;
+
+        // Attempts to give `train` a free arrival track. On success it reserves
+        // the track, drops the train from the entry queue, and starts the
+        // arrival drive. On failure (every long-enough arrival track is occupied
+        // or reserved) it logs the wait once and RE-SCHEDULES itself on the
+        // engine ARRIVAL_TRACK_RETRY_SECONDS of SIM time later.
+        //
+        // This replaces the old `while (...) Thread.Sleep(30000)` busy-wait,
+        // which blocked the single-threaded DES on the real wall clock: under
+        // any arrival-track contention that would have frozen the whole
+        // simulation, because no other event — including the PushOff completion
+        // that frees a track — could run while the handler slept. Polling in sim
+        // time is deterministic; an event-driven variant could instead re-run
+        // this from the arrival-track release site (RequestPushOff's OnCompleted)
+        // at the cost of extra wiring.
+        private void TryAssignArrivalTrack(Train train, bool alreadyWaiting)
+        {
+            // Capacity check (ignores occupancy): is ANY arrival track even long
+            // enough for this train? If not, it can never be placed — that's a
+            // data/capacity error, not a transient wait, so abandon it instead of
+            // rescheduling forever (which would keep the engine's event list
+            // non-empty and prevent the run from terminating).
+            bool anyLongEnough = _arrivalTracks.Any(
+                t => t.Designation == "Arrival" && t.Length >= train.Length);
+            if (!anyLongEnough)
+            {
+                Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: ERROR — no arrival track is long enough for train {train.ID} ({train.Length:F0}m); abandoning it");
+                SimulationLogger.Instance.LogTrainEvent(train.ID, "ArrivalTrackUnavailable", _engine.Now, $"{train.Length:F0}m exceeds every arrival track");
+                RemoveFromEntryQueue(train);
+                return;
+            }
 
             Track assignedTrack = null;
-            bool firstTime = true;
-
-            while (assignedTrack == null)
+            foreach (var track in _arrivalTracks)
             {
-                foreach (var track in _arrivalTracks)
+                if (track.Length >= train.Length && track.Designation == "Arrival"
+                    && track.CurrentOccupancies.Count == 0 && track.Reserved == false)
                 {
-                    if (track.Length >= train.Length && track.Designation == "Arrival")
-                    {
-                        if (track.CurrentOccupancies.Count == 0 && track.Reserved == false)
-                        {
-                            assignedTrack = track;
-                            Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: train {train.ID} assigned arrival track {track.RealLifeID}");
-                            SimulationLogger.Instance.LogTrainEvent(train.ID, "AssignedArrivalTrack", _engine.Now, assignedTrack.RealLifeID);
-                            track.Reserved = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (assignedTrack == null)
-                {
-                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: no arrival track currently available for train {train.ID}");
-
-                    if (firstTime)
-                    {
-                        Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: starting waiting activity for train {train.ID}");
-                        train.Status = "waiting for arrival track";
-                        firstTime = false;
-                    }
-
-                    System.Threading.Thread.Sleep(30000);
+                    assignedTrack = track;
+                    track.Reserved = true;
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: train {train.ID} assigned arrival track {track.RealLifeID}");
+                    SimulationLogger.Instance.LogTrainEvent(train.ID, "AssignedArrivalTrack", _engine.Now, assignedTrack.RealLifeID);
+                    break;
                 }
             }
 
+            if (assignedTrack == null)
+            {
+                if (!alreadyWaiting)
+                {
+                    Console.WriteLine($"{_engine.Now:dd/MM/yyyy-HH:mm:ss.ff} | ArrivalCU: no arrival track currently available for train {train.ID} — waiting (re-checking every {ARRIVAL_TRACK_RETRY_SECONDS}s sim time)");
+                    train.Status = "waiting for arrival track";
+                }
+                _engine.Schedule(
+                    _engine.Now.AddSeconds(ARRIVAL_TRACK_RETRY_SECONDS),
+                    () => TryAssignArrivalTrack(train, alreadyWaiting: true),
+                    $"RetryArrivalTrack-{train.ID}"
+                );
+                return;
+            }
+
+            RemoveFromEntryQueue(train);
+            StartArrivalDrive(train, assignedTrack);
+        }
+
+        // Remove a specific train from the entry queue. Assignment order can
+        // differ from arrival order (trains need different track lengths), so we
+        // can't just Dequeue the front — filter the queue down to everything
+        // except this train.
+        private void RemoveFromEntryQueue(Train train)
+        {
+            if (!_entryQueue.Contains(train)) return;
+            var remaining = _entryQueue.Where(t => t.ID != train.ID).ToList();
+            _entryQueue.Clear();
+            foreach (var t in remaining) _entryQueue.Enqueue(t);
+        }
+
+        // Builds and fires the ArrivalDrive for a train that has just been given
+        // an arrival track. Extracted verbatim from the old HandleTrainArrival
+        // tail so the drive / sort / ITP-request flow is unchanged.
+        private void StartArrivalDrive(Train train, Track assignedTrack)
+        {
             var driveActivity = new ArrivalDriveActivity(
                 engine: _engine,
                 trainId: train.ID,
@@ -153,8 +206,6 @@ namespace WienerNeustadtSimulation.Control
 
             // No resources needed — commence immediately
             driveActivity.OnReadyToCommence?.Invoke(null);
-
-            _entryQueue.Dequeue();
         }
         static string BuildTrainDetails(TrainDto t, Dictionary<string, WagonGroupDto> wagonGroupData)
         {
