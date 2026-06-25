@@ -69,9 +69,10 @@ namespace WienerNeustadtSimulation.Models
         // Shunting locomotive speed while pushing a cut of wagons in a flat
         // shunting yard. Real flat-yard shunting is controlled to ~10-15 km/h
         // (dropping to ~5 km/h only for the final coupling approach). We use
-        // 15 km/h = 250 m/min for the push move. Replaces the previous
-        // unrealistic 20 m/min (~1.2 km/h, walking pace).
-        private const double PUSH_SPEED_M_PER_MIN = 250.0; // 15 km/h
+        // the cautious end, 10 km/h = 166.67 m/min, for the push move.
+        // (Previously 15 km/h = 250 m/min; before that an unrealistic
+        // 20 m/min ~ 1.2 km/h walking pace.)
+        private const double PUSH_SPEED_M_PER_MIN = 166.67; // 10 km/h
 
         // Length penalty for the push-off drive, kept small so path distance
         // stays the dominant factor (matches [18]/[20]). IMPORTANT: this is

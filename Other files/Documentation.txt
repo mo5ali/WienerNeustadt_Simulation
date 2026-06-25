@@ -2617,6 +2617,86 @@ This is the running narrative; new entries are appended as work continues.
       (combined SEC entity) and confirmed backward-compatible with the
       existing old-format SimulationLog.json.
 
+[32] ITP duration reformulated (joint work + train-length walk); PushOff
+     speed 10 km/h; time-per-joint 90 s
+  Calibration changes from a review of the drive / ITP equations workbook
+  (Other files/Drive_speed_and_ITP_equations.xlsx).
+
+  32.1 New ITP duration formula
+    Old:
+      duration_s = max(joints,1) x 120 x (trainLength / 100) x workerMult
+    New:
+      duration_s = max(joints,1) x BASE_SECONDS_PER_JOINT x workerMult   (joint term)
+                   + (trainLength / walkingSpeed) x 60                    (walk term)
+    Two physically distinct terms:
+      * Joint term: the hands-on separation work at each joint -- uncoupling
+        and fitting / removing the removable link that splits the wagon-group
+        cuts during push-off. Driven by the separation-joint count (floored to
+        1) and the average ITP-skill multiplier of the allocated workers. The
+        old length factor (trainLength / 100) is DROPPED -- train length no
+        longer scales the per-joint work.
+      * Walk term: the time for the workers to walk the length of the train
+        for the visual checks / info confirmation done during ITP.
+        trainLength (m) / walkingSpeed (m/min) -> minutes, x 60 -> seconds.
+    BASE_SECONDS_PER_JOINT reduced 120 -> 90 s.
+
+  32.2 Worker walking speed
+    walkingSpeed is the workers' station MovementSpeedMetersPerMinute (the
+    SAME speed used for their travel to the work site), averaged across the
+    workers actually allocated to the ITP. ArrivalControlUnit computes that
+    average from the allocated WorkerDtos and sets
+    ManipulationActivity.WalkingSpeedMetersPerMinute before CalculateDuration
+    runs; a fallback of 80 m/min is used if no speed is available.
+    Realism check (ResourcePool.json): worker speeds span 79-100 m/min =
+    4.7-6.0 km/h (mean 85.9; Arrival-area ITP workers mean 87.1), within the
+    realistic adult-walking band (~5 km/h average, ~6 km/h brisk). No data
+    change needed.
+
+  32.3 PushOff drive speed 15 -> 10 km/h
+    PushOffActivity.PUSH_SPEED_M_PER_MIN 250 m/min (15 km/h) -> 166.67 m/min
+    (10 km/h), the cautious end of the 10-15 km/h flat-yard shunting band.
+    Push-drive durations rise accordingly (travel_s = distance_m x 0.36 at
+    10 km/h). ArrivalDrive / DepartureDrive (20 km/h) and the 0.2 s/m length
+    penalties are unchanged.
+
+  32.4 Effect (sample, worker_mult = 1.0)
+    ITP: a 3-joint / 400 m train was 24:00 under the old formula; under the
+    new one (walk 87 m/min) it is 3x90 + (400/87)x60 = 270 + 275.9 ~ 9:06.
+    A 0-/1-joint 200 m train ~ 3:48 (90 s + walk). PushOff 703->615 cut 100 m
+    rises from ~1:25 (15 km/h) to ~1:57 (10 km/h).
+
+  32.5 Reference workbook
+    Other files/Drive_speed_and_ITP_equations.xlsx regenerated from the
+    user-revised template (edited in place, formatting preserved): the ITP
+    sheet carries the new two-term formula, the 90 s constant, the
+    walking-speed constant + realism note, and a recomputed duration table +
+    worked example; the Drive-speed sheet carries the 10 km/h push speed and a
+    recomputed PushOffDrive table + worked example; the Open-questions sheet's
+    0-joint numbers were updated.
+
+  32.6 Files touched
+    Models/ManipulationActivity.cs   - new two-term ITP formula;
+                                       BASE_SECONDS_PER_JOINT 120 -> 90;
+                                       REF_LENGTH_M removed; new
+                                       WalkingSpeedMetersPerMinute property +
+                                       FALLBACK_WALK_SPEED_M_PER_MIN.
+    Control/ArrivalControlUnit.cs     - averages the allocated ITP workers'
+                                       MovementSpeedMetersPerMinute into the
+                                       activity before CalculateDuration.
+    Models/PushOffActivity.cs        - PUSH_SPEED_M_PER_MIN 250 -> 166.67.
+    Other files/Drive_speed_and_ITP_equations.xlsx - regenerated.
+    Other files/Documentation.txt    - this entry.
+
+  32.7 Verifying
+    * dotnet build (Windows; no .NET in the dev sandbox). Re-run the sim, then
+      python Output/analytics.py.
+    * Console at each ITP commence should show the new duration; workbook ITP
+      durations should track joint-count + train-length/walking-speed rather
+      than the old length-scaled joint product.
+    * Drive Stats: PushOffDrive mean speed should now read ~10 km/h.
+    * analytics.py needs NO change -- ITP duration and push speed are
+      engine-computed and read straight from SimulationLog.json.
+
 
 14. FILE / MODULE INDEX
 ================================================================================

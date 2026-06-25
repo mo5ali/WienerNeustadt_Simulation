@@ -414,6 +414,20 @@ namespace WienerNeustadtSimulation.Control
             foreach (var worker in allocatedWorkers)
                 workerMultipliers[worker.Id] = _resourceControl.GetWorkerTimeMultiplierForActivity(worker, activity.ActivityType);
 
+            // ITP duration now has a train-length walk term driven by the
+            // allocated workers' station walking speed. Feed the average of the
+            // allocated workers' MovementSpeedMetersPerMinute to the activity
+            // before computing the duration.
+            if (activity is ManipulationActivity manip && activity.ActivityType == "IncomingTrainPreparation")
+            {
+                var walkSpeeds = allocatedWorkers
+                    .Select(w => w.MovementSpeedMetersPerMinute ?? 0.0)
+                    .Where(s => s > 0)
+                    .ToList();
+                if (walkSpeeds.Count > 0)
+                    manip.WalkingSpeedMetersPerMinute = walkSpeeds.Average();
+            }
+
             // Duration must be computed BEFORE MarkCommenced so the Started log carries
             // the calculated duration / worker multiplier.
             var duration = activity.CalculateDuration(workerMultipliers);

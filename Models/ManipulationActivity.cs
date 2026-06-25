@@ -6,29 +6,34 @@ namespace WienerNeustadtSimulation.Models
 {
     public class ManipulationActivity : Activity
     {
-        // ITP duration formula constants (supervisor spec, June 2026).
+        // ITP duration formula (supervisor spec, updated):
         //
         //   duration_seconds
-        //     = max(joints, 1) × BASE_SECONDS_PER_JOINT
-        //                      × (trainLength / REF_LENGTH_M)
-        //                      × averageWorkerMultiplier
+        //     = max(joints, 1) × BASE_SECONDS_PER_JOINT × averageWorkerMultiplier   (joint term)
+        //       + (trainLength / walkingSpeed) × 60                                  (walk term)
         //
-        // The "joints" main factor is the count of consecutive
-        // same-destination cuts minus 1 (a 3-cut train has 2 joints —
-        // 2 places where workers physically separate the train during
-        // preparation). The max() floor recognises that even a
-        // single-destination train (0 joints) still needs the road-loco
-        // decouple + brake-line work, which is on the same order as
-        // one joint's worth of effort. The length factor is a linear
-        // scale: a 200 m train multiplies the per-joint base time by
-        // 2.0; a 50 m train by 0.5. The worker multiplier is the
-        // average of allocated workers' ITP-skill multipliers
-        // (default 1.0 if no skill entry).
+        // Joint term: the hands-on work of separating the train at each
+        // separation joint — uncoupling and fitting/removing the removable
+        // link used to split the wagon-group cuts during push-off. Scales with
+        // the number of separation joints (consecutive same-destination cuts − 1,
+        // floored to 1) and the average ITP-skill multiplier of the allocated
+        // workers (default 1.0 if no skill entry).
+        // Walk term: the time for the workers to walk the length of the train
+        // for the visual checks / info confirmation done during ITP.
+        // trainLength (m) ÷ walkingSpeed (m/min) gives minutes; × 60 → seconds.
+        // walkingSpeed is the workers' station MovementSpeedMetersPerMinute
+        // (the same speed used for their travel to the work site), averaged
+        // across the allocated ITP workers and set by ArrivalControlUnit.
         //
-        // Tune BASE_SECONDS_PER_JOINT and REF_LENGTH_M independently
-        // to recalibrate without touching the formula structure.
-        private const double BASE_SECONDS_PER_JOINT = 120.0;  // 2 min per separation joint
-        private const double REF_LENGTH_M = 100.0;            // 1.0× factor at 100 m
+        // The max(joints, 1) floor recognises that even a single-destination
+        // train (0 joints) still needs the road-loco decouple + brake-check
+        // work, on the order of one joint's effort. Tune BASE_SECONDS_PER_JOINT
+        // to recalibrate the joint term.
+        private const double BASE_SECONDS_PER_JOINT = 90.0;   // 1.5 min per separation joint (was 120)
+        // Fallback worker walking speed (m/min) for the walk term, used only if
+        // no allocated-worker speed is available. Same magnitude as
+        // ResourceControlUnit.DefaultWorkerSpeedMetersPerMinute.
+        private const double FALLBACK_WALK_SPEED_M_PER_MIN = 80.0;
         public override int RequiredWorkers => GetRequiredWorkersForType(ActivityType);
         public override bool RequiresLocomotive => GetRequiresLocomotiveForType(ActivityType);
         public override double BaseSecondsPerMeter => GetBaseSecondsPerMeterForType(ActivityType);
@@ -47,6 +52,12 @@ namespace WienerNeustadtSimulation.Models
         // The ITP duration formula in CalculateDuration (task #24) uses it
         // as the main driver of work time.
         public int SeparationJoints { get; }
+
+        // Average walking speed (m/min) of the workers allocated to this ITP,
+        // set by ArrivalControlUnit just before CalculateDuration is called.
+        // Drives the walk term of the ITP formula. Defaults to the fallback
+        // until set.
+        public double WalkingSpeedMetersPerMinute { get; set; } = FALLBACK_WALK_SPEED_M_PER_MIN;
 
         public ManipulationActivity(
             string activityType,
@@ -87,11 +98,17 @@ namespace WienerNeustadtSimulation.Models
             AverageWorkerMultiplier = modifiers.Count > 0 ? modifiers.Average() : 1.0;
 
             int effectiveJoints = Math.Max(SeparationJoints, 1);
-            double lengthFactor = EntityLength / REF_LENGTH_M;
-            double seconds = effectiveJoints
-                             * BASE_SECONDS_PER_JOINT
-                             * lengthFactor
-                             * AverageWorkerMultiplier.Value;
+            // Joint term: separation work, scaled by the worker ITP-skill multiplier.
+            double jointSeconds = effectiveJoints
+                                  * BASE_SECONDS_PER_JOINT
+                                  * AverageWorkerMultiplier.Value;
+            // Walk term: workers walking the train length for visual checks.
+            // length (m) / speed (m/min) = minutes; × 60 → seconds.
+            double walkSpeed = WalkingSpeedMetersPerMinute > 0
+                ? WalkingSpeedMetersPerMinute
+                : FALLBACK_WALK_SPEED_M_PER_MIN;
+            double walkSeconds = (EntityLength / walkSpeed) * 60.0;
+            double seconds = jointSeconds + walkSeconds;
             CalculatedDuration = TimeSpan.FromSeconds(seconds);
             return CalculatedDuration.Value;
         }
