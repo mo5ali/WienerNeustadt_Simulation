@@ -15,9 +15,9 @@ namespace WienerNeustadtSimulation.Models
         // Joint term: the hands-on work of separating the train at each
         // separation joint — uncoupling and fitting/removing the removable
         // link used to split the wagon-group cuts during push-off. Scales with
-        // the number of separation joints (consecutive same-destination cuts − 1,
-        // floored to 1) and the average ITP-skill multiplier of the allocated
-        // workers (default 1.0 if no skill entry).
+        // the number of separation joints (consecutive same-destination cuts − 1)
+        // and the average ITP-skill multiplier of the allocated workers
+        // (default 1.0 if no skill entry).
         // Walk term: the time for the workers to walk the length of the train
         // for the visual checks / info confirmation done during ITP.
         // trainLength (m) ÷ walkingSpeed (m/min) gives minutes; × 60 → seconds.
@@ -25,10 +25,10 @@ namespace WienerNeustadtSimulation.Models
         // (the same speed used for their travel to the work site), averaged
         // across the allocated ITP workers and set by ArrivalControlUnit.
         //
-        // The max(joints, 1) floor recognises that even a single-destination
-        // train (0 joints) still needs the road-loco decouple + brake-check
-        // work, on the order of one joint's effort. Tune BASE_SECONDS_PER_JOINT
-        // to recalibrate the joint term.
+        // No joint floor: a single-destination train (0 joints) keeps its road
+        // locomotive until push-off, so it needs no separation work — its ITP
+        // duration is purely the walk term. Tune BASE_SECONDS_PER_JOINT to
+        // recalibrate the joint term.
         private const double BASE_SECONDS_PER_JOINT = 90.0;   // 1.5 min per separation joint (was 120)
         // Fallback worker walking speed (m/min) for the walk term, used only if
         // no allocated-worker speed is available. Same magnitude as
@@ -97,9 +97,12 @@ namespace WienerNeustadtSimulation.Models
             }
             AverageWorkerMultiplier = modifiers.Count > 0 ? modifiers.Average() : 1.0;
 
-            int effectiveJoints = Math.Max(SeparationJoints, 1);
+            // No floor: a single-destination (0-joint) train keeps its road
+            // locomotive until push-off and needs no joint separation work, so
+            // its joint term is 0 and the ITP duration is purely the walk term.
+            int joints = SeparationJoints;
             // Joint term: separation work, scaled by the worker ITP-skill multiplier.
-            double jointSeconds = effectiveJoints
+            double jointSeconds = joints
                                   * BASE_SECONDS_PER_JOINT
                                   * AverageWorkerMultiplier.Value;
             // Walk term: workers walking the train length for visual checks.

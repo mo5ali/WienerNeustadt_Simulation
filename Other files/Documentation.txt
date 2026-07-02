@@ -2752,6 +2752,75 @@ This is the running narrative; new entries are appended as work continues.
       (re-checking every 30s sim time)", and assigns each waiting train when
       a track frees.
 
+[34] ITP 0-joint floor removed; Securing & Coupling changed to fixed durations
+  Two calibration changes.
+
+  34.1 ITP 0-joint floor removed
+    ManipulationActivity's ITP joint term used max(joints, 1), so a single-
+    destination (0-joint) train was charged one joint of separation work.
+    Removed: a single-destination train keeps its road (train) locomotive
+    coupled until push-off, so there is no separation work to do -- its ITP
+    duration is now purely the train-length walk / visual-check term. The
+    joint term is joints x 90 x workerMult (= 0 when joints = 0); the walk
+    term is unchanged. Resolves open question 1 in the equations workbook
+    (option B -- drop the floor). Sample (walk 87 m/min, worker_mult 1.0):
+    0-joint 200 m = 138 s (was 228 s); 0-joint 400 m = 276 s (was 366 s).
+    Joint counts >= 1 are unchanged.
+
+  34.2 Securing & Coupling now fixed-duration (length-independent)
+    Both were length-scaled (SEC = length x 8 x mult, COP = length x 12 x
+    mult), which after the cut-as-unit change ([31]) meant a bigger cut took
+    proportionally longer -- but securing and coupling are per-operation
+    tasks, not proportional to cut size. Changed to a fixed base time x the
+    worker's skill multiplier for the activity:
+      * Securing = 120 s (2 min) x workerMult
+      * Coupling = 240 s (4 min) x workerMult
+    A cut arrives already coupled internally, so on the classification track
+    it needs at most ONE securing (first cut on an empty track) or ONE
+    coupling to the standing rake (a later cut) -- one operation either way.
+    BaseSecondsPerMeter is now 0 for both; each overrides CalculateDuration
+    to return the fixed base x the average allocated-worker multiplier (the
+    worker Securing / Coupling skill multipliers in ResourcePool.json are
+    still honoured; length is ignored).
+
+    Values / sources: manual European screw coupling is reported at ~3-5 min
+    per connection (hook-and-screw link + air hoses); DAC field trials
+    (2022-2024) benchmark manual coupling at 4-6 min vs < 30 s automatic;
+    uncoupling / simple securing are faster. Coupling set to 4 min (mid-range
+    of the manual figure); securing to 2 min (lighter -- parking brake only,
+    no inter-vehicle connection). Tune FIXED_SECONDS in the two activity
+    classes to recalibrate.
+
+  34.3 Effect on KPIs (expected)
+    Securing / Coupling durations drop and stop varying with cut length --
+    previously Coupling averaged ~10.5 min and Securing ~7 min on the
+    length-scaled cut model; now each is a fixed 4 / 2 min x worker skill
+    (~3-4 min coupling, ~1.5-2 min securing). ITP for single-destination
+    trains drops to the walk term only. The Wagon Groups classification-dwell
+    and idle-time KPIs shift accordingly.
+
+  34.4 Files touched
+    Models/ManipulationActivity.cs  - max(joints,1) floor removed.
+    Models/SecuringActivity.cs      - fixed 120 s; BaseSecondsPerMeter 0;
+                                      CalculateDuration override.
+    Models/CouplingActivity.cs      - fixed 240 s; BaseSecondsPerMeter 0;
+                                      CalculateDuration override.
+    Other files/Drive_speed_and_ITP_equations.xlsx - ITP table / note /
+                                      example recomputed without the floor;
+                                      open question 1 marked resolved; new
+                                      "Coupling & Securing" sheet with the
+                                      fixed durations + sources.
+    Other files/Documentation.txt   - this entry.
+
+  34.5 Verifying
+    * dotnet build (Windows; no .NET in the dev sandbox). Re-run the sim,
+      then python Output/analytics.py.
+    * Activities (raw): Securing rows ~120 s x mult and Coupling rows ~240 s
+      x mult regardless of cut length; ITP for 0-joint trains = walk term
+      only (no joint component).
+    * A single-destination (0-joint) train's ITP duration should equal
+      (trainLength / walkingSpeed) x 60.
+
 
 14. FILE / MODULE INDEX
 ================================================================================
