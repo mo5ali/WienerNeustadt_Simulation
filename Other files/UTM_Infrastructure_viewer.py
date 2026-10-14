@@ -50,7 +50,7 @@ def calculate_distance(x1, y1, x2, y2):
 
 
 # Load JSON data
-with open("C:\\Users\\moham\\source\\repos\\WienerNeustadt_Simulation\\InputFiles\\Infrastructure_WienerNeustadt_V20.json") as f:
+with open(r"C:\Users\MA\source\repos\WienerNeustadt_Simulation\InputFiles\Infrastructure_WienerNeustadt_V20.json") as f:
     json_data = json.load(f)
 
 # Create dictionaries for nodes and tracks

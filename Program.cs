@@ -31,7 +31,7 @@ namespace WienerNeustadtSimulation
                 Console.WriteLine($"📝 Logging to: {logPath}\n");
 
                 // Load input data
-                var inboundPath = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "InputFiles", "InboundTrains_test2.json");
+                var inboundPath = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "InputFiles", "InboundTrains_WN_2025-01.json");
                 if (!File.Exists(inboundPath))
                 {
                     Console.Error.WriteLine($"   Inbound file not found: {inboundPath}");
