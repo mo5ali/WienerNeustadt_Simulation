@@ -12,7 +12,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T02:39:44Z"
+      "Time": "2025-01-02T02:39:44Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10002",
@@ -23,7 +26,15 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T06:27:40Z"
+      "Time": "2025-01-02T06:27:40Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10003",
@@ -45,7 +56,10 @@
       "LocomotiveId": "LOCO-1116-008",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T07:09:01Z"
+      "Time": "2025-01-02T07:09:01Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10004",
@@ -56,7 +70,13 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T07:21:51Z"
+      "Time": "2025-01-02T07:21:51Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10005",
@@ -67,7 +87,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T08:00:44Z"
+      "Time": "2025-01-02T08:00:44Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10006",
@@ -87,7 +112,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T08:48:33Z"
+      "Time": "2025-01-02T08:48:33Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10007",
@@ -99,7 +127,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T09:00:10Z"
+      "Time": "2025-01-02T09:00:10Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10008",
@@ -112,7 +145,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T10:29:03Z"
+      "Time": "2025-01-02T10:29:03Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10009",
@@ -123,7 +163,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T14:34:20Z"
+      "Time": "2025-01-02T14:34:20Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10010",
@@ -141,7 +186,10 @@
       "LocomotiveId": "LOCO-1116-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T14:59:32Z"
+      "Time": "2025-01-02T14:59:32Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10011",
@@ -152,7 +200,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T15:02:03Z"
+      "Time": "2025-01-02T15:02:03Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)",
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10012",
@@ -173,7 +227,10 @@
       "LocomotiveId": "LOCO-1116-006",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T17:41:35Z"
+      "Time": "2025-01-02T17:41:35Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10013",
@@ -194,7 +251,10 @@
       "LocomotiveId": "LOCO-1293-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-02T20:07:22Z"
+      "Time": "2025-01-02T20:07:22Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10014",
@@ -208,7 +268,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T02:39:16Z"
+      "Time": "2025-01-03T02:39:16Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10015",
@@ -219,7 +282,10 @@
       "LocomotiveId": "LOCO-1116-006",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T04:33:53Z"
+      "Time": "2025-01-03T04:33:53Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10016",
@@ -240,7 +306,10 @@
       "LocomotiveId": "LOCO-1293-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T05:33:28Z"
+      "Time": "2025-01-03T05:33:28Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10017",
@@ -251,7 +320,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T06:31:32Z"
+      "Time": "2025-01-03T06:31:32Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)"
+      ]
     },
     {
       "ID": "10018",
@@ -268,7 +342,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T07:14:46Z"
+      "Time": "2025-01-03T07:14:46Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10019",
@@ -279,7 +356,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T07:26:41Z"
+      "Time": "2025-01-03T07:26:41Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10020",
@@ -290,7 +374,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T07:57:18Z"
+      "Time": "2025-01-03T07:57:18Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10021",
@@ -302,7 +391,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T08:45:54Z"
+      "Time": "2025-01-03T08:45:54Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10022",
@@ -315,7 +409,15 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T10:29:43Z"
+      "Time": "2025-01-03T10:29:43Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10023",
@@ -326,7 +428,15 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T12:59:00Z"
+      "Time": "2025-01-03T12:59:00Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10024",
@@ -337,7 +447,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T14:19:09Z"
+      "Time": "2025-01-03T14:19:09Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10025",
@@ -358,7 +473,10 @@
       "LocomotiveId": "LOCO-1116-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T15:03:38Z"
+      "Time": "2025-01-03T15:03:38Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10026",
@@ -369,7 +487,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T15:34:33Z"
+      "Time": "2025-01-03T15:34:33Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)"
+      ]
     },
     {
       "ID": "10027",
@@ -380,7 +503,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T17:11:18Z"
+      "Time": "2025-01-03T17:11:18Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10028",
@@ -398,7 +524,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T19:59:43Z"
+      "Time": "2025-01-03T19:59:43Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10029",
@@ -420,7 +549,10 @@
       "LocomotiveId": "LOCO-1116-006",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-03T20:54:23Z"
+      "Time": "2025-01-03T20:54:23Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10030",
@@ -433,7 +565,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-04T05:38:41Z"
+      "Time": "2025-01-04T05:38:41Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10031",
@@ -446,7 +581,10 @@
       "LocomotiveId": "LOCO-1293-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-05T17:32:02Z"
+      "Time": "2025-01-05T17:32:02Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10032",
@@ -459,7 +597,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-05T20:06:18Z"
+      "Time": "2025-01-05T20:06:18Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10033",
@@ -470,7 +611,10 @@
       "LocomotiveId": "LOCO-1116-008",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-06T17:38:58Z"
+      "Time": "2025-01-06T17:38:58Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10034",
@@ -485,7 +629,10 @@
       "LocomotiveId": "LOCO-1116-006",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T02:42:50Z"
+      "Time": "2025-01-07T02:42:50Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10035",
@@ -496,7 +643,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T06:30:13Z"
+      "Time": "2025-01-07T06:30:13Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)"
+      ]
     },
     {
       "ID": "10036",
@@ -513,7 +665,10 @@
       "LocomotiveId": "LOCO-1116-008",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T07:14:36Z"
+      "Time": "2025-01-07T07:14:36Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10037",
@@ -524,7 +679,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T07:20:44Z"
+      "Time": "2025-01-07T07:20:44Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10038",
@@ -535,7 +695,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T07:24:39Z"
+      "Time": "2025-01-07T07:24:39Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10039",
@@ -547,7 +714,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T08:16:16Z"
+      "Time": "2025-01-07T08:16:16Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10040",
@@ -565,7 +737,10 @@
       "LocomotiveId": "LOCO-1116-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T08:36:47Z"
+      "Time": "2025-01-07T08:36:47Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10041",
@@ -578,7 +753,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T10:31:51Z"
+      "Time": "2025-01-07T10:31:51Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)"
+      ]
     },
     {
       "ID": "10042",
@@ -589,7 +770,15 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T12:59:33Z"
+      "Time": "2025-01-07T12:59:33Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10043",
@@ -600,7 +789,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T14:14:00Z"
+      "Time": "2025-01-07T14:14:00Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10044",
@@ -621,7 +815,10 @@
       "LocomotiveId": "LOCO-1116-006",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T14:58:36Z"
+      "Time": "2025-01-07T14:58:36Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10045",
@@ -632,7 +829,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T15:21:28Z"
+      "Time": "2025-01-07T15:21:28Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)"
+      ]
     },
     {
       "ID": "10046",
@@ -644,7 +846,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T16:00:39Z"
+      "Time": "2025-01-07T16:00:39Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10047",
@@ -667,7 +874,10 @@
       "LocomotiveId": "LOCO-1116-005",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T17:20:29Z"
+      "Time": "2025-01-07T17:20:29Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10048",
@@ -678,7 +888,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T18:04:08Z"
+      "Time": "2025-01-07T18:04:08Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10049",
@@ -689,7 +906,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-07T21:00:22Z"
+      "Time": "2025-01-07T21:00:22Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10050",
@@ -705,7 +927,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T02:43:30Z"
+      "Time": "2025-01-08T02:43:30Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10051",
@@ -716,7 +941,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T03:45:46Z"
+      "Time": "2025-01-08T03:45:46Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10052",
@@ -727,7 +955,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T06:01:14Z"
+      "Time": "2025-01-08T06:01:14Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)"
+      ]
     },
     {
       "ID": "10053",
@@ -752,7 +985,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T07:16:21Z"
+      "Time": "2025-01-08T07:16:21Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10054",
@@ -763,7 +999,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T07:20:11Z"
+      "Time": "2025-01-08T07:20:11Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10055",
@@ -774,7 +1017,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T08:01:28Z"
+      "Time": "2025-01-08T08:01:28Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10056",
@@ -786,7 +1034,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T08:58:47Z"
+      "Time": "2025-01-08T08:58:47Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10057",
@@ -799,7 +1052,15 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T10:13:27Z"
+      "Time": "2025-01-08T10:13:27Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10058",
@@ -810,7 +1071,14 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T12:46:21Z"
+      "Time": "2025-01-08T12:46:21Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)"
+      ]
     },
     {
       "ID": "10059",
@@ -821,7 +1089,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T14:26:26Z"
+      "Time": "2025-01-08T14:26:26Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10060",
@@ -842,7 +1115,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T14:53:42Z"
+      "Time": "2025-01-08T14:53:42Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10061",
@@ -853,7 +1129,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T15:11:40Z"
+      "Time": "2025-01-08T15:11:40Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)",
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10062",
@@ -864,7 +1146,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T17:21:17Z"
+      "Time": "2025-01-08T17:21:17Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10063",
@@ -875,7 +1160,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T17:59:49Z"
+      "Time": "2025-01-08T17:59:49Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10064",
@@ -894,7 +1184,10 @@
       "LocomotiveId": "LOCO-1116-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T19:40:24Z"
+      "Time": "2025-01-08T19:40:24Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10065",
@@ -905,7 +1198,13 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-08T20:03:59Z"
+      "Time": "2025-01-08T20:03:59Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10066",
@@ -918,7 +1217,10 @@
       "LocomotiveId": "LOCO-1116-006",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T02:46:36Z"
+      "Time": "2025-01-09T02:46:36Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10067",
@@ -937,7 +1239,10 @@
       "LocomotiveId": "LOCO-1293-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T06:06:30Z"
+      "Time": "2025-01-09T06:06:30Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10068",
@@ -948,7 +1253,15 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T06:31:58Z"
+      "Time": "2025-01-09T06:31:58Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10069",
@@ -965,7 +1278,10 @@
       "LocomotiveId": "LOCO-1116-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T07:12:58Z"
+      "Time": "2025-01-09T07:12:58Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10070",
@@ -976,7 +1292,13 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T07:20:52Z"
+      "Time": "2025-01-09T07:20:52Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10071",
@@ -987,7 +1309,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T07:51:20Z"
+      "Time": "2025-01-09T07:51:20Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10072",
@@ -999,7 +1326,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T08:45:11Z"
+      "Time": "2025-01-09T08:45:11Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10073",
@@ -1011,7 +1343,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T10:50:21Z"
+      "Time": "2025-01-09T10:50:21Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10074",
@@ -1022,7 +1361,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T14:33:46Z"
+      "Time": "2025-01-09T14:33:46Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10075",
@@ -1037,7 +1381,10 @@
       "LocomotiveId": "LOCO-1116-006",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T15:00:30Z"
+      "Time": "2025-01-09T15:00:30Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10076",
@@ -1048,7 +1395,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T15:26:54Z"
+      "Time": "2025-01-09T15:26:54Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)",
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10077",
@@ -1067,7 +1420,10 @@
       "LocomotiveId": "LOCO-1293-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T17:43:21Z"
+      "Time": "2025-01-09T17:43:21Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10078",
@@ -1078,7 +1434,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T17:45:38Z"
+      "Time": "2025-01-09T17:45:38Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10079",
@@ -1099,7 +1461,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T17:47:16Z"
+      "Time": "2025-01-09T17:47:16Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10080",
@@ -1117,7 +1482,10 @@
       "LocomotiveId": "LOCO-1116-006",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-09T20:02:09Z"
+      "Time": "2025-01-09T20:02:09Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10081",
@@ -1131,7 +1499,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T02:41:42Z"
+      "Time": "2025-01-10T02:41:42Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10082",
@@ -1142,7 +1513,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T04:32:17Z"
+      "Time": "2025-01-10T04:32:17Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10083",
@@ -1153,7 +1527,14 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T05:45:59Z"
+      "Time": "2025-01-10T05:45:59Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10084",
@@ -1172,7 +1553,10 @@
       "LocomotiveId": "LOCO-1293-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T06:39:32Z"
+      "Time": "2025-01-10T06:39:32Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10085",
@@ -1183,7 +1567,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T07:26:38Z"
+      "Time": "2025-01-10T07:26:38Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10086",
@@ -1194,7 +1585,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T07:55:21Z"
+      "Time": "2025-01-10T07:55:21Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10087",
@@ -1216,7 +1612,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T08:45:24Z"
+      "Time": "2025-01-10T08:45:24Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10088",
@@ -1229,7 +1628,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T08:58:39Z"
+      "Time": "2025-01-10T08:58:39Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10089",
@@ -1240,7 +1644,15 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T10:18:40Z"
+      "Time": "2025-01-10T10:18:40Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10090",
@@ -1251,7 +1663,13 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T13:04:47Z"
+      "Time": "2025-01-10T13:04:47Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10091",
@@ -1262,7 +1680,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T14:11:32Z"
+      "Time": "2025-01-10T14:11:32Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10092",
@@ -1273,7 +1696,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T14:49:06Z"
+      "Time": "2025-01-10T14:49:06Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)"
+      ]
     },
     {
       "ID": "10093",
@@ -1284,7 +1712,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T17:28:41Z"
+      "Time": "2025-01-10T17:28:41Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10094",
@@ -1306,7 +1737,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T17:38:41Z"
+      "Time": "2025-01-10T17:38:41Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10095",
@@ -1324,7 +1758,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-10T20:11:11Z"
+      "Time": "2025-01-10T20:11:11Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10096",
@@ -1337,7 +1774,10 @@
       "LocomotiveId": "LOCO-1293-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-11T04:57:49Z"
+      "Time": "2025-01-11T04:57:49Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10097",
@@ -1351,7 +1791,10 @@
       "LocomotiveId": "LOCO-1116-005",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-11T05:29:22Z"
+      "Time": "2025-01-11T05:29:22Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10098",
@@ -1364,7 +1807,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-12T17:41:28Z"
+      "Time": "2025-01-12T17:41:28Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10099",
@@ -1376,7 +1822,10 @@
       "LocomotiveId": "LOCO-1116-006",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-12T20:02:23Z"
+      "Time": "2025-01-12T20:02:23Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10100",
@@ -1388,7 +1837,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T02:28:56Z"
+      "Time": "2025-01-13T02:28:56Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10101",
@@ -1399,7 +1851,10 @@
       "LocomotiveId": "LOCO-1116-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T04:28:34Z"
+      "Time": "2025-01-13T04:28:34Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10102",
@@ -1410,7 +1865,13 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T06:04:50Z"
+      "Time": "2025-01-13T06:04:50Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)"
+      ]
     },
     {
       "ID": "10103",
@@ -1421,7 +1882,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T07:02:11Z"
+      "Time": "2025-01-13T07:02:11Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10104",
@@ -1432,7 +1900,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T07:15:03Z"
+      "Time": "2025-01-13T07:15:03Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10105",
@@ -1456,7 +1929,10 @@
       "LocomotiveId": "LOCO-1116-005",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T07:18:30Z"
+      "Time": "2025-01-13T07:18:30Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10106",
@@ -1468,7 +1944,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T09:00:06Z"
+      "Time": "2025-01-13T09:00:06Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10107",
@@ -1488,7 +1969,10 @@
       "LocomotiveId": "LOCO-1293-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T09:01:30Z"
+      "Time": "2025-01-13T09:01:30Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10108",
@@ -1501,7 +1985,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T10:03:22Z"
+      "Time": "2025-01-13T10:03:22Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10109",
@@ -1512,7 +2003,14 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T12:16:36Z"
+      "Time": "2025-01-13T12:16:36Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10110",
@@ -1523,7 +2021,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T14:26:53Z"
+      "Time": "2025-01-13T14:26:53Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10111",
@@ -1544,7 +2047,10 @@
       "LocomotiveId": "LOCO-1293-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T14:46:15Z"
+      "Time": "2025-01-13T14:46:15Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10112",
@@ -1555,7 +2061,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T15:20:46Z"
+      "Time": "2025-01-13T15:20:46Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)"
+      ]
     },
     {
       "ID": "10113",
@@ -1567,7 +2078,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T16:00:43Z"
+      "Time": "2025-01-13T16:00:43Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10114",
@@ -1578,7 +2094,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T17:26:39Z"
+      "Time": "2025-01-13T17:26:39Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10115",
@@ -1589,7 +2108,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-13T21:03:59Z"
+      "Time": "2025-01-13T21:03:59Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10116",
@@ -1603,7 +2127,10 @@
       "LocomotiveId": "LOCO-1293-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T02:27:34Z"
+      "Time": "2025-01-14T02:27:34Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10117",
@@ -1614,7 +2141,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T06:29:31Z"
+      "Time": "2025-01-14T06:29:31Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)"
+      ]
     },
     {
       "ID": "10118",
@@ -1631,7 +2163,10 @@
       "LocomotiveId": "LOCO-1116-008",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T06:37:58Z"
+      "Time": "2025-01-14T06:37:58Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10119",
@@ -1642,7 +2177,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T07:19:42Z"
+      "Time": "2025-01-14T07:19:42Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10120",
@@ -1653,7 +2195,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T08:00:30Z"
+      "Time": "2025-01-14T08:00:30Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10121",
@@ -1676,7 +2223,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T09:00:03Z"
+      "Time": "2025-01-14T09:00:03Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10122",
@@ -1689,7 +2239,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T09:04:34Z"
+      "Time": "2025-01-14T09:04:34Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10123",
@@ -1701,7 +2256,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T09:49:19Z"
+      "Time": "2025-01-14T09:49:19Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10124",
@@ -1712,7 +2274,14 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T12:50:59Z"
+      "Time": "2025-01-14T12:50:59Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)"
+      ]
     },
     {
       "ID": "10125",
@@ -1723,7 +2292,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T14:23:26Z"
+      "Time": "2025-01-14T14:23:26Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10126",
@@ -1744,7 +2318,10 @@
       "LocomotiveId": "LOCO-1293-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T14:52:29Z"
+      "Time": "2025-01-14T14:52:29Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10127",
@@ -1755,7 +2332,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T15:27:23Z"
+      "Time": "2025-01-14T15:27:23Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)",
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10128",
@@ -1766,7 +2349,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T15:39:07Z"
+      "Time": "2025-01-14T15:39:07Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10129",
@@ -1786,7 +2374,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T17:31:14Z"
+      "Time": "2025-01-14T17:31:14Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10130",
@@ -1797,7 +2388,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T17:52:13Z"
+      "Time": "2025-01-14T17:52:13Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10131",
@@ -1808,7 +2404,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-14T19:47:40Z"
+      "Time": "2025-01-14T19:47:40Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10132",
@@ -1822,7 +2423,10 @@
       "LocomotiveId": "LOCO-1116-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T02:23:46Z"
+      "Time": "2025-01-15T02:23:46Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10133",
@@ -1833,7 +2437,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T04:35:13Z"
+      "Time": "2025-01-15T04:35:13Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10134",
@@ -1844,7 +2451,14 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T06:28:41Z"
+      "Time": "2025-01-15T06:28:41Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10135",
@@ -1863,7 +2477,10 @@
       "LocomotiveId": "LOCO-1116-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T07:07:40Z"
+      "Time": "2025-01-15T07:07:40Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10136",
@@ -1874,7 +2491,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T07:28:38Z"
+      "Time": "2025-01-15T07:28:38Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10137",
@@ -1885,7 +2509,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T08:02:59Z"
+      "Time": "2025-01-15T08:02:59Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10138",
@@ -1903,7 +2532,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T08:53:16Z"
+      "Time": "2025-01-15T08:53:16Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10139",
@@ -1915,7 +2547,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T09:05:23Z"
+      "Time": "2025-01-15T09:05:23Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10140",
@@ -1927,7 +2564,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T09:56:59Z"
+      "Time": "2025-01-15T09:56:59Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10141",
@@ -1938,7 +2582,13 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T12:58:55Z"
+      "Time": "2025-01-15T12:58:55Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10142",
@@ -1958,7 +2608,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T15:03:29Z"
+      "Time": "2025-01-15T15:03:29Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10143",
@@ -1969,7 +2622,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T15:32:47Z"
+      "Time": "2025-01-15T15:32:47Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)",
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10144",
@@ -1980,7 +2639,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T17:14:22Z"
+      "Time": "2025-01-15T17:14:22Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10145",
@@ -2001,7 +2663,10 @@
       "LocomotiveId": "LOCO-1293-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-15T17:38:58Z"
+      "Time": "2025-01-15T17:38:58Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10146",
@@ -2014,7 +2679,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T02:39:08Z"
+      "Time": "2025-01-16T02:39:08Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10147",
@@ -2025,7 +2693,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T06:21:11Z"
+      "Time": "2025-01-16T06:21:11Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)"
+      ]
     },
     {
       "ID": "10148",
@@ -2046,7 +2719,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T07:13:31Z"
+      "Time": "2025-01-16T07:13:31Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10149",
@@ -2057,7 +2733,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T07:13:54Z"
+      "Time": "2025-01-16T07:13:54Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10150",
@@ -2068,7 +2751,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T07:56:24Z"
+      "Time": "2025-01-16T07:56:24Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10151",
@@ -2088,7 +2776,10 @@
       "LocomotiveId": "LOCO-1293-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T09:00:35Z"
+      "Time": "2025-01-16T09:00:35Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10152",
@@ -2100,7 +2791,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T09:01:41Z"
+      "Time": "2025-01-16T09:01:41Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10153",
@@ -2112,7 +2808,15 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T10:35:16Z"
+      "Time": "2025-01-16T10:35:16Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10154",
@@ -2123,7 +2827,14 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T12:46:10Z"
+      "Time": "2025-01-16T12:46:10Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10155",
@@ -2134,7 +2845,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T14:31:02Z"
+      "Time": "2025-01-16T14:31:02Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10156",
@@ -2151,7 +2867,10 @@
       "LocomotiveId": "LOCO-1116-006",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T14:44:42Z"
+      "Time": "2025-01-16T14:44:42Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10157",
@@ -2162,7 +2881,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T15:26:45Z"
+      "Time": "2025-01-16T15:26:45Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)",
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10158",
@@ -2174,7 +2899,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T16:05:39Z"
+      "Time": "2025-01-16T16:05:39Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10159",
@@ -2189,7 +2919,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T17:26:30Z"
+      "Time": "2025-01-16T17:26:30Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10160",
@@ -2206,7 +2939,10 @@
       "LocomotiveId": "LOCO-1116-005",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-16T20:02:36Z"
+      "Time": "2025-01-16T20:02:36Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10161",
@@ -2220,7 +2956,10 @@
       "LocomotiveId": "LOCO-1293-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T02:44:06Z"
+      "Time": "2025-01-17T02:44:06Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10162",
@@ -2231,7 +2970,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T04:25:28Z"
+      "Time": "2025-01-17T04:25:28Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10163",
@@ -2242,7 +2984,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T06:28:14Z"
+      "Time": "2025-01-17T06:28:14Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)"
+      ]
     },
     {
       "ID": "10164",
@@ -2261,7 +3008,10 @@
       "LocomotiveId": "LOCO-1116-005",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T06:57:07Z"
+      "Time": "2025-01-17T06:57:07Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10165",
@@ -2272,7 +3022,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T07:28:30Z"
+      "Time": "2025-01-17T07:28:30Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10166",
@@ -2283,7 +3040,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T07:58:29Z"
+      "Time": "2025-01-17T07:58:29Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10167",
@@ -2303,7 +3065,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T08:37:34Z"
+      "Time": "2025-01-17T08:37:34Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10168",
@@ -2315,7 +3080,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T08:47:38Z"
+      "Time": "2025-01-17T08:47:38Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10169",
@@ -2327,7 +3097,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T10:09:10Z"
+      "Time": "2025-01-17T10:09:10Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10170",
@@ -2338,7 +3115,15 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T12:49:27Z"
+      "Time": "2025-01-17T12:49:27Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10171",
@@ -2349,7 +3134,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T15:32:37Z"
+      "Time": "2025-01-17T15:32:37Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)",
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10172",
@@ -2360,7 +3151,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T17:29:53Z"
+      "Time": "2025-01-17T17:29:53Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10173",
@@ -2371,7 +3165,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T17:59:39Z"
+      "Time": "2025-01-17T17:59:39Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10174",
@@ -2389,7 +3189,10 @@
       "LocomotiveId": "LOCO-1116-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-17T20:06:04Z"
+      "Time": "2025-01-17T20:06:04Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10175",
@@ -2403,7 +3206,10 @@
       "LocomotiveId": "LOCO-1293-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-18T00:23:17Z"
+      "Time": "2025-01-18T00:23:17Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10176",
@@ -2416,7 +3222,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-18T05:42:34Z"
+      "Time": "2025-01-18T05:42:34Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10177",
@@ -2436,7 +3245,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-18T06:26:08Z"
+      "Time": "2025-01-18T06:26:08Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10178",
@@ -2448,7 +3260,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-19T17:30:47Z"
+      "Time": "2025-01-19T17:30:47Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10179",
@@ -2460,7 +3275,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-19T20:12:14Z"
+      "Time": "2025-01-19T20:12:14Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10180",
@@ -2474,7 +3292,10 @@
       "LocomotiveId": "LOCO-1116-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T02:27:43Z"
+      "Time": "2025-01-20T02:27:43Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10181",
@@ -2485,7 +3306,10 @@
       "LocomotiveId": "LOCO-1116-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T04:30:47Z"
+      "Time": "2025-01-20T04:30:47Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10182",
@@ -2496,7 +3320,15 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T05:55:55Z"
+      "Time": "2025-01-20T05:55:55Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10183",
@@ -2522,7 +3354,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T07:15:10Z"
+      "Time": "2025-01-20T07:15:10Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10184",
@@ -2533,7 +3368,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T07:26:03Z"
+      "Time": "2025-01-20T07:26:03Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10185",
@@ -2544,7 +3384,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T07:30:10Z"
+      "Time": "2025-01-20T07:30:10Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10186",
@@ -2567,7 +3414,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T08:44:00Z"
+      "Time": "2025-01-20T08:44:00Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10187",
@@ -2579,7 +3429,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T08:59:06Z"
+      "Time": "2025-01-20T08:59:06Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10188",
@@ -2592,7 +3447,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T10:33:22Z"
+      "Time": "2025-01-20T10:33:22Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10189",
@@ -2603,7 +3465,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T12:44:14Z"
+      "Time": "2025-01-20T12:44:14Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10190",
@@ -2614,7 +3481,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T14:23:04Z"
+      "Time": "2025-01-20T14:23:04Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10191",
@@ -2634,7 +3506,10 @@
       "LocomotiveId": "LOCO-1293-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T15:06:57Z"
+      "Time": "2025-01-20T15:06:57Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10192",
@@ -2646,7 +3521,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T15:46:43Z"
+      "Time": "2025-01-20T15:46:43Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10193",
@@ -2657,7 +3537,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T15:49:14Z"
+      "Time": "2025-01-20T15:49:14Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)"
+      ]
     },
     {
       "ID": "10194",
@@ -2668,7 +3553,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T16:59:17Z"
+      "Time": "2025-01-20T16:59:17Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10195",
@@ -2679,7 +3567,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-20T21:00:33Z"
+      "Time": "2025-01-20T21:00:33Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10196",
@@ -2694,7 +3587,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T02:48:40Z"
+      "Time": "2025-01-21T02:48:40Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10197",
@@ -2705,7 +3601,15 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T06:35:44Z"
+      "Time": "2025-01-21T06:35:44Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10198",
@@ -2725,7 +3629,10 @@
       "LocomotiveId": "LOCO-1116-005",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T07:12:31Z"
+      "Time": "2025-01-21T07:12:31Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10199",
@@ -2736,7 +3643,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T07:20:35Z"
+      "Time": "2025-01-21T07:20:35Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10200",
@@ -2747,7 +3659,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T07:32:17Z"
+      "Time": "2025-01-21T07:32:17Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10201",
@@ -2766,7 +3685,10 @@
       "LocomotiveId": "LOCO-1116-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T08:46:30Z"
+      "Time": "2025-01-21T08:46:30Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10202",
@@ -2778,7 +3700,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T09:01:27Z"
+      "Time": "2025-01-21T09:01:27Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10203",
@@ -2791,7 +3718,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T10:02:58Z"
+      "Time": "2025-01-21T10:02:58Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10204",
@@ -2802,7 +3736,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T14:27:04Z"
+      "Time": "2025-01-21T14:27:04Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10205",
@@ -2820,7 +3759,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T14:36:26Z"
+      "Time": "2025-01-21T14:36:26Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10206",
@@ -2831,7 +3773,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T15:00:37Z"
+      "Time": "2025-01-21T15:00:37Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)"
+      ]
     },
     {
       "ID": "10207",
@@ -2842,7 +3789,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-21T20:50:18Z"
+      "Time": "2025-01-21T20:50:18Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10208",
@@ -2856,7 +3808,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T02:28:16Z"
+      "Time": "2025-01-22T02:28:16Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10209",
@@ -2867,7 +3822,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T04:33:27Z"
+      "Time": "2025-01-22T04:33:27Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10210",
@@ -2878,7 +3836,14 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T06:20:42Z"
+      "Time": "2025-01-22T06:20:42Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)"
+      ]
     },
     {
       "ID": "10211",
@@ -2899,7 +3864,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T06:45:51Z"
+      "Time": "2025-01-22T06:45:51Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10212",
@@ -2910,7 +3878,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T07:28:37Z"
+      "Time": "2025-01-22T07:28:37Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10213",
@@ -2921,7 +3896,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T07:57:12Z"
+      "Time": "2025-01-22T07:57:12Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10214",
@@ -2933,7 +3913,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T08:22:14Z"
+      "Time": "2025-01-22T08:22:14Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10215",
@@ -2953,7 +3938,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T09:05:54Z"
+      "Time": "2025-01-22T09:05:54Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10216",
@@ -2964,7 +3952,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T10:22:38Z"
+      "Time": "2025-01-22T10:22:38Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10217",
@@ -2975,7 +3970,13 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T12:59:46Z"
+      "Time": "2025-01-22T12:59:46Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10218",
@@ -2986,7 +3987,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T15:11:56Z"
+      "Time": "2025-01-22T15:11:56Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)",
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10219",
@@ -3006,7 +4013,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T17:20:51Z"
+      "Time": "2025-01-22T17:20:51Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10220",
@@ -3017,7 +4027,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T17:32:47Z"
+      "Time": "2025-01-22T17:32:47Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10221",
@@ -3028,7 +4041,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T17:48:23Z"
+      "Time": "2025-01-22T17:48:23Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10222",
@@ -3046,7 +4066,10 @@
       "LocomotiveId": "LOCO-1116-008",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-22T20:02:26Z"
+      "Time": "2025-01-22T20:02:26Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10223",
@@ -3060,7 +4083,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T02:41:32Z"
+      "Time": "2025-01-23T02:41:32Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10224",
@@ -3071,7 +4097,14 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T06:19:01Z"
+      "Time": "2025-01-23T06:19:01Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10225",
@@ -3089,7 +4122,10 @@
       "LocomotiveId": "LOCO-1293-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T06:45:18Z"
+      "Time": "2025-01-23T06:45:18Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10226",
@@ -3100,7 +4136,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T07:05:11Z"
+      "Time": "2025-01-23T07:05:11Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10227",
@@ -3111,7 +4154,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T07:39:29Z"
+      "Time": "2025-01-23T07:39:29Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10228",
@@ -3123,7 +4171,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T08:40:15Z"
+      "Time": "2025-01-23T08:40:15Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10229",
@@ -3145,7 +4198,10 @@
       "LocomotiveId": "LOCO-1293-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T09:01:59Z"
+      "Time": "2025-01-23T09:01:59Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10230",
@@ -3160,7 +4216,15 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T10:26:05Z"
+      "Time": "2025-01-23T10:26:05Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10231",
@@ -3171,7 +4235,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T14:26:48Z"
+      "Time": "2025-01-23T14:26:48Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10232",
@@ -3190,7 +4259,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T14:40:38Z"
+      "Time": "2025-01-23T14:40:38Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10233",
@@ -3201,7 +4273,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T15:25:49Z"
+      "Time": "2025-01-23T15:25:49Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ebenfurth (beet loading)",
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10234",
@@ -3213,7 +4291,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T15:43:07Z"
+      "Time": "2025-01-23T15:43:07Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10235",
@@ -3235,7 +4318,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T17:00:19Z"
+      "Time": "2025-01-23T17:00:19Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10236",
@@ -3246,7 +4332,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T17:35:53Z"
+      "Time": "2025-01-23T17:35:53Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10237",
@@ -3257,7 +4348,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-23T20:57:40Z"
+      "Time": "2025-01-23T20:57:40Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10238",
@@ -3272,7 +4368,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T02:39:09Z"
+      "Time": "2025-01-24T02:39:09Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10239",
@@ -3283,7 +4382,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T04:31:50Z"
+      "Time": "2025-01-24T04:31:50Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10240",
@@ -3294,7 +4396,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T06:11:06Z"
+      "Time": "2025-01-24T06:11:06Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)"
+      ]
     },
     {
       "ID": "10241",
@@ -3305,7 +4412,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T06:56:39Z"
+      "Time": "2025-01-24T06:56:39Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10242",
@@ -3328,7 +4442,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T07:11:50Z"
+      "Time": "2025-01-24T07:11:50Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10243",
@@ -3339,7 +4456,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T07:17:57Z"
+      "Time": "2025-01-24T07:17:57Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10244",
@@ -3351,7 +4473,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T08:45:46Z"
+      "Time": "2025-01-24T08:45:46Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10245",
@@ -3369,7 +4496,10 @@
       "LocomotiveId": "LOCO-1116-005",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T09:00:32Z"
+      "Time": "2025-01-24T09:00:32Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10246",
@@ -3381,7 +4511,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T09:51:45Z"
+      "Time": "2025-01-24T09:51:45Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)"
+      ]
     },
     {
       "ID": "10247",
@@ -3392,7 +4528,15 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T13:00:55Z"
+      "Time": "2025-01-24T13:00:55Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10248",
@@ -3403,7 +4547,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T14:27:54Z"
+      "Time": "2025-01-24T14:27:54Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10249",
@@ -3422,7 +4571,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T14:52:31Z"
+      "Time": "2025-01-24T14:52:31Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10250",
@@ -3433,7 +4585,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T15:11:07Z"
+      "Time": "2025-01-24T15:11:07Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10251",
@@ -3444,7 +4601,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T17:29:00Z"
+      "Time": "2025-01-24T17:29:00Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10252",
@@ -3455,7 +4615,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-24T17:30:00Z"
+      "Time": "2025-01-24T17:30:00Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10253",
@@ -3468,7 +4635,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-25T01:40:27Z"
+      "Time": "2025-01-25T01:40:27Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10254",
@@ -3481,7 +4651,10 @@
       "LocomotiveId": "LOCO-1293-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-26T17:46:07Z"
+      "Time": "2025-01-26T17:46:07Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10255",
@@ -3495,7 +4668,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T02:35:36Z"
+      "Time": "2025-01-27T02:35:36Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10256",
@@ -3506,7 +4682,10 @@
       "LocomotiveId": "LOCO-1293-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T04:31:33Z"
+      "Time": "2025-01-27T04:31:33Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10257",
@@ -3517,7 +4696,14 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T06:34:26Z"
+      "Time": "2025-01-27T06:34:26Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)"
+      ]
     },
     {
       "ID": "10258",
@@ -3535,7 +4721,10 @@
       "LocomotiveId": "LOCO-1293-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T07:06:53Z"
+      "Time": "2025-01-27T07:06:53Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10259",
@@ -3546,7 +4735,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T07:27:00Z"
+      "Time": "2025-01-27T07:27:00Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10260",
@@ -3557,7 +4753,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T07:53:17Z"
+      "Time": "2025-01-27T07:53:17Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10261",
@@ -3579,7 +4780,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T08:28:23Z"
+      "Time": "2025-01-27T08:28:23Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10262",
@@ -3591,7 +4795,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T08:28:50Z"
+      "Time": "2025-01-27T08:28:50Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10263",
@@ -3603,7 +4812,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T10:29:27Z"
+      "Time": "2025-01-27T10:29:27Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)"
+      ]
     },
     {
       "ID": "10264",
@@ -3614,7 +4828,13 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T12:41:12Z"
+      "Time": "2025-01-27T12:41:12Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10265",
@@ -3625,7 +4845,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T14:20:25Z"
+      "Time": "2025-01-27T14:20:25Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10266",
@@ -3636,7 +4861,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T15:26:00Z"
+      "Time": "2025-01-27T15:26:00Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10267",
@@ -3648,7 +4878,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T15:54:29Z"
+      "Time": "2025-01-27T15:54:29Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10268",
@@ -3659,7 +4894,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T17:31:28Z"
+      "Time": "2025-01-27T17:31:28Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10269",
@@ -3672,7 +4910,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T17:40:14Z"
+      "Time": "2025-01-27T17:40:14Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10270",
@@ -3683,7 +4927,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-27T20:58:30Z"
+      "Time": "2025-01-27T20:58:30Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10271",
@@ -3696,7 +4945,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T02:52:15Z"
+      "Time": "2025-01-28T02:52:15Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10272",
@@ -3707,7 +4959,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T06:29:03Z"
+      "Time": "2025-01-28T06:29:03Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)"
+      ]
     },
     {
       "ID": "10273",
@@ -3724,7 +4981,10 @@
       "LocomotiveId": "LOCO-1116-005",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T07:11:53Z"
+      "Time": "2025-01-28T07:11:53Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10274",
@@ -3735,7 +4995,13 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T07:31:30Z"
+      "Time": "2025-01-28T07:31:30Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10275",
@@ -3746,7 +5012,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T07:41:47Z"
+      "Time": "2025-01-28T07:41:47Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10276",
@@ -3770,7 +5041,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T08:45:27Z"
+      "Time": "2025-01-28T08:45:27Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10277",
@@ -3782,7 +5056,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T09:05:26Z"
+      "Time": "2025-01-28T09:05:26Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10278",
@@ -3795,7 +5074,15 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T10:29:42Z"
+      "Time": "2025-01-28T10:29:42Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10279",
@@ -3806,7 +5093,14 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T12:55:41Z"
+      "Time": "2025-01-28T12:55:41Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)"
+      ]
     },
     {
       "ID": "10280",
@@ -3817,7 +5111,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T14:15:03Z"
+      "Time": "2025-01-28T14:15:03Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10281",
@@ -3836,7 +5135,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T14:25:18Z"
+      "Time": "2025-01-28T14:25:18Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10282",
@@ -3847,7 +5149,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T15:30:53Z"
+      "Time": "2025-01-28T15:30:53Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10283",
@@ -3858,7 +5165,13 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T19:28:40Z"
+      "Time": "2025-01-28T19:28:40Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10284",
@@ -3869,7 +5182,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-28T20:58:39Z"
+      "Time": "2025-01-28T20:58:39Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10285",
@@ -3883,7 +5201,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T02:43:29Z"
+      "Time": "2025-01-29T02:43:29Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10286",
@@ -3894,7 +5215,10 @@
       "LocomotiveId": "LOCO-1116-008",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T04:18:33Z"
+      "Time": "2025-01-29T04:18:33Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10287",
@@ -3905,7 +5229,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T06:14:33Z"
+      "Time": "2025-01-29T06:14:33Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)"
+      ]
     },
     {
       "ID": "10288",
@@ -3916,7 +5245,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T07:16:18Z"
+      "Time": "2025-01-29T07:16:18Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10289",
@@ -3927,7 +5261,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T07:29:26Z"
+      "Time": "2025-01-29T07:29:26Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10290",
@@ -3939,7 +5280,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T08:18:36Z"
+      "Time": "2025-01-29T08:18:36Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10291",
@@ -3959,7 +5305,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T09:01:31Z"
+      "Time": "2025-01-29T09:01:31Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10292",
@@ -3971,7 +5320,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T10:29:50Z"
+      "Time": "2025-01-29T10:29:50Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10293",
@@ -3982,7 +5338,15 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T13:04:18Z"
+      "Time": "2025-01-29T13:04:18Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10294",
@@ -3993,7 +5357,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T14:28:50Z"
+      "Time": "2025-01-29T14:28:50Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10295",
@@ -4014,7 +5383,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T14:49:49Z"
+      "Time": "2025-01-29T14:49:49Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10296",
@@ -4025,7 +5397,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T15:48:17Z"
+      "Time": "2025-01-29T15:48:17Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10297",
@@ -4036,7 +5413,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T17:29:03Z"
+      "Time": "2025-01-29T17:29:03Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10298",
@@ -4057,7 +5437,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T17:35:58Z"
+      "Time": "2025-01-29T17:35:58Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10299",
@@ -4068,7 +5451,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-29T20:45:43Z"
+      "Time": "2025-01-29T20:45:43Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10300",
@@ -4083,7 +5471,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T02:41:50Z"
+      "Time": "2025-01-30T02:41:50Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10301",
@@ -4094,7 +5485,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T06:17:03Z"
+      "Time": "2025-01-30T06:17:03Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)"
+      ]
     },
     {
       "ID": "10302",
@@ -4105,7 +5501,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T06:55:45Z"
+      "Time": "2025-01-30T06:55:45Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10303",
@@ -4127,7 +5530,10 @@
       "LocomotiveId": "LOCO-1293-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T07:12:04Z"
+      "Time": "2025-01-30T07:12:04Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10304",
@@ -4138,7 +5544,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T07:51:35Z"
+      "Time": "2025-01-30T07:51:35Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10305",
@@ -4151,7 +5562,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T08:21:41Z"
+      "Time": "2025-01-30T08:21:41Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10306",
@@ -4167,7 +5583,10 @@
       "LocomotiveId": "LOCO-1116-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T09:07:38Z"
+      "Time": "2025-01-30T09:07:38Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10307",
@@ -4180,7 +5599,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T09:52:05Z"
+      "Time": "2025-01-30T09:52:05Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10308",
@@ -4191,7 +5617,14 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T12:56:34Z"
+      "Time": "2025-01-30T12:56:34Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)"
+      ]
     },
     {
       "ID": "10309",
@@ -4202,7 +5635,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T14:28:52Z"
+      "Time": "2025-01-30T14:28:52Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10310",
@@ -4220,7 +5658,10 @@
       "LocomotiveId": "LOCO-1293-001",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T14:51:19Z"
+      "Time": "2025-01-30T14:51:19Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10311",
@@ -4231,7 +5672,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T15:32:46Z"
+      "Time": "2025-01-30T15:32:46Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10312",
@@ -4242,7 +5688,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T17:22:07Z"
+      "Time": "2025-01-30T17:22:07Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10313",
@@ -4253,7 +5704,13 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T19:42:41Z"
+      "Time": "2025-01-30T19:42:41Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10314",
@@ -4264,7 +5721,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-30T20:25:19Z"
+      "Time": "2025-01-30T20:25:19Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10315",
@@ -4279,7 +5741,10 @@
       "LocomotiveId": "LOCO-1293-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T02:46:31Z"
+      "Time": "2025-01-31T02:46:31Z",
+      "Origin": "Wien Kledering (Villach through train, detached group)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10316",
@@ -4290,7 +5755,10 @@
       "LocomotiveId": "LOCO-1293-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T04:26:21Z"
+      "Time": "2025-01-31T04:26:21Z",
+      "Origin": "St. Veit an der Glan (block train)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10317",
@@ -4301,7 +5769,12 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T05:56:27Z"
+      "Time": "2025-01-31T05:56:27Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)"
+      ]
     },
     {
       "ID": "10318",
@@ -4312,7 +5785,14 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T06:59:19Z"
+      "Time": "2025-01-31T06:59:19Z",
+      "Origin": "Siding tour north (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Felixdorf/Sollenau (Bundesheer, Maba)",
+        "Steinabrückl/Wöllersdorf",
+        "Other sidings north"
+      ]
     },
     {
       "ID": "10319",
@@ -4333,7 +5813,10 @@
       "LocomotiveId": "LOCO-1116-002",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T07:03:28Z"
+      "Time": "2025-01-31T07:03:28Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10320",
@@ -4344,7 +5827,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T08:00:39Z"
+      "Time": "2025-01-31T08:00:39Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10321",
@@ -4356,7 +5844,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T08:51:51Z"
+      "Time": "2025-01-31T08:51:51Z",
+      "Origin": "Siding tour east (Mattersburger Bahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neudörfl (FunderMax)"
+      ]
     },
     {
       "ID": "10322",
@@ -4374,7 +5867,10 @@
       "LocomotiveId": "LOCO-1293-004",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T08:59:29Z"
+      "Time": "2025-01-31T08:59:29Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10323",
@@ -4387,7 +5883,14 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T10:32:17Z"
+      "Time": "2025-01-31T10:32:17Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Neunkirchen (loading tracks)",
+        "Ternitz (Schoeller-Bleckmann)",
+        "Other sidings south"
+      ]
     },
     {
       "ID": "10324",
@@ -4398,7 +5901,15 @@
       "LocomotiveId": "LOCO-2070-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T12:26:46Z"
+      "Time": "2025-01-31T12:26:46Z",
+      "Origin": "Local sidings Wr. Neustadt",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Wr. Neustadt (Hödlmayr)",
+        "Wr. Neustadt (Brenntag)",
+        "Wr. Neustadt Ausfahrbf (Furtenbach)",
+        "Other sidings local"
+      ]
     },
     {
       "ID": "10325",
@@ -4409,7 +5920,12 @@
       "LocomotiveId": "LOCO-2016-02",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T14:11:43Z"
+      "Time": "2025-01-31T14:11:43Z",
+      "Origin": "Siding tour south (Aspangbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Pitten (Hamburger)"
+      ]
     },
     {
       "ID": "10326",
@@ -4427,7 +5943,10 @@
       "LocomotiveId": "LOCO-1116-005",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T15:01:04Z"
+      "Time": "2025-01-31T15:01:04Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10327",
@@ -4448,7 +5967,10 @@
       "LocomotiveId": "LOCO-1116-007",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T15:18:38Z"
+      "Time": "2025-01-31T15:18:38Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10328",
@@ -4459,7 +5981,12 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T15:32:17Z"
+      "Time": "2025-01-31T15:32:17Z",
+      "Origin": "Siding tour north-east (Pottendorfer Linie)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Obereggendorf (Hofer)"
+      ]
     },
     {
       "ID": "10329",
@@ -4470,7 +5997,10 @@
       "LocomotiveId": "LOCO-STLB-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T17:30:52Z"
+      "Time": "2025-01-31T17:30:52Z",
+      "Origin": "Aspang (STLB Weiz-Bratislava, handover)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     },
     {
       "ID": "10330",
@@ -4481,7 +6011,13 @@
       "LocomotiveId": "LOCO-2016-01",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T17:45:32Z"
+      "Time": "2025-01-31T17:45:32Z",
+      "Origin": "Siding tour south-west (Südbahn)",
+      "OriginType": "SidingTour",
+      "PickupStations": [
+        "Other sidings south",
+        "Gloggnitz"
+      ]
     },
     {
       "ID": "10331",
@@ -4497,7 +6033,10 @@
       "LocomotiveId": "LOCO-1293-003",
       "Status": "Arriving",
       "Designation": "Inbound",
-      "Time": "2025-01-31T20:04:36Z"
+      "Time": "2025-01-31T20:04:36Z",
+      "Origin": "Wien Kledering (ZVBf)",
+      "OriginType": "MainLine",
+      "PickupStations": []
     }
   ],
   "wagonGroups": [
