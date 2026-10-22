@@ -6,8 +6,11 @@ Reads:  ../bin/Debug/net8.0/OutputFiles/SimulationLog.json
 Writes: ../bin/Debug/net8.0/OutputFiles/SimulationAnalytics.xlsx
 
 Usage:
-    pip install openpyxl
+    pip install openpyxl reportlab matplotlib pypdf
     python analytics.py
+
+Also writes SimulationAnalytics.pdf next to the workbook (see build_pdf_report;
+toggle with BUILD_PDF_REPORT): Definitions, summary tables, Activity Charts.
 
 Sheets produced:
     1. Definitions          — every metric, what it means, the exact formula.
@@ -60,6 +63,23 @@ ALIGN_TOP_WRAP = Alignment(vertical="top", wrap_text=True)
 # (Excel / LibreOffice / Numbers) at the end of the run. Flip to False to
 # disable the auto-open.
 AUTO_OPEN_RESULT = True
+
+# ── PDF report settings ──────────────────────────────────────────────────────
+# When True, a compact PDF report (SimulationAnalytics.pdf, next to the
+# workbook) is built at the end of the run from the finished workbook:
+#   page 1      Definitions
+#   page 2      summary tables (no charts)
+#   pages 3+    Activity Charts (by track), then (by length), 4 per page
+# Needs: pip install reportlab matplotlib pypdf
+BUILD_PDF_REPORT = True
+PDF_DEFINITIONS_SHEET = "Definitions"
+PDF_TABLE_SHEETS = ["Throughput", "Process Durations",
+                    "Train Timeline", "OBT Formation"]
+PDF_CHART_SHEETS = ["Activity Charts (by track)",
+                    "Activity Charts (by length)"]
+# Columns left out of the PDF tables (already explained on the
+# Definitions page). Keyed by sheet name.
+PDF_DROP_COLUMNS = {"Throughput": ["Notes"]}
 
 
 # ── JSON parsing ──────────────────────────────────────────────────────────────
@@ -1694,6 +1714,505 @@ def _open_result_file():
         print(f"  (could not auto-open the file: {e})")
 
 
+# ── PDF report ───────────────────────────────────────────────────────────────
+# Built from the FINISHED workbook (the .xlsm once Excel has saved it, so all
+# formula cells carry cached values and the VBA-built chart sheets exist).
+# Tables are read with openpyxl (data_only=True). Charts are not rendered by
+# openpyxl, so they are rebuilt with matplotlib straight from the chart XML in
+# the workbook package: the VBA macros write every scatter series as literal
+# point arrays (<c:numLit>), and bar charts keep a <c:numCache>, so the chart
+# definition alone carries all the data needed.
+
+_C_NS = {
+    "c": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+    "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+    "xdr": "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing",
+    "m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+    "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    "pr": "http://schemas.openxmlformats.org/package/2006/relationships",
+}
+_MPL_MARKERS = {"circle": "o", "square": "s", "diamond": "D", "triangle": "^",
+                "x": "x", "star": "*", "plus": "+", "dash": "_", "dot": "."}
+
+
+def _wait_until_readable(path, timeout=20):
+    """Block until no other process holds an exclusive lock on `path`
+    (the post-processor's hidden Excel can take a moment to let go)."""
+    import time
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with open(path, "r+b"):
+                return True
+        except (PermissionError, OSError):
+            time.sleep(0.5)
+    return False
+
+
+def _fmt_hms(seconds):
+    """Seconds -> h:mm:ss (hours may exceed 24)."""
+    if seconds is None:
+        return ""
+    neg = seconds < 0
+    s = int(round(abs(seconds)))
+    out = f"{s // 3600}:{(s % 3600) // 60:02d}:{s % 60:02d}"
+    return "-" + out if neg else out
+
+
+def _fmt_cell(value, number_format, header):
+    """Render one cached cell value as compact text for the PDF."""
+    import re
+    from datetime import timedelta
+    if value is None:
+        return ""
+    if isinstance(value, timedelta):
+        return _fmt_hms(value.total_seconds())
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return str(value)
+    if header.endswith("(s)"):                  # seconds column -> h:mm:ss
+        return _fmt_hms(value)
+    fmt = number_format or "General"
+    if "h" in fmt and "mm" in fmt:              # day-fraction duration
+        return _fmt_hms(value * 86400)
+    m = re.search(r"0\.(0+)", fmt)
+    if m:
+        return f"{value:,.{len(m.group(1))}f}"
+    if fmt.strip() == "0" or float(value).is_integer():
+        return f"{int(round(value)):,}"
+    return f"{value:,.3f}".rstrip("0").rstrip(".")
+
+
+def _read_sheet_rows(ws):
+    """Return (headers, rows) from a sheet's used range, values formatted.
+    Trailing empty rows/columns are dropped."""
+    raw = []
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row,
+                            max_col=ws.max_column):
+        raw.append([(c.value, c.number_format) for c in row])
+    while raw and all(v is None for v, _ in raw[-1]):
+        raw.pop()
+    if not raw:
+        return [], []
+    headers = [str(v) if v is not None else "" for v, _ in raw[0]]
+    while headers and not headers[-1] and all(
+            len(r) >= len(headers) and r[len(headers) - 1][0] is None
+            for r in raw[1:]):
+        headers.pop()
+    rows = []
+    for r in raw[1:]:
+        rows.append([_fmt_cell(r[i][0], r[i][1], headers[i])
+                     if i < len(r) else "" for i in range(len(headers))])
+    return headers, rows
+
+
+def _compact_table(sheet_name, headers, rows):
+    """Make a summary table concise: drop columns listed in PDF_DROP_COLUMNS
+    and redundant restatements of the mean ("Mean (min)", "Mean (hh:mm:ss)"
+    when "Mean (s)" exists); then strip the "(s)" unit from headers, since
+    every seconds column is rendered as h:mm:ss."""
+    drop = set(PDF_DROP_COLUMNS.get(sheet_name, []))
+    stems = {h[:-4] for h in headers if h.endswith(" (s)")}
+    for h in headers:
+        for suffix in (" (min)", " (hh:mm:ss)"):
+            if h.endswith(suffix) and h[:-len(suffix)] in stems:
+                drop.add(h)
+    keep = [i for i, h in enumerate(headers) if h not in drop]
+    new_headers = []
+    for i in keep:
+        h = headers[i]
+        for suffix in (" (s)", " (hh:mm:ss)"):
+            if h.endswith(suffix):
+                h = h[:-len(suffix)]
+        new_headers.append(h)
+    return new_headers, [[r[i] for i in keep] for r in rows]
+
+
+def _sheet_chart_parts(zf, sheet_name):
+    """Chart XML part names on a sheet, ordered as laid out (top-to-bottom,
+    left-to-right by their drawing anchors)."""
+    import posixpath
+    import xml.etree.ElementTree as ET
+    ns = _C_NS
+
+    def rels_of(part):
+        d, f = posixpath.split(part)
+        rp = posixpath.join(d, "_rels", f + ".rels")
+        if rp not in zf.namelist():
+            return {}
+        root = ET.fromstring(zf.read(rp))
+        return {r.get("Id"): posixpath.normpath(posixpath.join(d, r.get("Target")))
+                for r in root.findall("pr:Relationship", ns)}
+
+    wb_xml = ET.fromstring(zf.read("xl/workbook.xml"))
+    wb_rels = rels_of("xl/workbook.xml")
+    sheet_part = None
+    for s in wb_xml.find("m:sheets", ns):
+        if s.get("name") == sheet_name:
+            sheet_part = wb_rels.get(s.get(f"{{{ns['r']}}}id"))
+    if not sheet_part:
+        return []
+    out = []
+    for drawing in (t for t in rels_of(sheet_part).values() if "/drawings/" in t):
+        d_rels = rels_of(drawing)
+        root = ET.fromstring(zf.read(drawing))
+        for anchor in list(root):
+            frm = anchor.find("xdr:from", ns)
+            pos = ((int(frm.find("xdr:row", ns).text),
+                    int(frm.find("xdr:col", ns).text)) if frm is not None
+                   else (0, 0))
+            for ch in anchor.iter(f"{{{ns['c']}}}chart"):
+                target = d_rels.get(ch.get(f"{{{ns['r']}}}id"))
+                if target:
+                    out.append((pos, target))
+    out.sort()
+    return [t for _, t in out]
+
+
+def _parse_chart(xml_bytes):
+    """Pull type, title, axis titles and series (name, x, y, colour, marker)
+    out of one chart XML part."""
+    import xml.etree.ElementTree as ET
+    ns = _C_NS
+    root = ET.fromstring(xml_bytes)
+
+    def text_of(el):
+        return "".join(t.text or "" for t in el.iter(f"{{{ns['a']}}}t")) if el is not None else ""
+
+    def values(el):
+        if el is None:
+            return []
+        for tag in ("numLit", "numCache", "strLit", "strCache"):
+            src = el.find(f".//c:{tag}", ns)
+            if src is not None:
+                pts = {int(p.get("idx")): p.find("c:v", ns).text
+                       for p in src.findall("c:pt", ns)}
+                n = int(src.find("c:ptCount", ns).get("val")) if src.find("c:ptCount", ns) is not None else len(pts)
+                vals = [pts.get(i) for i in range(n)]
+                if tag.startswith("num"):
+                    return [float(v) if v is not None else None for v in vals]
+                return vals
+        return []
+
+    chart = root.find("c:chart", ns)
+    title = text_of(chart.find("c:title", ns))
+    plot = chart.find("c:plotArea", ns)
+    kind, series = None, []
+    for tag in ("scatterChart", "barChart", "lineChart"):
+        node = plot.find(f"c:{tag}", ns)
+        if node is None:
+            continue
+        kind = tag
+        for ser in node.findall("c:ser", ns):
+            tx = ser.find("c:tx", ns)
+            name = ""
+            if tx is not None:
+                v = tx.find(".//c:v", ns)
+                name = v.text if v is not None else text_of(tx)
+            color = None
+            marker = "o"
+            mk = ser.find("c:marker", ns)
+            if mk is not None:
+                sym = mk.find("c:symbol", ns)
+                if sym is not None:
+                    marker = _MPL_MARKERS.get(sym.get("val"), "o")
+                clr = mk.find(".//a:srgbClr", ns)
+                if clr is not None:
+                    color = "#" + clr.get("val")
+            if color is None:
+                clr = ser.find("c:spPr//a:srgbClr", ns)
+                if clr is not None:
+                    color = "#" + clr.get("val")
+            if tag == "scatterChart":
+                x, y = values(ser.find("c:xVal", ns)), values(ser.find("c:yVal", ns))
+            else:
+                x, y = values(ser.find("c:cat", ns)), values(ser.find("c:val", ns))
+            series.append({"name": name, "x": x, "y": y,
+                           "color": color, "marker": marker})
+        break
+    axes = plot.findall("c:valAx", ns) + plot.findall("c:catAx", ns)
+    ax_titles = {}
+    for ax in axes:
+        pos = ax.find("c:axPos", ns).get("val")
+        ax_titles[pos] = text_of(ax.find("c:title", ns))
+    return {"kind": kind, "title": title, "series": series,
+            "xlabel": ax_titles.get("b", ""), "ylabel": ax_titles.get("l", "")}
+
+
+def _short_chart_title(title):
+    """'Securing - Duration (min) vs StartedAt, by track' -> 'Securing'.
+    The page heading already says what is plotted against what."""
+    return title.split(" - ")[0].strip() if " - " in title else title
+
+
+def _render_chart_pages(charts_by_sheet, pdf_path, page_size_in):
+    """Charts, 4 per landscape page (2x2), as vector PDF via matplotlib."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.dates as mdates
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
+    from datetime import timedelta
+
+    excel_epoch = datetime(1899, 12, 30)
+    plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 7,
+                         "axes.titlesize": 8.5, "axes.titleweight": "bold",
+                         "axes.labelsize": 7, "legend.fontsize": 6,
+                         "pdf.fonttype": 42})
+    with PdfPages(pdf_path) as pdf:
+        for sheet_name, charts in charts_by_sheet:
+            for start in range(0, len(charts), 4):
+                fig, axs = plt.subplots(2, 2, figsize=page_size_in)
+                first = charts[start]
+                subtitle = (f"{first['ylabel']} vs {first['xlabel'].lower()}"
+                            if first["xlabel"] and first["ylabel"] else "")
+                head = sheet_name + (f" — {subtitle}" if subtitle else "")
+                if len(charts) > 4:
+                    head += f"  ({start // 4 + 1}/{(len(charts) + 3) // 4})"
+                fig.suptitle(head, fontsize=11, fontweight="bold",
+                             x=0.04, ha="left", y=0.975)
+                for ax, ch in zip(axs.flat, charts[start:start + 4]):
+                    for s in ch["series"]:
+                        pts = [(xv, yv) for xv, yv in zip(s["x"], s["y"])
+                               if xv is not None and yv is not None]
+                        if not pts:
+                            continue
+                        xs, ys = zip(*pts)
+                        if ch["kind"] == "scatterChart":
+                            xs = [excel_epoch + timedelta(days=v) for v in xs]
+                            ax.scatter(xs, ys, s=7, marker=s["marker"],
+                                       color=s["color"], label=s["name"],
+                                       linewidths=0.4, alpha=0.85)
+                        else:
+                            ax.bar([str(v) for v in xs], ys, color=s["color"],
+                                   label=s["name"])
+                    ax.set_title(_short_chart_title(ch["title"]), loc="left")
+                    ax.set_ylabel(ch["ylabel"])
+                    ax.set_ylim(bottom=0)
+                    ax.grid(True, color="#e3e3e3", linewidth=0.5)
+                    ax.set_axisbelow(True)
+                    for side in ("top", "right"):
+                        ax.spines[side].set_visible(False)
+                    if ch["kind"] == "scatterChart":
+                        loc = mdates.AutoDateLocator(maxticks=8)
+                        ax.xaxis.set_major_locator(loc)
+                        ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(loc))
+                    if len(ch["series"]) > 1:
+                        ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0),
+                                  frameon=False, handletextpad=0.2,
+                                  borderaxespad=0.3, markerscale=1.3)
+                for ax in list(axs.flat)[len(charts[start:start + 4]):]:
+                    ax.set_visible(False)
+                fig.tight_layout(rect=(0.02, 0.02, 0.98, 0.95), w_pad=2.5, h_pad=1.8)
+                pdf.savefig(fig)
+                plt.close(fig)
+
+
+def build_pdf_report(workbook_path, pdf_path):
+    """Build a compact PDF from the finished analytics workbook:
+    Definitions -> summary tables -> Activity Charts (by track / by length).
+    Returns the PDF path, or None if it couldn't be built."""
+    try:
+        from openpyxl import load_workbook
+        from pypdf import PdfWriter
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.platypus import (PageBreak, Paragraph,
+                                        SimpleDocTemplate, Spacer, Table,
+                                        TableStyle)
+        import matplotlib
+    except ImportError as e:
+        print(f"  (PDF report skipped — missing package: {e.name}. "
+              "Run: pip install reportlab matplotlib pypdf)")
+        return None
+    import tempfile
+    import zipfile
+    from xml.sax.saxutils import escape
+
+    if not os.path.exists(workbook_path):
+        print(f"  (PDF report skipped — workbook not found: {workbook_path})")
+        return None
+    _wait_until_readable(workbook_path)
+
+    # DejaVu Sans ships with matplotlib and covers →, ≈, −, — etc.
+    font_dir = os.path.join(matplotlib.get_data_path(), "fonts", "ttf")
+    try:
+        pdfmetrics.registerFont(TTFont("DejaVu", os.path.join(font_dir, "DejaVuSans.ttf")))
+        pdfmetrics.registerFont(TTFont("DejaVu-Bold", os.path.join(font_dir, "DejaVuSans-Bold.ttf")))
+        F, FB = "DejaVu", "DejaVu-Bold"
+    except Exception:  # noqa: BLE001 — fall back to built-in font
+        F, FB = "Helvetica", "Helvetica-Bold"
+
+    wb = load_workbook(workbook_path, data_only=True)
+    names = wb.sheetnames
+    missing = [n for n in [PDF_DEFINITIONS_SHEET] + PDF_TABLE_SHEETS + PDF_CHART_SHEETS
+               if n not in names]
+    if missing:
+        print(f"  (PDF: sheet(s) not in workbook, skipped: {', '.join(missing)})")
+
+    page = landscape(A4)
+    margin = 12 * mm
+    usable_w = page[0] - 2 * margin
+    navy = colors.HexColor("#305496")
+    st_cell = ParagraphStyle("cell", fontName=F, fontSize=7, leading=8.4)
+    st_cell_b = ParagraphStyle("cellb", parent=st_cell, fontName=FB)
+    st_h1 = ParagraphStyle("h1", fontName=FB, fontSize=13, leading=16,
+                           spaceAfter=5)
+    st_h2 = ParagraphStyle("h2", fontName=FB, fontSize=9.5, leading=12,
+                           spaceAfter=3, textColor=navy)
+    st_note = ParagraphStyle("note", fontName=F, fontSize=7, leading=9,
+                             textColor=colors.HexColor("#555555"))
+
+    def P(text, style=st_cell):
+        return Paragraph(escape(str(text)), style)
+
+    base_style = [
+        ("FONT", (0, 0), (-1, -1), F, 7),
+        ("FONT", (0, 0), (-1, 0), FB, 7),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BACKGROUND", (0, 0), (-1, 0), navy),
+        ("LINEBELOW", (0, 1), (-1, -1), 0.25, colors.HexColor("#d0d0d0")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+    ]
+
+    story = []
+    run_label = ""
+    if "Throughput" in names:            # "Sim start ... Sim end" if available
+        t = {str(r[0].value): r[1].value for r in wb["Throughput"].iter_rows(min_row=2)
+             if len(r) > 1 and r[0].value}
+        if t.get("Sim start") and t.get("Sim end"):
+            run_label = f"Simulated period {t['Sim start']} → {t['Sim end']}"
+
+    # ── Page 1: definitions ─────────────────────────────────────────────
+    if PDF_DEFINITIONS_SHEET in names:
+        headers, rows = _read_sheet_rows(wb[PDF_DEFINITIONS_SHEET])
+        story.append(Paragraph("Simulation Analytics — Metric definitions", st_h1))
+        if run_label:
+            story.append(Paragraph(escape(run_label), st_note))
+            story.append(Spacer(1, 3))
+        data = [[P(h, st_cell_b) for h in headers[:3]]]
+        style = list(base_style)
+        for r in rows:
+            if r[0].startswith("—"):          # section row, e.g. "— Throughput block —"
+                data.append([P(r[0].strip("— ").strip(), st_cell_b), "", ""])
+                i = len(data) - 1
+                style += [("SPAN", (0, i), (-1, i)),
+                          ("BACKGROUND", (0, i), (-1, i), colors.HexColor("#e8edf6"))]
+            else:
+                data.append([P(r[0], st_cell_b), P(r[1]), P(r[2])])
+        tbl = Table(data, colWidths=[usable_w * f for f in (0.19, 0.50, 0.31)],
+                    repeatRows=1)
+        tbl.setStyle(TableStyle(style + [("TEXTCOLOR", (0, 0), (-1, 0), colors.white)]))
+        story += [tbl, PageBreak()]
+
+    # ── Page 2: summary tables, two columns ─────────────────────────────
+    blocks = []
+    for name in PDF_TABLE_SHEETS:
+        if name not in names:
+            continue
+        headers, rows = _compact_table(name, *_read_sheet_rows(wb[name]))
+        if not headers:
+            continue
+        data = [headers] + rows
+        first_w = 0.40 if len(headers) > 3 else 0.55
+        col_w = (usable_w / 2 - 6 * mm)
+        widths = [col_w * first_w] + [col_w * (1 - first_w) / (len(headers) - 1)] * (len(headers) - 1)
+        tbl = Table(data, colWidths=widths)
+        tbl.setStyle(TableStyle(base_style + [
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f7fb")]),
+        ]))
+        blocks.append([Paragraph(escape(name), st_h2), tbl, Spacer(1, 9)])
+    if blocks:
+        story.append(Paragraph("Summary tables", st_h1))
+        story.append(Paragraph("Durations shown as h:mm:ss.", st_note))
+        story.append(Spacer(1, 4))
+        left, right = blocks[0::2], blocks[1::2]
+        # Put the two tallest tables in different columns: order is
+        # Throughput, Process Durations, Train Timeline, OBT Formation.
+        if len(blocks) == 4:
+            left, right = [blocks[0], blocks[3]], [blocks[1], blocks[2]]
+        grid = Table([[sum(left, []), sum(right, [])]],
+                     colWidths=[usable_w / 2] * 2)
+        grid.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                  ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                                  ("RIGHTPADDING", (0, 0), (-1, -1), 6 * mm)]))
+        story.append(grid)
+
+    def on_page(canvas, doc):
+        canvas.saveState()
+        canvas.setFont(F, 6.5)
+        canvas.setFillColor(colors.HexColor("#888888"))
+        canvas.drawString(margin, 6 * mm, os.path.basename(workbook_path))
+        canvas.drawRightString(page[0] - margin, 6 * mm, f"Page {doc.page}")
+        canvas.restoreState()
+
+    tmp_dir = tempfile.mkdtemp(prefix="simpdf_")
+    tables_pdf = os.path.join(tmp_dir, "tables.pdf")
+    charts_pdf = os.path.join(tmp_dir, "charts.pdf")
+    SimpleDocTemplate(tables_pdf, pagesize=page, leftMargin=margin,
+                      rightMargin=margin, topMargin=margin,
+                      bottomMargin=margin, title="Simulation Analytics",
+                      ).build(story, onFirstPage=on_page, onLaterPages=on_page)
+
+    # ── Chart pages ─────────────────────────────────────────────────────
+    charts_by_sheet = []
+    with zipfile.ZipFile(workbook_path) as zf:
+        for name in PDF_CHART_SHEETS:
+            if name not in names:
+                continue
+            charts = [_parse_chart(zf.read(p)) for p in _sheet_chart_parts(zf, name)]
+            charts = [c for c in charts if c["series"]]
+            if charts:
+                charts_by_sheet.append((name, charts))
+            else:
+                print(f"  (PDF: no charts found on '{name}')")
+    if charts_by_sheet:
+        _render_chart_pages(charts_by_sheet, charts_pdf,
+                            (page[0] / 72, page[1] / 72))
+
+    writer = PdfWriter()
+    writer.append(tables_pdf)
+    if charts_by_sheet:
+        writer.append(charts_pdf)
+    writer.add_metadata({"/Title": "Simulation Analytics"})
+    writer.compress_identical_objects()
+    try:
+        with open(pdf_path, "wb") as f:
+            writer.write(f)
+    except PermissionError:
+        print(f"  (PDF not written — {pdf_path} is open in another program)")
+        return None
+    n_charts = sum(len(c) for _, c in charts_by_sheet)
+    print(f"Wrote:   {pdf_path}  ({len(writer.pages)} pages, {n_charts} charts)")
+    return pdf_path
+
+
+def _maybe_build_pdf_report():
+    """Build the PDF from the .xlsm (preferred: Excel-saved, so formulas have
+    cached values and the VBA chart sheets exist), else from the .xlsx."""
+    if not BUILD_PDF_REPORT:
+        return
+    xlsm = os.path.splitext(OUT_PATH)[0] + ".xlsm"
+    source = xlsm if os.path.exists(xlsm) else OUT_PATH
+    if source == OUT_PATH:
+        print("  (PDF: no .xlsm found — building from the .xlsx; formula cells "
+              "have no cached values and there are no chart sheets)")
+    try:
+        build_pdf_report(source, os.path.splitext(OUT_PATH)[0] + ".pdf")
+    except Exception as e:  # noqa: BLE001 — never let the report kill the run
+        print(f"  (PDF report failed: {e})")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     print(f"Reading: {LOG_PATH}")
@@ -1810,6 +2329,11 @@ def main():
         if vals:
             print(f"  {label:32s} {len(vals):4d} {sum(vals)/len(vals):10.2f} "
                   f"{min(vals):9.2f} {max(vals):9.2f}")
+
+    # Compact PDF report (definitions, summary tables, activity charts),
+    # built from the finished workbook.
+    print()
+    _maybe_build_pdf_report()
 
     # Launch the finished workbook in the OS default app (last step so the
     # console summary above has already printed).
